@@ -5,6 +5,19 @@ import simd
 
 /// The Thread tool through the session, canvas, and kernel.
 @MainActor final class ThreadToolTests: CanvasTestCase {
+    /// Threads start from the Fit preference, which hosted tests share with the app: these tests run
+    /// at the default (Standard) fit and put the preference back afterwards.
+    private var savedClearance: Any?
+    override func setUp() async throws {
+        try await super.setUp()
+        savedClearance = UserDefaults.standard.object(forKey: "fitClearance")
+        Fit.preferredClearance = Fit.defaultClearance
+    }
+    override func tearDown() async throws {
+        UserDefaults.standard.set(savedClearance, forKey: "fitClearance")
+        try await super.tearDown()
+    }
+
     /// The 60 × 40 × 20 box with a 6.8 mm through hole (an M8 tap drill) at its center.
     func drilledScene() throws -> (ModelingSession, CanvasController) {
         let (session, controller) = boxScene()
