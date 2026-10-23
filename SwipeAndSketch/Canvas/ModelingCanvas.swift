@@ -1260,14 +1260,15 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
     private func rebuildPreview() {
         previewNode.childNodes.forEach { $0.removeFromParentNode() }
         if session.isPickingPlane {
-            // Three translucent world planes at the origin to pick from after Sketch.
+            // Three translucent world planes at the origin to pick from after Sketch, borderless and
+            // tinted like their view cube faces (Top Violet, Front Lime, Right Coral) so they never
+            // read as blue sketch regions.
             let half = planePickerHalfSize
             let square = [Point2(x: -half, y: -half), Point2(x: half, y: -half), Point2(x: half, y: half), Point2(x: -half, y: half)]
-            for plane in SketchPlane.allCases {
-                let fill = planarNode(path: path(for: square, circle: nil), plane: plane, height: 0, color: blue.withAlphaComponent(0.12),
+            for (plane, axis, alpha) in [(SketchPlane.top, WorldAxis.z, 0.22), (.front, .y, 0.4), (.right, .x, 0.28)] {
+                let fill = planarNode(path: path(for: square, circle: nil), plane: plane, height: 0, color: axis.color.withAlphaComponent(alpha),
                                       name: "plane.pick.\(plane.worldName ?? "")")
                 previewNode.addChildNode(drawOnTop(fill, order: 8))
-                previewNode.addChildNode(drawOnTop(outlineNode(square, plane: plane, color: blue.withAlphaComponent(0.7), closed: true), order: 8))
             }
         }
         if session.tool.isPlaneTool {
