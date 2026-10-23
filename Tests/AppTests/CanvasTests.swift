@@ -405,6 +405,26 @@ import simd
         }
     }
 
+    /// A tap on a circle drifts a few points; it selects the circle without resizing it, even with
+    /// snapping on (user report, October 23, 2026).
+    func testPencilTapOnACircleDoesNotResizeIt() throws {
+        for selected in [true, false] {
+            let session = ModelingSession(inMemory: true)
+            let circle = SketchShape(kind: .circle, plane: .top, start: .zero, end: .init(x: 10.3, y: 0))
+            session.addShape(circle)
+            if !selected { session.selection = nil }
+            let controller = canvas(session)
+            let edge = controller.project(SketchPlane.top.world(.init(x: 0, y: 10.3)))
+            let drift = CGPoint(x: edge.x + 4, y: edge.y + 5)
+            controller.pencilBegan(at: edge)
+            controller.pencilMoved(to: drift)
+            controller.pencilEnded(at: drift, cancelled: false)
+            XCTAssertEqual(session.selection, .shape(circle.id))
+            XCTAssertEqual(session.dimensionValue(.shape(circle.id, .diameter)) ?? 0, 20.6, accuracy: 0.001)
+            XCTAssertEqual(session.workspace.shapes[0].end, circle.end, "Nothing moved")
+        }
+    }
+
     func testPencilLineEndpointDragKeepsLoopJoinedAndCanCancel() throws {
         let session = ModelingSession(inMemory: true)
         session.snapEnabled = false

@@ -210,6 +210,9 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
     /// Two Pencil taps this close in time and place are a double-tap.
     static let doubleTapInterval: CFTimeInterval = 0.45
     static let doubleTapDistance: CGFloat = 24
+    /// How far the Pencil must travel before a press on a sketch handle drags it; a tap drifts a few
+    /// points (and snapping would then jump the size to the nearest grid value).
+    static let sketchDragSlop: CGFloat = 10
     private var lastFaceTap: (bodyID: UUID, time: CFTimeInterval, point: CGPoint)?
     private var lastSketchTap: (sketchID: UUID, time: CFTimeInterval, point: CGPoint)?
     /// A sketch line under the Pencil at touch-down; it becomes `lastSketchTap` only if the Pencil
@@ -1833,7 +1836,7 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             return
         }
         if let drag = sketchDrag {
-            guard dragMoved || distance(point, pencilStartScreen) > 3,
+            guard dragMoved || distance(point, pencilStartScreen) > Self.sketchDragSlop,
                   let local = pointOnPlane(point, plane: drag.shape.plane) else { return }
             dragMoved = true
             var endpoint = local + drag.offset
