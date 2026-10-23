@@ -109,6 +109,9 @@ SSKShape *ssk_extrude_outlines(SSKPlane plane, const double *xy, const int32_t *
 SSKShape *ssk_thread_tool(SSKVec3 origin, SSKVec3 axis, SSKVec3 reference, double start, double end, double pitch,
                           double crestRadius, double rootRadius, double surfaceRadius, bool internal, bool leftHanded, int32_t starts,
                           bool raised, double clipStart, double clipEnd);
+/// Tests only: makes ssk_thread_tool on this thread try just its fallback attempt `attempt` (0 is
+/// the first), or every attempt in turn again when it is -1. Returns how many attempts there are.
+int32_t ssk_set_thread_attempt(int32_t attempt);
 /// For a cylindrical face: 1 when it faces away from its axis (a round boss), -1 when it faces the
 /// axis (a hole), 0 for any other face.
 int32_t ssk_face_cylinder_side(const SSKShape *shape, int32_t face);

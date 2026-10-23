@@ -540,13 +540,15 @@ final class ThreadTests: XCTestCase {
     // MARK: Raised threads (October 22, 2026)
 
     /// A jar's neck: a Ø60 tube with 2 mm walls, 20 tall, on an 80 × 80 × 4 plate.
-    func jarNeck() throws -> SolidBody {
-        var neck = try box(-40, -40, 40, 40, depth: 4)
+    /// A jar's neck: a boss of `diameter` with 2 mm walls, 20 mm tall on a 4 mm plate.
+    func jarNeck(diameter: Double = 60) throws -> SolidBody {
+        let half = diameter / 2 + 10
+        var neck = try box(-half, -half, half, half, depth: 4)
         let plate = try XCTUnwrap(SketchPlane.through(.init(0, 0, 4), normal: .init(0, 0, 1)))
-        let circle = SketchShape(kind: .circle, plane: plate, start: .zero, end: Point2(x: 30, y: 0))
+        let circle = SketchShape(kind: .circle, plane: plate, start: .zero, end: Point2(x: diameter / 2, y: 0))
         neck.cuts.append(ExtrusionCut(profile: try XCTUnwrap(Geometry.profiles(in: [circle], on: plate).first), depth: 20, operation: .join))
         let top = try XCTUnwrap(SketchPlane.through(.init(0, 0, 24), normal: .init(0, 0, 1)))
-        neck.cuts.append(try XCTUnwrap(ExtrusionCut.hole(HoleSpec(kind: .simple, size: "", diameter: 56), at: .zero, on: top, depth: 20)))
+        neck.cuts.append(try XCTUnwrap(ExtrusionCut.hole(HoleSpec(kind: .simple, size: "", diameter: diameter - 4), at: .zero, on: top, depth: 20)))
         return neck
     }
 
@@ -730,5 +732,84 @@ final class ThreadTests: XCTestCase {
         XCTAssertTrue(spec.isRaised)
         XCTAssertEqual(spec.threadedLength, 10, accuracy: 1e-9)
         XCTAssertTrue(bench.summary().contains("external raised thread"), bench.summary())
+    }
+
+    // MARK: Jar sizes (October 23, 2026)
+
+    /// The tool the kernel makes for `body`'s thread `spec` from fallback `attempt` alone, placed as
+    /// SolidKernel.applyThread places it.
+    func threadTool(_ spec: ThreadSpec, of body: SolidBody, attempt: Int32) -> KernelSolid? {
+        ssk_set_thread_attempt(attempt)
+        defer { ssk_set_thread_attempt(-1) }
+        func vec(_ v: SIMD3<Double>) -> SSKVec3 { SSKVec3(x: v.x, y: v.y, z: v.z) }
+        let origin = body.worldPoint(spec.origin)
+        let axis = simd_normalize(body.worldPoint(spec.origin + spec.axis) - origin)
+        let reference = body.worldPoint(spec.origin + spec.reference) - origin
+        let clip = spec.ends.map { ($0.startOpen ? $0.start : 0, $0.endOpen ? $0.end : spec.length) } ?? (0, spec.length)
+        return ssk_thread_tool(vec(origin), vec(axis), vec(reference), 0, spec.length, spec.pitch, spec.crestRadius,
+                               spec.rootRadius, spec.surfaceDiameter / 2, spec.isInternal, spec.leftHanded == true, Int32(spec.startCount),
+                               spec.isRaised, clip.0, clip.1).map { KernelSolid(adopting: $0) }
+    }
+
+    /// Probes halfway between `spec`'s root and crest, staggered around the axis along `tool`'s length
+    /// (a pitch in from either end), raised by `lift`: whether each lies inside `tool`.
+    func probes(_ tool: KernelSolid, _ spec: ThreadSpec, of span: KernelSolid? = nil, lift: Double = 0) -> [Bool] {
+        let bounds = (span ?? tool).bounds
+        let radius = (spec.rootRadius + spec.crestRadius) / 2, bottom = bounds.min.z + spec.pitch, top = bounds.max.z - spec.pitch
+        return (0..<144).map { i in
+            let z = bottom + (top - bottom) * Double(i / 6) / 23 + lift
+            let angle = 2 * Double.pi * (Double(i % 6) / 6 + 0.137 * Double(i / 6))
+            return ssk_point_inside(tool.handle, SSKVec3(x: radius * cos(angle), y: radius * sin(angle), z: z))
+        }
+    }
+
+    /// The share of two probe lists that disagree.
+    func disagreement(_ a: [Bool], _ b: [Bool]) -> Double {
+        Double(zip(a, b).filter { $0 != $1 }.count) / Double(a.count)
+    }
+
+    func testEveryFallbackKeepsTheHelixInStep() throws {
+        let neck = try jarNeck()
+        let (cut, _) = try roundFace(neck, side: 1)
+        var raised = cut.made(raised: true)
+        raised.starts = 2
+        var leftHanded = raised
+        leftHanded.leftHanded = true
+        let jar = try XCTUnwrap(neck.threading(raised))
+        let cap = try XCTUnwrap(jar.matingPart(.cap, forThreadAt: jar.cuts.count - 1))
+        let capThread = try XCTUnwrap(cap.cuts.last?.thread)
+        let attempts = ssk_set_thread_attempt(-1)
+        XCTAssertGreaterThan(attempts, 1)
+        for (name, spec, body) in [("raised", raised, neck), ("left-handed", leftHanded, neck), ("cap", capThread, cap)] {
+            let first = try XCTUnwrap(threadTool(spec, of: body, attempt: 0), name)
+            let expected = probes(first, spec)
+            // An eighth of a pitch along the axis, as the fallbacks once slid the helix, shows plainly.
+            XCTAssertGreaterThan(disagreement(expected, probes(first, spec, lift: 0.13 * spec.pitch)), 0.15, name)
+            for attempt in 1..<attempts {
+                let tool = try XCTUnwrap(threadTool(spec, of: body, attempt: attempt), "\(name): attempt \(attempt) builds")
+                XCTAssertEqual(tool.volume, first.volume, accuracy: 0.03 * first.volume, "\(name): attempt \(attempt)")
+                XCTAssertLessThan(disagreement(expected, probes(tool, spec, of: first)), 0.03, "\(name): attempt \(attempt) keeps the helix where it is")
+            }
+        }
+    }
+
+    func testJarSizedTwoStartThreadsTakeCapsInStep() throws {
+        for diameter in [40.0, 60, 80, 100] {
+            let neck = try jarNeck(diameter: diameter)
+            let (cut, _) = try roundFace(neck, side: 1)
+            var full = cut.made(raised: true)
+            full.starts = 2
+            let spec = try XCTUnwrap(full.shortened(to: 12, atEnd: neck.threadEntryIsAtEnd(full)), "Ø\(diameter)")
+            let jar = try XCTUnwrap(neck.threading(spec), "Ø\(diameter)")
+            let built = try SolidKernel.solid(for: jar)
+            XCTAssertTrue(built.isValidSolid, "Ø\(diameter)")
+            XCTAssertGreaterThan(built.bounds.max.x, diameter / 2 + 0.5, "Ø\(diameter): the ridges stand out of the neck")
+            let cap = try XCTUnwrap(jar.matingPart(.cap, forThreadAt: jar.cuts.count - 1), "Ø\(diameter)")
+            XCTAssertEqual(cap.cuts.last?.thread?.startCount, 2, "Ø\(diameter)")
+            XCTAssertTrue(try SolidKernel.solid(for: cap).isValidSolid, "Ø\(diameter)")
+            XCTAssertLessThan(try overlap(jar, cap), 1e-3, "Ø\(diameter): screwed on without touching")
+            let offStep = try XCTUnwrap(cap.transformed(by: RigidTransform(translation: .init(0, 0, -spec.pitch / 2))))
+            XCTAssertGreaterThan(try overlap(jar, offStep), 1, "Ø\(diameter): half a pitch off, the ridges collide")
+        }
     }
 }

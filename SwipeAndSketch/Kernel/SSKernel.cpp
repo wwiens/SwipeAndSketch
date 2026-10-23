@@ -656,6 +656,17 @@ SSKShape *ssk_extrude_outlines(SSKPlane plane, const double *xy, const int32_t *
     });
 }
 
+namespace {
+const struct { int mode; double phase; double fuzz; } threadAttempts[] = {
+    {0, 0, 0}, {0, 0, 1e-4}, {0, 0.13, 0}, {1, 0, 0}, {1, 0.29, 1e-4}, {0, 0.41, 1e-4}};
+thread_local int32_t onlyThreadAttempt = -1;
+}
+
+int32_t ssk_set_thread_attempt(int32_t attempt) {
+    onlyThreadAttempt = attempt;
+    return (int32_t)std::size(threadAttempts);
+}
+
 SSKShape *ssk_thread_tool(SSKVec3 origin, SSKVec3 axis, SSKVec3 reference, double start, double end, double pitch,
                           double crestRadius, double rootRadius, double surfaceRadius, bool internal, bool leftHanded, int32_t starts,
                           bool raised, double clipStart, double clipEnd) {
@@ -698,11 +709,14 @@ SSKShape *ssk_thread_tool(SSKVec3 origin, SSKVec3 axis, SSKVec3 reference, doubl
         // The ridge swept along a helix from a pitch before the start to a pitch past the end, split
         // into half turns (a face that wraps the axis confuses the booleans). The boolean can
         // still quietly leave the ridge out, so each attempt is checked and the next varies the sweep.
+        // A `phase` starts the sweep that fraction of a pitch earlier on the same helix, turned back to
+        // match, so its half turns break elsewhere while the thread stays in step with its mate.
         auto ridgeFor = [&](int mode, double phase) -> TopoDS_Shape {
             const double z0 = start - pitch - baseHalf - phase * pitch, height = length + 2 * pitch + 2 * baseHalf + phase * pitch;
-            const gp_Ax3 frame(o.Translated(gp_Vec(z) * z0), z, x);
+            const double lead = pitch * starts, back = 2 * M_PI * phase * pitch / lead;
+            const gp_Ax3 frame(o.Translated(gp_Vec(z) * z0), z, x.Rotated(gp_Ax1(o, z), leftHanded ? back : -back));
             Handle(Geom_CylindricalSurface) cylinder = new Geom_CylindricalSurface(frame, inner);
-            const double lead = pitch * starts, turns = height / lead, perTurn = std::hypot(2 * M_PI, lead);
+            const double turns = height / lead, perTurn = std::hypot(2 * M_PI, lead);
             Handle(Geom2d_Line) line = new Geom2d_Line(gp_Pnt2d(0, 0), gp_Dir2d(leftHanded ? -2 * M_PI : 2 * M_PI, lead));
             BRepBuilderAPI_MakeWire wire;
             const int pieces = std::max(1, (int)std::ceil(turns * 2));
@@ -712,7 +726,7 @@ SSKShape *ssk_thread_tool(SSKVec3 origin, SSKVec3 axis, SSKVec3 reference, doubl
                 wire.Add(edge);
             }
             if (!wire.IsDone()) return TopoDS_Shape();
-            auto at = [&](double r, double h) { return frame.Location().Translated(gp_Vec(x) * r + gp_Vec(z) * h); };
+            auto at = [&](double r, double h) { return frame.Location().Translated(gp_Vec(frame.XDirection()) * r + gp_Vec(z) * h); };
             BRepBuilderAPI_MakePolygon trapezoid(at(inner, -baseHalf), at(crestRadius, -crestHalf), at(crestRadius, crestHalf), at(inner, baseHalf), true);
             BRepOffsetAPI_MakePipeShell pipe(wire.Wire());
             // A fixed binormal along the axis keeps the profile in planes through the axis; or Frenet.
@@ -765,9 +779,9 @@ SSKShape *ssk_thread_tool(SSKVec3 origin, SSKVec3 axis, SSKVec3 reference, doubl
         auto clipSlab = [&](double radius) {
             return BRepPrimAPI_MakeCylinder(gp_Ax2(o.Translated(gp_Vec(z) * clipStart), z, x), radius, clipLength).Shape();
         };
-        const struct { int mode; double phase; double fuzz; } attempts[] = {
-            {0, 0, 0}, {0, 0, 1e-4}, {0, 0.13, 0}, {1, 0, 0}, {1, 0.29, 1e-4}, {0, 0.41, 1e-4}};
-        for (const auto &attempt : attempts) {
+        for (int32_t index = 0; index < (int32_t)std::size(threadAttempts); ++index) {
+            if (onlyThreadAttempt >= 0 && index != onlyThreadAttempt) continue;
+            const auto &attempt = threadAttempts[index];
             try {
                 const TopoDS_Shape ridge = ridgeFor(attempt.mode, attempt.phase);
                 if (ridge.IsNull()) continue;
