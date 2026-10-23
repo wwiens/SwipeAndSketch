@@ -295,17 +295,17 @@ struct WorkspaceView: View {
             }
             .frame(maxWidth: 260)
             Menu {
-                menuButton("Save", icon: .save) { session.save() }
-                    .disabled(!session.hasProjectFile || session.isReadOnly).accessibilityIdentifier("project.save")
-                menuButton("Save As…", icon: .saveAs) { session.onSaveAs?() }
-                    .disabled(!session.hasProjectFile).accessibilityIdentifier("project.saveAs")
+                // The usual file order: New and Open, then Save and Save As.
                 menuButton("New Project…", icon: .newProject) { session.onNewProject?() }
                     .disabled(!session.hasProjectFile).accessibilityIdentifier("project.new")
                 menuButton("Open Project…", icon: .open) { session.onOpenProjects?() }
                     .disabled(!session.hasProjectFile).accessibilityIdentifier("project.open")
+                menuButton("Save", icon: .save) { session.save() }
+                    .disabled(!session.hasProjectFile || session.isReadOnly).accessibilityIdentifier("project.save")
+                menuButton("Save As…", icon: .saveAs) { session.onSaveAs?() }
+                    .disabled(!session.hasProjectFile).accessibilityIdentifier("project.saveAs")
                 Divider()
-                menuButton("Import STEP…", icon: .open) { importingSTEP = true }
-                    .disabled(session.isEditingBlocked).accessibilityIdentifier("project.importSTEP")
+                // Out to the printer first, then other files out and in.
                 // 3MF is print-ready (named parts on the plate, a preview), so it opens its options first.
                 menuButton("Send to Slicer…", icon: .send) { session.printSheet = .send }
                     .disabled(!session.canExport).accessibilityIdentifier("project.sendToSlicer")
@@ -313,6 +313,8 @@ struct WorkspaceView: View {
                     .disabled(!session.canExport).accessibilityIdentifier("project.export.3mf")
                 menuButton("Export STL…", icon: .export) { session.export(.stl) }
                     .disabled(!session.canExport).accessibilityIdentifier("project.export.stl")
+                menuButton("Import STEP…", icon: .open) { importingSTEP = true }
+                    .disabled(session.isEditingBlocked).accessibilityIdentifier("project.importSTEP")
                 Divider()
                 // Plain buttons: an inline Picker here keeps the app from ever settling (UI tests wait on it).
                 Menu {
@@ -323,6 +325,7 @@ struct WorkspaceView: View {
                     Label { Text("Units: \(session.lengthUnit.title)") } icon: { Image(SSIcon.measure.assetName).renderingMode(.template) }
                 }
                 .accessibilityIdentifier("project.units")
+                // The gap printed parts leave each other; the Fit Test print is how to find it.
                 Menu {
                     ForEach(Fit.Preset.allCases, id: \.self) { preset in
                         let title = session.fitText(preset.clearance)
@@ -331,14 +334,17 @@ struct WorkspaceView: View {
                     Button(Fit.preset(for: session.fitClearance) == nil ? "Custom · \(session.lengthText(session.fitClearance)) (in use)…" : "Custom…") {
                         session.openDimension(.fitClearance, at: CGPoint(x: workspaceSize.width / 2 - 55, y: workspaceSize.height / 2 + 170))
                     }
+                    Divider()
+                    menuButton("Add a Fit Test Print", icon: .fitTest) { session.chooseTool(.fitTest) }
+                        .accessibilityIdentifier("project.fitTest")
                 } label: {
-                    Label { Text("Fit: \(session.fitText(session.fitClearance))") } icon: { Image(SSIcon.fit.assetName).renderingMode(.template) }
+                    Label { Text("Fit Clearance: \(session.fitText(session.fitClearance))") } icon: { Image(SSIcon.fit.assetName).renderingMode(.template) }
                 }
                 .disabled(session.isEditingBlocked)
                 .accessibilityIdentifier("project.fit")
                 Divider()
+                menuButton("Reset View", icon: .resetView) { session.requestCamera(.reset) }
                 menuButton("Controls", icon: .help) { session.showHelp = true }
-                menuButton("Reset view", icon: .resetView) { session.requestCamera(.reset) }
                 menuButton("Purchases · \(license.access.status)", icon: .brand) { license.isShowingStore = true }
                     .accessibilityIdentifier("project.purchases")
                 menuButton("About Swipe & Sketch", icon: .brand) { showAbout = true }.accessibilityIdentifier("project.about")
@@ -354,22 +360,21 @@ struct WorkspaceView: View {
         .accessibilityElement(children: .contain).accessibilityIdentifier("project.tab")
     }
 
-    /// The utility rail at the top left, a small dock of its own: the model tree, then snapping, the
-    /// assistant, and Measure, which all work in any mode.
+    /// The utility rail at the top left, a small dock of its own, the same in every mode: the two side
+    /// panels (Model Tree and Assistant), then the tools that look at the model without changing it
+    /// (Measure and Section), then snapping.
     private var utilityRail: some View {
         VStack(spacing: 4) {
             dockTile("Model Tree", icon: .items, selected: showItems, id: "items.toggle") {
                 withAnimation(.easeOut(duration: 0.2)) { showItems.toggle() }
                 if !showItems { session.endSelectingRows() }
             }
-            Rectangle().fill(hairline).frame(width: 40, height: 1).padding(.vertical, 4)
-            dockTile("Snap", icon: session.snapEnabled ? .snapOn : .snapOff, selected: false, id: "snap.toggle",
-                     subtitle: session.snapEnabled ? "On" : "Off") { session.snapEnabled.toggle() }
             dockTile("Assistant", icon: .assistant, selected: showAssistant, id: "assistant.toggle") {
                 withAnimation(.easeOut(duration: 0.2)) { showAssistant.toggle() }
                 // With something selected, it opens ready to ask about it.
                 if showAssistant && session.selection != nil { assistantFocus += 1 }
             }
+            Rectangle().fill(hairline).frame(width: 40, height: 1).padding(.vertical, 4)
             dockTile("Measure", icon: .measure, selected: session.isMeasuring, id: "tool.measure") {
                 openGroup = nil
                 if session.isMeasuring { session.endMeasure() } else { session.chooseTool(.measure) }
@@ -380,6 +385,8 @@ struct WorkspaceView: View {
                 session.toggleSection()
             }
             .disabled(session.isViewingBlocked || session.workspace.bodies.isEmpty && session.section == nil)
+            dockTile("Snap", icon: session.snapEnabled ? .snapOn : .snapOff, selected: false, id: "snap.toggle",
+                     subtitle: session.snapEnabled ? "On" : "Off") { session.snapEnabled.toggle() }
         }
         .frame(width: railWidth - 12)
         .padding(.horizontal, 6).padding(.vertical, 8)
@@ -392,7 +399,7 @@ struct WorkspaceView: View {
 
     /// The dock at the bottom center: modeling tools, or sketch tools while sketching.
     /// There is no Select tool: with no tool chosen, taps select; tapping the active tool
-    /// again puts it down. Fillet/Chamfer, Combine, and Plane pop up their tools above them.
+    /// again puts it down. Group tiles (`ToolGroup`) pop up their tools above them.
     private var dock: some View {
         HStack(alignment: .top, spacing: 4) {
             if sketching {
@@ -415,17 +422,18 @@ struct WorkspaceView: View {
                 dockTile("Dimension", icon: .dimension, selected: session.tool == .dimension, id: "tool.dimension") { toggle(.dimension) }
                 dockTile("Project", icon: .project, selected: session.tool == .project, id: "tool.project") { toggle(.project) }
             } else {
+                // Left to right, the way a part is made: what to build on (sketches and planes), then
+                // solids made, changed, and combined, then moved and copied, then fitted together.
                 dockTile("Sketch", icon: .sketch, selected: false, id: "tool.sketch") { session.beginSketch() }
+                dockTile("Project", icon: .project, selected: session.tool == .project, id: "tool.project") { toggle(.project) }
+                groupTile(.planes)
                 dockDivider
                 groupTile(.create)
                 groupTile(.edges)
-                dockTile("Shell", icon: .shell, selected: session.tool == .shell, id: "tool.shell") { toggle(.shell) }
-                dockDivider
                 groupTile(.combine)
-                groupTile(.fit)
+                dockDivider
                 groupTile(.transform)
-                groupTile(.planes)
-                dockTile("Project", icon: .project, selected: session.tool == .project, id: "tool.project") { toggle(.project) }
+                groupTile(.fit)
             }
         }
         .padding(.horizontal, 8).padding(.vertical, 6)
@@ -480,8 +488,8 @@ struct WorkspaceView: View {
             ForEach(group.tools, id: \.rawValue) { tool in
                 let active = session.tool == tool
                 Button {
-                    openGroup = nil
-                    session.chooseTool(tool)
+                    // Like a dock tile: tapping the tool in use puts it down.
+                    toggle(tool)
                 } label: {
                     HStack(spacing: 10) {
                         SSIconGlyph(icon: tool.icon, size: 24, color: active ? paper : ink)
@@ -605,11 +613,11 @@ struct WorkspaceView: View {
             .disabled(!session.canExtrudeSelectedFace)
         stripButton("Sketch", icon: .sketch, id: "selection.sketch") { session.beginFaceSketch() }
             .disabled(!session.canSketchOnSelectedFace)
+        stripButton("Text", icon: .text, id: "selection.text") { session.chooseTool(.text) }
+            .disabled(!session.canSketchOnSelectedFace)
     }
 
     @ViewBuilder private var flatFaceMoreActions: some View {
-        stripButton("Text", icon: .text, id: "selection.text") { session.chooseTool(.text) }
-            .disabled(!session.canSketchOnSelectedFace)
         stripButton("Align", icon: .align, id: "selection.align") { session.chooseTool(.align) }
         stripButton("Offset Plane", icon: .offsetPlane, id: "selection.offsetPlane") { session.chooseTool(.offsetPlane) }
     }
@@ -622,49 +630,52 @@ struct WorkspaceView: View {
         stripButton("Align", icon: .align, id: "selection.align") { session.chooseTool(.align) }
     }
 
+    /// A solid's actions, in the dock's order: Modify (Shell, Split Body), Combine, Transform, Joints,
+    /// then its color and a copy.
     @ViewBuilder private func bodyActions(_ body: SolidBody) -> some View {
         // The hint already says a solid is selected, so its size stands alone (VoiceOver still hears the kind).
         if let measure = session.selectionMeasure { measureLabel(measure, kind: "Solid body") } else { stripLabel("Solid body") }
         stripButton("Shell", icon: .shell, id: "selection.shell") { session.shellSelection() }
-        AnyView(combineMenu)
+        stripButton("Split Body", icon: .split, id: "selection.split") { session.chooseTool(.split) }
+        if session.workspace.bodies.count > 1 { AnyView(combineMenu) }
+        AnyView(transformMenu(solid: true))
         if !session.matingChoices.isEmpty { matingMenu }
         Menu { colorMenu(body.id, current: body.color ?? .gray) } label: { StripLabel(title: "Color", icon: .color, showsMenu: true) }
             .accessibilityLabel("Color").accessibilityIdentifier("selection.color")
-        AnyView(arrangeActions(duplicateFirst: true))
+        stripButton("Duplicate", icon: .copy, id: "selection.duplicate") { session.duplicate() }
     }
 
-    /// Union, Subtract, Intersect, and Split Body share one menu, like the dock's Combine group.
+    /// Union, Subtract, and Intersect share one menu, like the dock's Combine group.
     private var combineMenu: some View {
         Menu {
-            if session.workspace.bodies.count > 1 {
-                menuButton("Union", icon: .merge) { session.chooseTool(.union) }.accessibilityIdentifier("selection.union")
-                menuButton("Subtract", icon: .subtract) { session.chooseTool(.subtract) }.accessibilityIdentifier("selection.subtract")
-                menuButton("Intersect", icon: .intersect) { session.chooseTool(.intersect) }.accessibilityIdentifier("selection.intersect")
-            }
-            menuButton("Split Body", icon: .split) { session.chooseTool(.split) }.accessibilityIdentifier("selection.split")
+            menuButton("Union", icon: .merge) { session.chooseTool(.union) }.accessibilityIdentifier("selection.union")
+            menuButton("Subtract", icon: .subtract) { session.chooseTool(.subtract) }.accessibilityIdentifier("selection.subtract")
+            menuButton("Intersect", icon: .intersect) { session.chooseTool(.intersect) }.accessibilityIdentifier("selection.intersect")
         } label: {
             StripLabel(title: "Combine", icon: .merge, showsMenu: true)
         }
         .accessibilityLabel("Combine").accessibilityIdentifier("selection.combine")
     }
 
-    /// Duplicate, Align (solids), Mirror, Pattern, and Scale.
-    @ViewBuilder private func arrangeActions(duplicateFirst: Bool) -> some View {
-        if duplicateFirst {
-            stripButton("Duplicate", icon: .copy, id: "selection.duplicate") { session.duplicate() }
-            stripButton("Align", icon: .align, id: "selection.align") { session.chooseTool(.align) }
+    /// Align (solids only), Scale, Mirror, and Pattern share one menu, like the dock's Transform group.
+    private func transformMenu(solid: Bool) -> some View {
+        Menu {
+            if solid {
+                menuButton("Align", icon: .align) { session.chooseTool(.align) }.accessibilityIdentifier("selection.align")
+            }
+            menuButton("Scale", icon: .scale) { session.chooseTool(.scale) }.accessibilityIdentifier("selection.scale")
+            menuButton("Mirror", icon: .mirror) { session.chooseTool(.mirror) }.accessibilityIdentifier("selection.mirror")
+            menuButton("Pattern", icon: .pattern) { session.chooseTool(.pattern) }.accessibilityIdentifier("selection.pattern")
+        } label: {
+            StripLabel(title: "Transform", icon: .align, showsMenu: true)
         }
-        stripButton("Mirror", icon: .mirror, id: "selection.mirror") { session.chooseTool(.mirror) }
-        stripButton("Pattern", icon: .pattern, id: "selection.pattern") { session.chooseTool(.pattern) }
-        stripButton("Scale", icon: .scale, id: "selection.scale") { session.chooseTool(.scale) }
-        if !duplicateFirst {
-            stripButton("Duplicate", icon: .copy, id: "selection.duplicate") { session.duplicate() }
-        }
+        .accessibilityLabel("Transform").accessibilityIdentifier("selection.transform")
     }
 
     @ViewBuilder private func sketchActions(_ sketch: Sketch) -> some View {
         stripLabel(session.sketchName(of: sketch.id) ?? "Sketch", id: "selection.sketchName")
-        AnyView(arrangeActions(duplicateFirst: false))
+        AnyView(transformMenu(solid: false))
+        stripButton("Duplicate", icon: .copy, id: "selection.duplicate") { session.duplicate() }
     }
 
     @ViewBuilder private var regionActions: some View {
@@ -1807,7 +1818,7 @@ struct WorkspaceView: View {
         NavigationStack {
             List {
                 Section("Pencil") {
-                    Text("Tap Sketch, then draw with Apple Pencil: on the grid, or on one of the planes at the origin or a flat face (tap it first to look straight at it). Line is ready; Rectangle and Circle are beside it.")
+                    Text("Tap Sketch, then draw with Apple Pencil: on the grid, or on one of the planes at the origin or a flat face (tap it first to look straight at it). Line is ready; Rectangle and Shapes (Circle and more) are beside it.")
                     Text("Sketch on a solid: with no tool chosen, tap a flat face with Pencil, then tap Sketch (or just choose Line, Rectangle, Circle, or Hole while the face is selected). The view turns to face it, strokes stay on that face, and purple dots on its corners, edge midpoints, and center are snap points. Finish Sketch ends the sketch. Tapping a view cube face while sketching moves the sketch to Top, Front, or Right.")
                     Text("With no tool chosen, a tap picks a face and a quick double-tap picks the whole solid. A tap near a solid's edge picks the edge: drag its arrow to round it, or choose Fillet or Chamfer. A tap on a sketch line opens that sketch where you are looking, so you can keep drawing into it at an angle; a quick double-tap selects the whole sketch.")
                     Text("A sketch you extruded is hidden under its solid. Choose a drawing tool on its plane (then tap the tool again to put it down) and it shows again so you can tap it, or pick it from the Model Tree.")
@@ -1815,48 +1826,49 @@ struct WorkspaceView: View {
                     Text("Select a sketch. Its dimensions appear beside it. Tap a value with Pencil or a finger to open the numeric keypad.")
                     Text("With no tool chosen, drag endpoints to change lines, rectangle corners or edges to resize, or a circle's circumference to change its diameter. Drag the circle center to reposition it.")
                 }
-                Section("Toolbar") { Text("Tools live in the dock at the bottom. While modeling: Sketch, Extrude (Extrude or Revolve), Fillet (Fillet, Chamfer, or Delete Face), Shell, Combine (Union, Subtract, Intersect, Split Body), Fit (Peg, Thread, Fit Test), Transform (Align, Mirror, Pattern, Scale), Plane (Offset Plane, Midplane), and Project; a tile with ▴ pops up its tools above it. Tap Sketch and the dock switches to sketch tools (Line, Rectangle, Circle with Arc, Slot, Ellipse, Polygon, and Point, Hole with Peg and Text on a face, Trim with Fillet, Extend, Offset, and Mirror, Dimension, and Project) until you tap Finish Sketch. Model Tree, Snap, Assistant, Measure, and Section sit together in the rail at the top left; the view cube is at the top right. There is no Select tool: with no tool chosen, a tap selects; tap the active tool again to put it down. What you can do with the selection (Extrude, Revolve, Sketch, Shell, Delete Face, Offset Plane, Fillet, Combine with Union, Subtract, Intersect, and Split Body, Color, Duplicate, Align, Mirror, Pattern, Scale, Create Copy, Construction for a sketch shape, and the trash can for Delete, which removes whole items only) appears in the strip just above the dock, with a selected solid's volume. While an operation is being set up, its own controls and Done replace the dock. A hand resting on the dock while the Pencil draws presses nothing.") }
-                Section("Sizes From Faces") { Text("Tap a face of a solid. A round face shows its diameter and a flat face its distance to the face behind it; tap the value to type a new one. The solid's own circle, depth, hole, or outline changes when it can; otherwise the face moves and the faces around it follow. Delete Face (beside it, or under Fillet) takes faces off and closes the gap, removing a fillet, hole, or boss. For a round hole, tap its wall and choose Delete Hole: the whole hole goes in one tap, with any thread in it and fillets on its rim, as if it had never been made.") }
-                Section("Scale and Intersect") { Text("Transform ▸ Scale makes solids and sketches larger or smaller: drag an arrow or type the percentage, about their center, their base, or the origin; turn off Uniform to stretch a solid along one arrow. Combine ▸ Intersect keeps only where the picked solids overlap.") }
-                Section("Extrude Options") { Text("While extruding a sketch: Symmetric goes half each way, Taper leans the sides in by an angle, Up To sets the depth to reach a face you tap, and tapping more regions extrudes them too.") }
-                Section("Section View") { Text("Tap Section at the top left to cut the solids open along a plane and look inside; the cut faces are coral. Choose Top, Front, or Right, drag the arrow to move the cut, Flip for the other half, Done to finish. Nothing changes.") }
-                Section("More Sketch Tools") { Text("Circle ▸ Ellipse, Polygon (tap the number of sides afterward to change it), and Point. Trim ▸ Extend carries a line on to the next shape; Offset draws an outline a set distance away (Both Sides for a wall); Mirror copies shapes across a line. Select a shape and tap Construction to make it a dashed reference, and drag its arrows to move it within the sketch.") }
-                Section("Model Tree") { Text("Tap Model Tree at the top left to list everything in the project: bodies, construction planes, and sketches, each in its own group. Tap a row to select it, just like tapping it on the canvas, even a sketch hidden under the solid it made. Long-press a row to rename it, color a solid, copy, duplicate, paste, move it to a group, or delete; Paste also sits at the top of the list while something is copied (⌘C, ⌘V, and ⌘D work with a keyboard). Groups organize the tree: tap the folder button at the top to make one (or choose Move to Group ▸ New Group on a row), then drag rows onto it or use Move to Group. A group can hold solids, sketches, planes, and other groups; tap it to fold it away, and tap its eye to hide or show everything in it at once (each item keeps its own eye for when the group is shown again). Long-press a group to rename it, make a group inside it, ungroup it (keeping its contents), or delete it with its contents. To act on several rows at once, tap Select at the top of the list, tap the rows to check them (hidden ones too; a shape's row follows its sketch), then use the bar at the bottom: Group puts them in a new group, Move puts them in a group or takes them out, Hide or Show, and Delete. Dragging a checked row onto a group moves them all. Tap Done to stop. Tap Model Tree again to close the list.") }
                 Section("Touch") { Text("One finger orbits. Two fingers pan. Pinch to zoom. Fingers never draw or drag sketch geometry. The view cube rotates with the camera: tap any face to look straight at it and choose the plane for new sketches. Opposite faces share the same sketch plane. Double-tap the cube to reset and frame the model in 3D. During extrusion, the cube changes the view while keeping the extrusion's sketch plane.") }
-                Section("Fillet and Chamfer") { Text("Choose Fillet to round edges or Chamfer to bevel them, then tap the edges of a solid with Apple Pencil; tap again to deselect. Any edge works: the solid's own, and the edges of holes, cuts, joined bosses, united solids, shells, and earlier fillets. Drag the double-arrow up or down, or tap its value for the keypad. The preview shows the result; a red value does not fit the edges. Done applies it as one step, and Undo removes it.") }
-                Section("Arc and Slot") { Text("In a sketch, tap Circle to find Arc and Slot beside it. Arc: drag from one end to the other, curving the stroke through the middle; the arc passes through the point farthest from its ends. Drag its ends or middle dot to reshape it, or tap its radius. Slot: drag from the center of one round end to the other's; it is drawn at the last width used. Drag its ends or its edge, or tap its length or width.") }
-                Section("Regions") { Text("Shapes in a sketch divide each other where they cross: two overlapping rectangles make three regions, and a line across a rectangle makes two. Tap inside a region to select it. An outline inside a region, such as a circle in a rectangle, is a hole in it, and the circle is a region of its own. A selected shape (just drawn, or picked from the Model Tree) extrudes all of itself.") }
-                Section("Trim and Sketch Fillet") { Text("Tap Trim (in the group beside Rectangle), then tap or scribble over part of a shape: the part goes, back to where other shapes cross it. A shape nothing crosses goes whole. Each stroke is one undo step; tap empty space to finish. Fillet in the same group rounds a corner where two lines meet (a rectangle's too): tap the corner. Tap the radius that appears to type another; it stays one undo step.") }
-                Section("Dimension") { Text("While sketching, tap Dimension, then a point (a line end, a corner, a circle's center, a purple dot of a solid, or the origin), a line, or a circle. One line shows its length and its angle. Tap a second item for the distance across and up between them, or the angle between two lines. Tap a value to type a new one: the second item moves to match. Joined to the first, it changes the outline in place; otherwise its whole outline moves. Tap empty space to start again. Dimensions are not kept afterwards.") }
-                Section("Measure") { Text("Tap Measure in the rail at the top left; a selected item becomes the first one measured. Tap a corner, edge, face, or sketch item to read its size: length, radius, area, or for a solid (double-tap a face) its volume and size. Tap a second item for the distance between them, its parts across, back, and up, and the angle between them. The results replace the dock; Done ends Measure. A selected edge, face, or solid also shows its size in the strip above the dock.") }
-                Section("Text") { Text("Select a flat face and tap Text above the dock (or choose Hole ▸ Text while sketching on a face), then tap where the text goes. Type it in the field, pick a font, and choose Raised (embossed) or Sunk (debossed). Tap the height (capital letters) or depth to type a value, and Rotate 90° to turn it. Tap elsewhere on the face to move it. The outline shows at once; the solid preview follows, and Done adds it as one step. The letters are saved in the project, so they rebuild the same on any iPad.") }
-                Section("Threads") { Text("Choose Fit ▸ Thread and tap the inside of a hole (a nut's thread) or the side of a round boss (a bolt's thread), or select that face and tap Thread above the dock. A size is picked from the face: a hole near an M-size's tap-drill diameter, a boss near its diameter, or a custom thread fitted to the face. Choose another ISO size (M3 to M24), or tap the diameter or pitch to type your own, such as a 3 mm pitch for a jar lid. Holes open up and bosses slim down by the clearance. Left-hand turns the thread the other way. Lead-in (on unless you turn it off) bevels the open ends so the thread starts straight. The preview takes a moment to build; Done cuts the thread as one step. Then tap the thread and choose Matching Part above the dock for the nut or cap (on a bolt's thread) or bolt or plug (in a hole's) that screws onto it: it appears already screwed on, with the same size, hand, and clearance. Move it aside, or export with Arrange on Plate, to print the parts separately.") }
-                Section("Fit") { Text("Printed parts that go together need a small gap. Set Fit in the project menu once for your printer: Tight (0.1 mm), Standard (0.2 mm), Loose (0.3 mm), or Custom; Fit ▸ Fit Test adds a test print to find it. Fit ▸ Peg (or Hole ▸ Peg while sketching on a face) puts a round peg on a flat face, and every solid it pushes into gets a matching socket, even a hidden one, so hide a lid to reach the rim under it. Subtract's Clearance leaves that gap around the tools, so a part shaped like them fits; choose Keep: Tools to keep the part.") }
-                Section("Units") { Text("Choose Millimeters or Inches under Units in the project menu. Values, the keypad, the grid, and snapping follow the choice; type in, mm, cm, or m after a number to give another unit. Projects always store millimeters.") }
+                Section("Toolbar") { Text("Tools live in the dock at the bottom, in the order a part is made. While modeling: Sketch, Project, and Planes (Offset Plane, Midplane) to build on; Create (Extrude, Revolve) to make solids; Modify (Fillet, Chamfer, Shell, Delete Face, Split Body) to change one; Combine (Union, Subtract, Intersect) to join or cut solids with each other; Transform (Align, Scale, Mirror, Pattern) to move, resize, and copy; and Joints (Peg & Socket, Thread, Fit Test) for parts that fit together. A tile with ▴ pops up its tools above it and shows the one in use. Tap Sketch and the dock switches to sketch tools until you tap Finish Sketch: Line, Rectangle, Shapes (Circle, Arc, Slot, Ellipse, Polygon, Point), Features on a face (Hole, Peg & Socket, Text), Modify (Trim, Extend, Fillet, Offset, Mirror), Dimension, and Project. The rail at the top left opens the Model Tree and the Assistant, then Measure, Section, and Snap; the view cube is at the top right. There is no Select tool: with no tool chosen, a tap selects; tap the active tool again to put it down. What you can do with the selection appears in the strip just above the dock, grouped the same way: for a solid, its volume, Shell, Split Body, Combine (Union, Subtract, Intersect), Transform (Align, Scale, Mirror, Pattern), Color, Duplicate, and the trash can for Delete, which removes whole items only; a face, edge, region, sketch, or plane offers what suits it. While an operation is being set up, its own controls and Done replace the dock. A hand resting on the dock while the Pencil draws presses nothing.") }
                 Section("Sketches") { Text("Tap Sketch, then one of the three planes at the origin (or a flat face) to start a new sketch; the view turns to face it and the origin is marked. Everything you draw until you leave belongs to that sketch, and the Model Tree lists each sketch with its shapes. Purple dots also mark where other sketches and solid edges cross the plane. Leaving a sketch selects all of it: drag an arrow to move it or an arc to turn it, tap the value to type an exact distance or angle, and turn on Create Copy to make copies instead. A selected solid (double-tap one of its faces) moves, turns, and copies the same way, with everything done to it. Hide or Show any sketch or solid from the Model Tree.") }
-                Section("Construction Planes") { Text("Tap Plane in the dock, then Offset Plane or Midplane. Offset Plane: tap a flat face, sketch region, plane, or one of the planes at the origin (or select it first); the new plane starts on it, so drag the double-arrow or tap the value for an exact distance (negative goes the other way). Midplane: tap two parallel faces, regions, or planes and the plane lands halfway between them. Done adds the plane. Select a plane to sketch on it or offset from it; hide or delete it from the Model Tree.") }
-                Section("Split Body") { Text("Tap Combine in the dock, then Split Body (or select a solid and choose Combine ▾ → Split Body above the dock). Tap the solids to split, then Splitting Tools and what to cut them with: a construction plane, one of the planes at the origin, a flat face of any solid (even the one being split, such as the inside face of an L), a sketch region (cut along its outline, straight through), or a sketch line (cut along the plane through it, square to its sketch). Tools reach through the whole solid, and several cut again. Nothing is removed: the pieces become separate solids that add up to the original. Turn on Keep Input to keep the solid too. Done is one undo step. Pieces that do not touch each other but come from the same side stay one solid.") }
+                Section("Regions") { Text("Shapes in a sketch divide each other where they cross: two overlapping rectangles make three regions, and a line across a rectangle makes two. Tap inside a region to select it. An outline inside a region, such as a circle in a rectangle, is a hole in it, and the circle is a region of its own. A selected shape (just drawn, or picked from the Model Tree) extrudes all of itself.") }
+                Section("Arc and Slot") { Text("In a sketch, tap Shapes to find Arc and Slot with Circle. Arc: drag from one end to the other, curving the stroke through the middle; the arc passes through the point farthest from its ends. Drag its ends or middle dot to reshape it, or tap its radius. Slot: drag from the center of one round end to the other's; it is drawn at the last width used. Drag its ends or its edge, or tap its length or width.") }
+                Section("More Sketch Tools") { Text("Shapes ▸ Ellipse, Polygon (tap the number of sides afterward to change it), and Point. Modify ▸ Extend carries a line on to the next shape; Offset draws an outline a set distance away (Both Sides for a wall); Mirror copies shapes across a line. Select a shape and tap Construction to make it a dashed reference, and drag its arrows to move it within the sketch.") }
+                Section("Trim and Sketch Fillet") { Text("Tap Modify in the sketch dock, then Trim, then tap or scribble over part of a shape: the part goes, back to where other shapes cross it. A shape nothing crosses goes whole. Each stroke is one undo step; tap empty space to finish. Fillet in the same group rounds a corner where two lines meet (a rectangle's too): tap the corner. Tap the radius that appears to type another; it stays one undo step.") }
+                Section("Dimension") { Text("While sketching, tap Dimension, then a point (a line end, a corner, a circle's center, a purple dot of a solid, or the origin), a line, or a circle. One line shows its length and its angle. Tap a second item for the distance across and up between them, or the angle between two lines. Tap a value to type a new one: the second item moves to match. Joined to the first, it changes the outline in place; otherwise its whole outline moves. Tap empty space to start again. Dimensions are not kept afterwards.") }
                 Section("Project") { Text("Tap Project in the dock to cast existing geometry onto a plane as a sketch. Tap the sketches, edges, faces, or solids to project (tap again to unpick; double-tap a solid or sketch for all of it), or select one first. Then tap Target Plane and the flat face, construction plane, world plane at the origin, or sketch to project onto. The surface turns purple and the projection previews on it; Done adds it as a new sketch, or into the sketch you tapped. Inside a sketch, Project goes into that sketch. Lines stay lines, and circles and arcs facing the surface stay exact, so projected outlines extrude with smooth curved sides; circles seen at an angle and the outlines of curved faces become curves. The projection is a copy: it does not follow later changes.") }
+                Section("Construction Planes") { Text("Tap Planes in the dock, then Offset Plane or Midplane. Offset Plane: tap a flat face, sketch region, plane, or one of the planes at the origin (or select it first); the new plane starts on it, so drag the double-arrow or tap the value for an exact distance (negative goes the other way). Midplane: tap two parallel faces, regions, or planes and the plane lands halfway between them. Done adds the plane. Select a plane to sketch on it or offset from it; hide or delete it from the Model Tree.") }
                 Section("Extrude") { Text("Select a closed region, then Extrude. It starts at 0 mm on the sketch plane. Drag the double-arrow outward along its direction to increase depth or back to decrease it, including through the sketch plane; dragging toward a solid moves into it. Tap the outlined value above the arrow for the same keypad used by sketch dimensions. Done creates a separate solid; Cancel discards the preview.") }
-                Section("Holes") { Text("While sketching on a face, choose Hole and tap where it goes; it snaps to the purple dots. Pick Simple, Counterbore, Countersink, or Insert (heat-set) and a size from M2 to M5: dimensions start from standard metric hardware (ISO 273 clearance, socket-head counterbores, 90° countersinks, common brass inserts). Tap the diameter or depth to type your own; a counterbore or countersink widens with the hole. Through goes all the way; turn it off for a blind hole. Done adds the hole and keeps the Hole tool ready for the next one.") }
-                Section("Shell") { Text("Choose Shell and tap the faces to leave open, such as a box's top (at least one): any face, including faces made by cuts, joins, Union, or Subtract, and curved faces where the wall can be built. Or select a face (or a solid) and tap Shell beside it. Drag the double-arrow or tap the thickness for the wall. Done, or a tap on empty space, hollows the solid inward, keeping its outside size. Shell before rounding every edge: a fully rounded box cannot be hollowed.") }
-                Section("Mirror") { Text("Tap Transform in the dock, then Mirror (or select a solid or sketch and tap Mirror above it). Tap the solids and sketches to mirror, then Mirror Plane and the plane to mirror across: one of the planes at the origin, a construction plane, a flat face, a sketch region's plane, or a sketch line (the plane through it, square to its sketch). Keep Input is on: the mirror images are new solids and sketches beside the originals; turn it off to replace them. A mirrored solid is an ordinary solid: its fillets, holes, cuts, and shells come along, and it can be edited, moved, or filleted like any other. Done is one undo step.") }
-                Section("Pattern") { Text("Tap Transform in the dock, then Pattern (or select a solid or sketch and tap Pattern above it). Tap the solids and sketches to copy. Linear: drag one of the gizmo arrows to lay copies out along it, and others for a grid; Extent spreads the copies across the distance, Spacing is the gap between neighbors. The quantity (− and +, or tap it to type it) counts the original and applies to the last arrow dragged. Circular: drag the gizmo center onto a corner, edge, circle center, or face center of any solid, a sketch point, or the origin (on a circle or edge the gizmo turns to follow it), then turn a ring; Rotated copies turn with the pattern, Fixed ones keep their orientation. Tap a value to type it. Done adds the copies as ordinary, independent solids and sketches in one undo step; a pattern makes at most 100.") }
-                Section("Align") { Text("Tap Transform in the dock, then Align (or select a solid, face, or edge and tap Align above it). Tap the solids to move, then From and the flat face, round edge, or straight edge on them to align, then To and where it goes: a face, construction plane, plane at the origin, or sketch region for a face (they meet face to face, centered on a face); a round edge or sketch circle for a round edge (concentric); a straight edge or sketch line for a straight edge (end to end, centered); a corner of another solid, a sketch point, or the origin for a corner (point to point: it just moves there). Pickable points show as small dots, and a tap near a corner picks the point rather than its edges. Flip turns it over; drag the double-arrow or tap the values to offset it or turn it about the target. Done moves the solids as one undo step.") }
-                Section("Subtract") { Text("Tap Combine in the dock, then Subtract. Tap the solids to subtract from (the targets, outlined in purple; a selected solid starts as one), then Tools and the solids to take away (blue). Each target loses whatever the tools overlap; a tool that overlaps no target, or a target no tool reaches, is named in the hint. Keep: None keeps only the results; Targets adds the results as new solids and keeps the targets; Tools keeps the tools; Targets & Tools keeps both. Done is one undo step.") }
-                Section("Union") { Text("Tap Combine in the dock, then Union (or select a solid and choose Combine ▾ → Union above the dock), then tap the solids to unite; tap one again to leave it out. The last one you tap is the target, outlined in purple, and the others join it. They must touch or overlap, in a chain if you like. The preview shows the united solid; Done makes it one solid that keeps everything done to each. Turn on Keep Input to add the united solid as a new one and keep the input solids too.") }
-                Section("Assistant") { Text("Tap Assistant in the rail at the top left to ask about the model or describe a change (with something selected, the request is about it), by typing, dictating, or writing with Apple Pencil. Changes preview on the canvas: Keep adds them as one step you can undo, and Discard leaves the model as it was; editing waits until you choose. Each reply lists the changes the app actually made. Automatic uses Private Cloud Compute when it is available and the on-device model otherwise; choose a model from the badge at the top of the panel.") }
-                Section("Import") { Text("Import STEP in the project menu brings in the solids of a .step or .stp file from Files, each as a solid of its own, where the file put them, converted to millimeters, together in a Model Tree group named after the file (hide or show them all with its eye). Open surfaces are joined into solids where they close. Imported solids are ordinary solids: move, rotate, mirror, align, cut, drill, shell, fillet any edge, combine, split, sketch on their faces, and export them. Their exact shapes are saved in the project, so it does not need the STEP file again.") }
-                Section("Export") { Text("Export 3MF in the project menu makes a print-ready file: choose all visible solids or the selected one, Arrange on Plate (side by side, each resting on the plate) or As Modeled, and your printer's plate. Each part is named as in the Model Tree, and a picture of the view is the file's preview. Export STL saves every visible solid in one watertight millimeter file. Both open the share sheet for AirDrop, Files, or a slicer app.") }
-                Section("Send to Slicer") { Text("Send to Slicer in the project menu makes the same print-ready 3MF and saves it into a print folder you choose once, such as a folder in iCloud Drive that the slicer on your Mac opens. Each send replaces the file there, so the newest version is always the one you open. Or share it with AirDrop or another app.") }
-                Section("Revolve") { Text("Select a closed region (or a flat face of a solid), then Revolve, from the selection strip or the Extrude group in the dock. Tap the axis to turn it around: a sketch line or one side of a rectangle, a straight edge of a solid, or the X, Y, or Z axis, lying in the region's plane along its edge or beside it (never through it). Drag the curved arrow around the axis, or tap the angle for the keypad; 360° goes all the way around, and a negative angle turns the other way. Tap another line to change the axis. Like Extrude, sweeping into a solid cuts it and touching one joins it, until you choose New Body, Join, or Cut. A face revolve joins or cuts its own solid. Done is one undo step; select the solid later to change its angle.") }
+                Section("Extrude Options") { Text("While extruding a sketch: Symmetric goes half each way, Taper leans the sides in by an angle, Up To sets the depth to reach a face you tap, and tapping more regions extrudes them too.") }
                 Section("Extrude a Face") { Text("Tap a flat face of a solid, then Extrude (or tap the face with the Extrude tool). It starts at 0 mm on the face: drag the double-arrow out to add material to the solid or in to cut into it, or tap the value to type a distance (negative goes in). Holes and rounded edges in the face carry through. Done applies it as one undo step.") }
                 Section("Join") { Text("Extrude a sketch out of a solid's face (or anywhere it touches a solid) and it joins that solid: Extrude switches to Join automatically and the merged solid previews live. Done makes the boss part of the solid, so later holes can go through both. Choose New Body to keep it separate.") }
                 Section("Holes and Cuts") { Text("Draw a circle (for a hole) or any closed outline on a plane that crosses or touches a solid, then Extrude and choose Cut. Drag the depth for a pocket, or turn on Through All to cut straight through every solid on both sides of the sketch plane. The red tool shows what is removed and the solids preview with the cut. Dragging into a solid switches to Cut automatically, and back out returns to New Body, until you choose one yourself. Done cuts every solid the tool touches as one undo step. While sketching or extruding, sketches on the active plane show through solids, and the Extrude tool picks regions even inside a solid.") }
+                Section("Revolve") { Text("Select a closed region (or a flat face of a solid), then Revolve, from the selection strip or Create in the dock. Tap the axis to turn it around: a sketch line or one side of a rectangle, a straight edge of a solid, or the X, Y, or Z axis, lying in the region's plane along its edge or beside it (never through it). Drag the curved arrow around the axis, or tap the angle for the keypad; 360° goes all the way around, and a negative angle turns the other way. Tap another line to change the axis. Like Extrude, sweeping into a solid cuts it and touching one joins it, until you choose New Body, Join, or Cut. A face revolve joins or cuts its own solid. Done is one undo step; select the solid later to change its angle.") }
+                Section("Holes") { Text("While sketching on a face, choose Features ▸ Hole and tap where it goes; it snaps to the purple dots. Pick Simple, Counterbore, Countersink, or Insert (heat-set) and a size from M2 to M5: dimensions start from standard metric hardware (ISO 273 clearance, socket-head counterbores, 90° countersinks, common brass inserts). Tap the diameter or depth to type your own; a counterbore or countersink widens with the hole. Through goes all the way; turn it off for a blind hole. Done adds the hole and keeps the Hole tool ready for the next one.") }
+                Section("Text") { Text("Select a flat face and tap Text above the dock (or choose Features ▸ Text while sketching on a face), then tap where the text goes. Type it in the field, pick a font, and choose Raised (embossed) or Sunk (debossed). Tap the height (capital letters) or depth to type a value, and Rotate 90° to turn it. Tap elsewhere on the face to move it. The outline shows at once; the solid preview follows, and Done adds it as one step. The letters are saved in the project, so they rebuild the same on any iPad.") }
+                Section("Fillet and Chamfer") { Text("Choose Modify ▸ Fillet to round edges or Modify ▸ Chamfer to bevel them (or select an edge and tap Fillet or Chamfer above it), then tap the edges of a solid with Apple Pencil; tap again to deselect. Any edge works: the solid's own, and the edges of holes, cuts, joined bosses, united solids, shells, and earlier fillets. Drag the double-arrow up or down, or tap its value for the keypad. The preview shows the result; a red value does not fit the edges. Done applies it as one step, and Undo removes it.") }
+                Section("Shell") { Text("Choose Modify ▸ Shell and tap the faces to leave open, such as a box's top (at least one): any face, including faces made by cuts, joins, Union, or Subtract, and curved faces where the wall can be built. Or select a face (or a solid) and tap Shell beside it. Drag the double-arrow or tap the thickness for the wall. Done, or a tap on empty space, hollows the solid inward, keeping its outside size. Shell before rounding every edge: a fully rounded box cannot be hollowed.") }
+                Section("Sizes From Faces") { Text("Tap a face of a solid. A round face shows its diameter and a flat face its distance to the face behind it; tap the value to type a new one. The solid's own circle, depth, hole, or outline changes when it can; otherwise the face moves and the faces around it follow. Delete Face (beside it, or under Modify) takes faces off and closes the gap, removing a fillet, hole, or boss. For a round hole, tap its wall and choose Delete Hole: the whole hole goes in one tap, with any thread in it and fillets on its rim, as if it had never been made.") }
+                Section("Split Body") { Text("Tap Modify in the dock, then Split Body (or select a solid and tap Split Body above the dock). Tap the solids to split, then Splitting Tools and what to cut them with: a construction plane, one of the planes at the origin, a flat face of any solid (even the one being split, such as the inside face of an L), a sketch region (cut along its outline, straight through), or a sketch line (cut along the plane through it, square to its sketch). Tools reach through the whole solid, and several cut again. Nothing is removed: the pieces become separate solids that add up to the original. Turn on Keep Input to keep the solid too. Done is one undo step. Pieces that do not touch each other but come from the same side stay one solid.") }
+                Section("Union") { Text("Tap Combine in the dock, then Union (or, with two or more solids, select one and choose Combine ▾ → Union above the dock), then tap the solids to unite; tap one again to leave it out. The last one you tap is the target, outlined in purple, and the others join it. They must touch or overlap, in a chain if you like. The preview shows the united solid; Done makes it one solid that keeps everything done to each. Turn on Keep Input to add the united solid as a new one and keep the input solids too.") }
+                Section("Subtract") { Text("Tap Combine in the dock, then Subtract (or select a solid and choose Combine ▾ → Subtract above the dock). Tap the solids to subtract from (the targets, outlined in purple; a selected solid starts as one), then Tools and the solids to take away (blue). Each target loses whatever the tools overlap; a tool that overlaps no target, or a target no tool reaches, is named in the hint. Keep: None keeps only the results; Targets adds the results as new solids and keeps the targets; Tools keeps the tools; Targets & Tools keeps both. Done is one undo step.") }
+                Section("Intersect") { Text("Combine ▸ Intersect (or Combine ▾ → Intersect above a selected solid) keeps only where the picked solids overlap.") }
+                Section("Align") { Text("Tap Transform in the dock, then Align (or select a face or edge and tap Align above it, or a solid and choose Transform ▾ → Align). Tap the solids to move, then From and the flat face, round edge, or straight edge on them to align, then To and where it goes: a face, construction plane, plane at the origin, or sketch region for a face (they meet face to face, centered on a face); a round edge or sketch circle for a round edge (concentric); a straight edge or sketch line for a straight edge (end to end, centered); a corner of another solid, a sketch point, or the origin for a corner (point to point: it just moves there). Pickable points show as small dots, and a tap near a corner picks the point rather than its edges. Flip turns it over; drag the double-arrow or tap the values to offset it or turn it about the target. Done moves the solids as one undo step.") }
+                Section("Scale") { Text("Transform ▸ Scale (or Transform ▾ → Scale above a selected solid or sketch) makes solids and sketches larger or smaller: drag an arrow or type the percentage, about their center, their base, or the origin; turn off Uniform to stretch a solid along one arrow.") }
+                Section("Mirror") { Text("Tap Transform in the dock, then Mirror (or select a solid or sketch and choose Transform ▾ → Mirror above it). Tap the solids and sketches to mirror, then Mirror Plane and the plane to mirror across: one of the planes at the origin, a construction plane, a flat face, a sketch region's plane, or a sketch line (the plane through it, square to its sketch). Keep Input is on: the mirror images are new solids and sketches beside the originals; turn it off to replace them. A mirrored solid is an ordinary solid: its fillets, holes, cuts, and shells come along, and it can be edited, moved, or filleted like any other. Done is one undo step.") }
+                Section("Pattern") { Text("Tap Transform in the dock, then Pattern (or select a solid or sketch and choose Transform ▾ → Pattern above it). Tap the solids and sketches to copy. Linear: drag one of the gizmo arrows to lay copies out along it, and others for a grid; Extent spreads the copies across the distance, Spacing is the gap between neighbors. The quantity (− and +, or tap it to type it) counts the original and applies to the last arrow dragged. Circular: drag the gizmo center onto a corner, edge, circle center, or face center of any solid, a sketch point, or the origin (on a circle or edge the gizmo turns to follow it), then turn a ring; Rotated copies turn with the pattern, Fixed ones keep their orientation. Tap a value to type it. Done adds the copies as ordinary, independent solids and sketches in one undo step; a pattern makes at most 100.") }
+                Section("Joints and Fit Clearance") { Text("Printed parts that go together need a small gap. Set Fit Clearance in the project menu once for your printer: Tight (0.1 mm), Standard (0.2 mm), Loose (0.3 mm), or Custom. To find yours, choose Add a Fit Test Print in the same menu (or Joints ▸ Fit Test). Joints ▸ Peg & Socket (or Features ▸ Peg & Socket while sketching on a face) puts a round peg on a flat face, and every solid it pushes into gets a matching socket, even a hidden one, so hide a lid to reach the rim under it. Subtract's Clearance leaves that gap around the tools, so a part shaped like them fits; choose Keep: Tools to keep the part.") }
+                Section("Threads") { Text("Choose Joints ▸ Thread and tap the inside of a hole (a nut's thread) or the side of a round boss (a bolt's thread), or select that face and tap Thread above the dock. A size is picked from the face: a hole near an M-size's tap-drill diameter, a boss near its diameter, or a custom thread fitted to the face. Choose another ISO size (M3 to M24), or tap the diameter or pitch to type your own, such as a 3 mm pitch for a jar lid. Holes open up and bosses slim down by the clearance. Left-hand turns the thread the other way. Lead-in (on unless you turn it off) bevels the open ends so the thread starts straight. The preview takes a moment to build; Done cuts the thread as one step. Then tap the thread and choose Matching Part above the dock for the nut or cap (on a bolt's thread) or bolt or plug (in a hole's) that screws onto it: it appears already screwed on, with the same size, hand, and clearance. Move it aside, or export with Arrange on Plate, to print the parts separately.") }
+                Section("Measure") { Text("Tap Measure in the rail at the top left; a selected item becomes the first one measured. Tap a corner, edge, face, or sketch item to read its size: length, radius, area, or for a solid (double-tap a face) its volume and size. Tap a second item for the distance between them, its parts across, back, and up, and the angle between them. The results replace the dock; Done ends Measure. A selected edge, face, or solid also shows its size in the strip above the dock.") }
+                Section("Section View") { Text("Tap Section at the top left to cut the solids open along a plane and look inside; the cut faces are coral. Choose Top, Front, or Right, drag the arrow to move the cut, Flip for the other half, Done to finish. Nothing changes.") }
+                Section("Model Tree") { Text("Tap Model Tree at the top left to list everything in the project: bodies, construction planes, and sketches, each in its own group. Tap a row to select it, just like tapping it on the canvas, even a sketch hidden under the solid it made. Long-press a row to rename it, color a solid, copy, duplicate, paste, move it to a group, or delete; Paste also sits at the top of the list while something is copied (⌘C, ⌘V, and ⌘D work with a keyboard). Groups organize the tree: tap the folder button at the top to make one (or choose Move to Group ▸ New Group on a row), then drag rows onto it or use Move to Group. A group can hold solids, sketches, planes, and other groups; tap it to fold it away, and tap its eye to hide or show everything in it at once (each item keeps its own eye for when the group is shown again). Long-press a group to rename it, make a group inside it, ungroup it (keeping its contents), or delete it with its contents. To act on several rows at once, tap Select at the top of the list, tap the rows to check them (hidden ones too; a shape's row follows its sketch), then use the bar at the bottom: Group puts them in a new group, Move puts them in a group or takes them out, Hide or Show, and Delete. Dragging a checked row onto a group moves them all. Tap Done to stop. Tap Model Tree again to close the list.") }
+                Section("Assistant") { Text("Tap Assistant in the rail at the top left to ask about the model or describe a change (with something selected, the request is about it), by typing, dictating, or writing with Apple Pencil. Changes preview on the canvas: Keep adds them as one step you can undo, and Discard leaves the model as it was; editing waits until you choose. Each reply lists the changes the app actually made. Automatic uses Private Cloud Compute when it is available and the on-device model otherwise; choose a model from the badge at the top of the panel.") }
                 Section("Projects") {
-                    Text("Create and open .swipesketch projects in Files, on your iPad or in iCloud Drive. Completed changes save automatically. Use the project menu for Save, Save As, New Project, or Open Project; the home button returns to Files.")
+                    Text("Create and open .swipesketch projects in Files, on your iPad or in iCloud Drive. Completed changes save automatically. Use the project menu for New Project, Open Project, Save, or Save As; the home button returns to the Home screen.")
                     Text("Save As creates and opens a separate editable copy. New Project starts with an empty file and keeps the current project. Canceled file pickers leave your current project open. Finish an extrusion with Done before saving it.")
                 }
+                Section("Import") { Text("Import STEP in the project menu brings in the solids of a .step or .stp file from Files, each as a solid of its own, where the file put them, converted to millimeters, together in a Model Tree group named after the file (hide or show them all with its eye). Open surfaces are joined into solids where they close. Imported solids are ordinary solids: move, rotate, mirror, align, cut, drill, shell, fillet any edge, combine, split, sketch on their faces, and export them. Their exact shapes are saved in the project, so it does not need the STEP file again.") }
+                Section("Export") { Text("Export 3MF in the project menu makes a print-ready file: choose all visible solids or the selected one, Arrange on Plate (side by side, each resting on the plate) or As Modeled, and your printer's plate. Each part is named as in the Model Tree, and a picture of the view is the file's preview. Export STL saves every visible solid in one watertight millimeter file. Both open the share sheet for AirDrop, Files, or a slicer app.") }
+                Section("Send to Slicer") { Text("Send to Slicer in the project menu makes the same print-ready 3MF and saves it into a print folder you choose once, such as a folder in iCloud Drive that the slicer on your Mac opens. Each send replaces the file there, so the newest version is always the one you open. Or share it with AirDrop or another app.") }
+                Section("Units") { Text("Choose Millimeters or Inches under Units in the project menu. Values, the keypad, the grid, and snapping follow the choice; type in, mm, cm, or m after a number to give another unit. Projects always store millimeters.") }
             }
             .navigationTitle("Controls").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { session.showHelp = false } } }
@@ -1932,37 +1944,47 @@ private struct StripLabel: View {
     }
 }
 
-/// Dock tiles that stand for several tools, which pop up above the tile.
+/// Dock tiles that stand for several tools, which pop up above the tile. Each group is named for what
+/// its tools do, never for one of them (October 22, 2026): Create makes solids, Modify changes one solid,
+/// Combine joins or cuts solids with others, Transform moves, resizes, and copies, Joints makes parts
+/// that fit together, and Planes adds construction planes. Case names keep their earlier spellings
+/// because they are the tiles' accessibility identifiers (`tool.edges` is Modify, `tool.fit` Joints).
 enum ToolGroup: String, CaseIterable {
     case create, edges, combine, fit, transform, planes
-    /// Sketch dock groups: round shapes, the tools that change drawn shapes, and features placed on a face.
+    /// Sketch dock groups: more shapes to draw, the tools that change drawn shapes, and features placed on a face.
     case curves, modify, faceFeatures
     var tools: [ModelingTool] {
         switch self {
         case .curves: [.circle, .arc, .slot, .ellipse, .polygon, .point]
-        case .modify: [.trim, .cornerFillet, .extend, .offset, .sketchMirror]
+        case .modify: [.trim, .extend, .cornerFillet, .offset, .sketchMirror]
         case .create: [.extrude, .revolve]
-        case .edges: [.fillet, .chamfer, .deleteFace]
-        case .combine: [.union, .subtract, .intersect, .split]
+        case .edges: [.fillet, .chamfer, .shell, .deleteFace, .split]
+        case .combine: [.union, .subtract, .intersect]
         case .fit: [.peg, .thread, .fitTest]
         case .faceFeatures: [.hole, .peg, .text]
-        case .transform: [.align, .mirror, .pattern, .scale]
+        case .transform: [.align, .scale, .mirror, .pattern]
         case .planes: [.offsetPlane, .midplane]
         }
     }
     var title: String {
         switch self {
-        case .create: "Extrude"; case .edges: "Fillet"; case .combine: "Combine"; case .fit: "Fit"; case .transform: "Transform"; case .planes: "Plane"
-        case .curves: "Circle"; case .modify: "Trim"; case .faceFeatures: "Hole"
+        case .create: "Create"; case .edges: "Modify"; case .combine: "Combine"; case .fit: "Joints"; case .transform: "Transform"; case .planes: "Planes"
+        case .curves: "Shapes"; case .modify: "Modify"; case .faceFeatures: "Features"
         }
     }
     var icon: SSIcon {
         switch self {
-        case .create: .extrude; case .edges: .fillet; case .combine: .merge; case .fit: .fit; case .transform: .align; case .planes: .plane
+        case .create: .extrude; case .edges: .fillet; case .combine: .merge; case .fit: .peg; case .transform: .align; case .planes: .plane
         case .curves: .circle; case .modify: .trim; case .faceFeatures: .hole
         }
     }
-    func title(for tool: ModelingTool) -> String { tool == .split ? "Split Body" : tool.title }
+    func title(for tool: ModelingTool) -> String {
+        switch tool {
+        case .split: "Split Body"
+        case .peg: "Peg & Socket"
+        default: tool.title
+        }
+    }
 }
 
 private struct ActionLabel: View {

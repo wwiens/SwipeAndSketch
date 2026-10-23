@@ -484,4 +484,26 @@ import simd
         session.confirmHole()
         XCTAssertEqual(session.workspace.bodies[0].cuts, [])
     }
+
+    // MARK: Dock groups
+
+    /// Each group is named for what its tools do, every tool sits in a group whose name fits it, and
+    /// nothing is in two groups of one dock except Peg & Socket, which is both a joint and a face feature.
+    func testDockGroupsAreNamedForWhatTheirToolsDo() {
+        let modeling: [ToolGroup] = [.planes, .create, .edges, .combine, .transform, .fit]
+        let sketching: [ToolGroup] = [.curves, .faceFeatures, .modify]
+        XCTAssertEqual(modeling.map(\.title), ["Planes", "Create", "Modify", "Combine", "Transform", "Joints"])
+        XCTAssertEqual(sketching.map(\.title), ["Shapes", "Features", "Modify"])
+        XCTAssertEqual(ToolGroup.combine.tools, [.union, .subtract, .intersect], "Combine is only the ways of putting solids together")
+        XCTAssertEqual(ToolGroup.edges.tools, [.fillet, .chamfer, .shell, .deleteFace, .split], "Modify changes one solid")
+        XCTAssertEqual(ToolGroup.fit.tools, [.peg, .thread, .fitTest])
+        XCTAssertEqual(ToolGroup.curves.tools.first, .circle)
+        for group in ToolGroup.allCases {
+            XCTAssertFalse(group.tools.map(group.title(for:)).contains(group.title), "\(group.title) names its category, not one of its tools")
+        }
+        let modelingTools = modeling.flatMap(\.tools)
+        XCTAssertEqual(Set(modelingTools).count, modelingTools.count, "no tool twice in the modeling dock")
+        XCTAssertEqual(ToolGroup.edges.title(for: .split), "Split Body")
+        XCTAssertEqual(ToolGroup.fit.title(for: .peg), "Peg & Socket")
+    }
 }

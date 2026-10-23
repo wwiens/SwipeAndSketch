@@ -117,6 +117,6 @@ import simd
         XCTAssertNil(session.mirrorDraft)
         XCTAssertEqual(session.workspace.bodies.count, 1)
         XCTAssertEqual(session.tool, .select)
-        XCTAssertEqual(ToolGroup.transform.tools, [.align, .mirror, .pattern, .scale])
+        XCTAssertEqual(ToolGroup.transform.tools, [.align, .scale, .mirror, .pattern])
     }
 }

@@ -506,7 +506,7 @@ struct AddPegTool: Tool {
         var z: Double?
         @Guide(description: "Peg diameter in mm (default 5)") var diameter: Double?
         @Guide(description: "How far the peg stands out, mm (default 5)") var height: Double?
-        @Guide(description: "Gap around the peg in its socket, mm; omit for the user's Fit") var clearance: Double?
+        @Guide(description: "Gap around the peg in its socket, mm; omit for the user's Fit Clearance preference") var clearance: Double?
         @Guide(description: "True for a separate peg (a dowel pin printed on its own) instead of one joined to the body") var separate: Bool?
         @Guide(description: "Separate pegs: mm into the face it stands on, which gets a socket too (default its height; 0 to just stand on it)") var into: Double?
     }
@@ -529,7 +529,7 @@ struct AddThreadTool: Tool {
         @Guide(description: "Size: metric M2–M36 (M8x1 for a fine pitch) or inch #4–3/4 such as 1/4; omit to fit the face, or give diameter and pitch") var size: String?
         @Guide(description: "Custom major diameter in mm, e.g. for a jar lid") var diameter: Double?
         @Guide(description: "Pitch in mm: a fine pitch of the size, or a custom one") var pitch: Double?
-        @Guide(description: "Gap in mm; omit for the user's Fit") var clearance: Double?
+        @Guide(description: "Gap in mm; omit for the user's Fit Clearance preference") var clearance: Double?
         var leftHanded: Bool?
         @Guide(description: "1–4 ridges side by side (2–4 for quick jar lids); omit for 1") var starts: Int?
         @Guide(description: "Threaded length in mm from the open end; omit for the whole face") var length: Double?
@@ -685,7 +685,7 @@ struct CombineTool: Tool {
         var target: String
         var tools: [String]
         @Guide(description: "Keep the tool bodies afterwards") var keepTools: Bool?
-        @Guide(description: "Subtract only: mm of gap left around the tools so a printed part shaped like them fits (the user's Fit is usually 0.1–0.3); omit for an exact cut")
+        @Guide(description: "Subtract only: mm of gap left around the tools so a printed part shaped like them fits (the user's Fit Clearance is usually 0.1–0.3); omit for an exact cut")
         var clearance: Double?
     }
     func call(arguments: Arguments) async throws -> String {

@@ -316,11 +316,9 @@ import XCTest
         let body = app.buttons["item.Body 01"]
         XCTAssertTrue(body.waitForExistence(timeout: 5))
         body.tap()
-        let combine = app.buttons["selection.combine"]
-        XCTAssertTrue(combine.waitForExistence(timeout: 5), "A selected solid offers Combine")
-        combine.tap()
         let split = app.buttons["selection.split"]
-        XCTAssertTrue(split.waitForExistence(timeout: 5), "Combine offers Split Body")
+        XCTAssertTrue(split.waitForExistence(timeout: 5), "A selected solid offers Split Body")
+        XCTAssertFalse(app.buttons["selection.combine"].exists, "One solid has nothing to combine with")
         split.tap()
         XCTAssertFalse(app.otherElements["dock"].exists, "Split's own controls replace the dock")
         let step = app.segmentedControls["split.step"]
@@ -372,44 +370,60 @@ import XCTest
         XCTAssertTrue(dock.waitForExistence(timeout: 10))
         XCTAssertGreaterThan(dock.frame.minY, app.frame.height / 2, "The dock is at the bottom")
         // Modeling: modeling tools only, no Select tile.
-        for id in ["tool.sketch", "tool.create", "tool.edges", "tool.shell", "tool.combine", "tool.transform", "tool.planes", "tool.project"] {
+        for id in ["tool.sketch", "tool.project", "tool.planes", "tool.create", "tool.edges", "tool.combine", "tool.transform", "tool.fit"] {
             XCTAssertTrue(app.buttons[id].exists, id)
         }
-        for id in ["tool.select", "tool.line", "tool.union", "tool.fillet", "tool.extrude", "tool.revolve"] { XCTAssertFalse(app.buttons[id].exists, id) }
+        XCTAssertEqual(["tool.planes", "tool.create", "tool.edges", "tool.combine", "tool.transform", "tool.fit"].map { app.buttons[$0].label },
+                       ["Planes", "Create", "Modify", "Combine", "Transform", "Joints"], "Groups are named for what their tools do")
+        for id in ["tool.select", "tool.line", "tool.union", "tool.fillet", "tool.shell", "tool.extrude", "tool.revolve"] { XCTAssertFalse(app.buttons[id].exists, id) }
         app.buttons["tool.combine"].tap()
-        for id in ["tool.union", "tool.subtract", "tool.split"] { XCTAssertTrue(app.buttons[id].waitForExistence(timeout: 5), id) }
+        for id in ["tool.union", "tool.subtract", "tool.intersect"] { XCTAssertTrue(app.buttons[id].waitForExistence(timeout: 5), id) }
+        XCTAssertFalse(app.buttons["tool.split"].exists, "Split Body divides a solid, so it is under Modify")
         shot("Dock with Combine open")
         app.otherElements["group.dismiss"].tap()
         XCTAssertTrue(app.buttons["tool.union"].waitForNonExistence(timeout: 5))
-        // Fillet group, and putting a tool down by tapping it again.
+        // Modify group, and putting a tool down by tapping it again.
         app.buttons["tool.edges"].tap()
+        for id in ["tool.fillet", "tool.chamfer", "tool.shell", "tool.deleteFace", "tool.split"] { XCTAssertTrue(app.buttons[id].waitForExistence(timeout: 5), id) }
+        shot("Dock with Modify open")
         app.buttons["tool.chamfer"].tap()
         XCTAssertEqual(app.buttons["tool.edges"].label, "Chamfer", "The group shows the tool in use")
         XCTAssertTrue(app.buttons["tool.edges"].isSelected)
-        // Extrude group: Extrude and Revolve.
+        // Create group: Extrude and Revolve.
         app.buttons["tool.create"].tap()
         for id in ["tool.extrude", "tool.revolve"] { XCTAssertTrue(app.buttons[id].waitForExistence(timeout: 5), id) }
-        shot("Dock with Extrude open")
+        shot("Dock with Create open")
         app.buttons["tool.revolve"].tap()
         XCTAssertEqual(app.buttons["tool.create"].label, "Revolve", "The group shows the tool in use")
         XCTAssertTrue(app.buttons["tool.create"].isSelected)
+        // Shell is under Modify; the Create tile goes back to its own name.
+        app.buttons["tool.edges"].tap()
         app.buttons["tool.shell"].tap()
-        XCTAssertTrue(app.buttons["tool.shell"].isSelected)
-        XCTAssertEqual(app.buttons["tool.create"].label, "Extrude")
+        XCTAssertEqual(app.buttons["tool.edges"].label, "Shell")
+        XCTAssertEqual(app.buttons["tool.create"].label, "Create")
+        app.buttons["tool.edges"].tap()
         app.buttons["tool.shell"].tap()
-        XCTAssertFalse(app.buttons["tool.shell"].isSelected, "Tapping the active tool puts it down")
+        XCTAssertEqual(app.buttons["tool.edges"].label, "Modify", "Tapping the active tool puts it down")
+        XCTAssertFalse(app.buttons["tool.edges"].isSelected)
+        // Joints: Peg & Socket, Thread, and Fit Test.
+        app.buttons["tool.fit"].tap()
+        for id in ["tool.peg", "tool.thread", "tool.fitTest"] { XCTAssertTrue(app.buttons[id].waitForExistence(timeout: 5), id) }
+        XCTAssertEqual(app.buttons["tool.peg"].label, "Peg & Socket")
+        shot("Dock with Joints open")
+        app.otherElements["group.dismiss"].tap()
         // Sketch: sketch tools at once, before a plane is picked.
         app.buttons["tool.sketch"].tap()
         XCTAssertTrue(app.buttons["sketch.exit"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["sketch.title"].label, "No active plane")
         for id in ["tool.line", "tool.rectangle", "tool.curves", "tool.modify", "tool.dimension", "tool.project"] { XCTAssertTrue(app.buttons[id].exists, id) }
         XCTAssertTrue(app.buttons["tool.line"].isSelected, "Line is ready")
-        for id in ["tool.create", "tool.shell", "tool.combine"] { XCTAssertFalse(app.buttons[id].exists, id) }
+        for id in ["tool.create", "tool.edges", "tool.combine"] { XCTAssertFalse(app.buttons[id].exists, id) }
+        XCTAssertEqual(["tool.curves", "tool.modify"].map { app.buttons[$0].label }, ["Shapes", "Modify"])
         shot("Sketch dock")
-        // Circle, Arc, and Slot share a tile; Trim and Fillet another.
+        // Circle, Arc, and Slot share Shapes; Trim and Fillet are under Modify.
         app.buttons["tool.curves"].tap()
         for id in ["tool.circle", "tool.arc", "tool.slot"] { XCTAssertTrue(app.buttons[id].waitForExistence(timeout: 5), id) }
-        shot("Sketch dock with Circle open")
+        shot("Sketch dock with Shapes open")
         app.buttons["tool.slot"].tap()
         XCTAssertEqual(app.buttons["tool.curves"].label, "Slot", "The group shows the tool in use")
         app.buttons["tool.modify"].tap()
@@ -425,7 +439,7 @@ import XCTest
         app.buttons["items.toggle"].tap()
         let strip = app.otherElements["selection.strip"]
         XCTAssertTrue(strip.waitForExistence(timeout: 5))
-        for id in ["selection.shell", "selection.combine", "selection.align", "selection.delete", "transform.copy"] {
+        for id in ["selection.shell", "selection.split", "selection.transform", "selection.delete", "transform.copy"] {
             XCTAssertTrue(app.descendants(matching: .any)[id].exists, id)
         }
         XCTAssertLessThan(strip.frame.maxY, dock.frame.minY + 1, "Just above the dock")

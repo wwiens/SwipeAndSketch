@@ -208,7 +208,7 @@ enum DimensionTarget: Hashable {
         case .pegHeight: "Height"
         case .pegEmbed: "Into Face"
         case .clearance: "Clearance"
-        case .fitClearance: "Fit"
+        case .fitClearance: "Fit Clearance"
         case .threadDiameter: "Diameter"
         case .threadPitch: "Pitch"
         case .threadLength: "Length"

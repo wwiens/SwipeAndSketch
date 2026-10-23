@@ -142,7 +142,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .sketching:
             HelpOverview(
                 summary: "You are in a sketch. Everything you draw now belongs to it and stays on its plane.",
-                steps: ["Pick a drawing tool in the dock: Line, Rectangle, or Circle (Arc and Slot are with Circle).", "Draw with Pencil.", "Tap Finish Sketch when you are finished."],
+                steps: ["Pick a drawing tool in the dock: Line, Rectangle, or one under Shapes (Circle, Arc, Slot, and more).", "Draw with Pencil.", "Tap Finish Sketch when you are finished."],
                 tips: ["Purple dots are snap points. Line up with one and a dashed guide appears.", "Tap a shape with no tool chosen to see and change its sizes.",
                        "Tap the active tool again to put it down."])
         case .line:
@@ -354,16 +354,16 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .peg:
             HelpOverview(
                 summary: "Add a round peg to a face, with a matching socket in the part it pushes into, so printed parts line up and press together.",
-                steps: ["Select the flat face the peg stands on, such as a box's rim, and choose Fit, then Peg. Hide a lid in the Model Tree to reach the face under it.",
+                steps: ["Select the flat face the peg stands on, such as a box's rim, and choose Joints, then Peg & Socket. Hide a lid in the Model Tree to reach the face under it.",
                         "Tap where the peg goes. It snaps to the purple dots.",
                         "Any solid the peg pushes into, even a hidden one, gets a socket, wider and deeper by the clearance. Tap Done; the tool stays ready for the next peg."],
                 tips: ["Joined makes the peg part of the face's solid. Separate makes it its own solid, a dowel pin to print on its own (lying down, for strength); it reaches into the face by Into Face, which gets a socket too (0 just stands it on the face).",
-                       "Tap the diameter or height to change them.", "The clearance starts from your Fit (project menu). Tight suits press fits; Loose slides apart easily.",
+                       "Tap the diameter or height to change them.", "The clearance starts from your Fit Clearance (project menu). Tight suits press fits; Loose slides apart easily.",
                        "The peg's tip is beveled so it starts into its socket easily."])
         case .text:
             HelpOverview(
                 summary: "Add raised or sunk lettering to a flat face: labels, names, version numbers.",
-                steps: ["Select a flat face and tap Text above the dock, or choose Hole ▸ Text while sketching on a face.",
+                steps: ["Select a flat face and tap Text above the dock, or choose Features ▸ Text while sketching on a face.",
                         "Tap where the text goes; it snaps to the purple dots. Type it in the field below and pick a font.",
                         "Choose Raised or Sunk, tap the height or depth to change them, and tap Done."],
                 tips: ["Letters 5 mm tall and 0.6 to 1 mm deep print cleanly on most printers.",
@@ -372,7 +372,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .thread:
             HelpOverview(
                 summary: "Make a real screw thread in a hole (like a nut) or on a round boss (like a bolt), ready to print: cut into the face, or raised onto it.",
-                steps: ["Choose Fit, then Thread, and tap the inside of a hole or the side of a round boss. Or select that face and tap Thread above the dock.",
+                steps: ["Choose Joints, then Thread, and tap the inside of a hole or the side of a round boss. Or select that face and tap Thread above the dock.",
                         "The bar shows the face's diameter, and the size that best fits it is picked for you. The message above the bar says how the thread fits.",
                         "Cut cuts grooves into the face. Raised adds ridges onto it instead, so a thin wall stays whole: use it for a jar's neck or a thin-walled tube.",
                         "Size lists the sizes that fit the face as it is first, each with a note: Best fit, Full thread, or how much of a full thread's depth it gets. Other sizes cut the hole out or turn the boss down first; sizes that would miss the face are greyed out with the reason. Inch sizes (UNC/UNF) are in their own submenu, and Custom Diameter takes any size, such as a jar lid's.",
@@ -400,10 +400,10 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .fitTest:
             HelpOverview(
                 summary: "A small print that finds the right clearance for your printer.",
-                steps: ["Choose Fit, then Fit Test. A plate with seven holes and a loose peg appear beside your model.",
+                steps: ["Choose Joints, then Fit Test (or Add a Fit Test Print under Fit Clearance in the project menu). A plate with seven holes and a loose peg appear beside your model.",
                         "Export and print both.",
                         "Try the peg in each hole, starting at the beveled corner. The holes leave 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, and 0.40 mm around the peg.",
-                        "Set Fit in the project menu to the first hole the peg slides into (snug), or one looser for parts that should move freely."],
+                        "Set Fit Clearance in the project menu to the first hole the peg slides into (snug), or one looser for parts that should move freely."],
                 tips: ["Print it with the same printer, material, and settings as your parts.", "Delete the coupon from the Model Tree when you are done."])
         case .split:
             HelpOverview(
