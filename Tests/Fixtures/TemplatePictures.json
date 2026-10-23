@@ -1,0 +1,15 @@
+{
+  "electronics.arduino-case" : "Case 21082.8 mm³ 76.60×61.30×23.60; Lid 10964.4 mm³ 76.60×61.30×6.00",
+  "electronics.arduino-mount" : "Mount 17826.9 mm³ 84.60×69.30×8.00",
+  "electronics.custom-case" : "Case 20050.5 mm³ 78.00×58.00×22.60; Lid 10596.9 mm³ 78.00×58.00×6.00",
+  "electronics.pi-case" : "Case 27616.3 mm³ 93.00×64.00×27.60; Lid 10958.8 mm³ 93.00×64.00×6.00",
+  "electronics.pi-mount" : "Mount 22014.2 mm³ 101.00×72.00×8.00",
+  "electronics.pi-zero-case" : "Case 11537.5 mm³ 73.00×38.00×15.60; Lid 6776.9 mm³ 73.00×38.00×6.00",
+  "electronics.pico-mount" : "Mount 7567.8 mm³ 67.00×37.00×8.00",
+  "enclosures.screw-lid-box" : "Box 45863.9 mm³ 94.80×64.80×37.40; Lid 18193.6 mm³ 94.80×64.80×3.00",
+  "enclosures.slip-lid-box" : "Box 33352.5 mm³ 84.00×64.00×42.00; Lid 12454.5 mm³ 84.00×64.00×6.00",
+  "gridfinity.baseplate" : "Baseplate 15365.0 mm³ 168.00×126.00×4.45",
+  "gridfinity.bin" : "Bin 30017.2 mm³ 83.50×41.50×46.20",
+  "gridfinity.divided-bin" : "Bin 69007.1 mm³ 125.50×83.50×25.20",
+  "gridfinity.magnet-baseplate" : "Baseplate 59400.7 mm³ 126.00×126.00×7.65"
+}

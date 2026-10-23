@@ -1,0 +1,1002 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		D76F3575B1B7892C4DEF43E1 /* SwipeAndSketch/Core/HoleRemoval.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34F01B425CCD77EFD76F3575 /* SwipeAndSketch/Core/HoleRemoval.swift */; };
+		62F94BA25871B3EF70D63676 /* SwipeAndSketchThumbnails/ThumbnailProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21B377C8E4B334B299C5796E /* SwipeAndSketchThumbnails/ThumbnailProvider.swift */; };
+		0CAF3144BC4A4F69BE9FA07F /* SwipeAndSketch/Core/ProjectPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1CA79626A45A0FAF2D61FEC /* SwipeAndSketch/Core/ProjectPreview.swift */; };
+		3DA18709A0FC6EF55A055419 /* SwipeAndSketchThumbnails.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 2E56AC85BA95E8224744B8CC /* SwipeAndSketchThumbnails.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		F2D61FEC98E76173DCBC066C /* SwipeAndSketch/Core/ProjectPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1CA79626A45A0FAF2D61FEC /* SwipeAndSketch/Core/ProjectPreview.swift */; };
+		07AA36DE94A9E112FD4831CA /* SwipeAndSketch/Core/Groups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69910042A2FEA63707AA36DE /* SwipeAndSketch/Core/Groups.swift */; };
+		1BDC66E620EF0D8965769E2E /* SwipeAndSketch/Core/SketchTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2E553FC8A8B08381BDC66E6 /* SwipeAndSketch/Core/SketchTools.swift */; };
+		16099C5AD3E84D66CA7D9A4B /* SwipeAndSketch/Core/Clipboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A13918F78E7055416099C5A /* SwipeAndSketch/Core/Clipboard.swift */; };
+		3227539823826E1FC3CC273D /* SwipeAndSketch/Core/Naming.swift in Sources */ = {isa = PBXBuildFile; fileRef = 199CA94DF59EEE8F32275398 /* SwipeAndSketch/Core/Naming.swift */; };
+		22605253DF2F164385FB0C24 /* SwipeAndSketch/Core/FaceEdits.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E4E3595E501D2C422605253 /* SwipeAndSketch/Core/FaceEdits.swift */; };
+		08EF15EF7721371D635FCCE4 /* Tests/AppTests/BasicsToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 778D5A7845409F9408EF15EF /* Tests/AppTests/BasicsToolTests.swift */; };
+		7E86E8EC7064EFDE32531491 /* Tests/AppTests/TemplatePictureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE2DD378C81274D75D8D5F00 /* Tests/AppTests/TemplatePictureTests.swift */; };
+		E4F61DB8477D478701161DBC /* SwipeAndSketch/Core/Scale.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7A1F6B9CC71D8BDE4F61DB8 /* SwipeAndSketch/Core/Scale.swift */; };
+		EE54AEE72E1B7100D35BB824 /* SwipeAndSketch/Core/Templates.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F3EB67718A2274EB569C89A /* SwipeAndSketch/Core/Templates.swift */; };
+		AF745B24C4459DA5EF65ECE8 /* SwipeAndSketch/Core/TemplatesGridfinity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 984D1A095D013A9113E4FFD8 /* SwipeAndSketch/Core/TemplatesGridfinity.swift */; };
+		D44C808239C9C6941328760B /* SwipeAndSketch/Core/TemplatesBoards.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8C23EC73BEDB0781C2E40B5 /* SwipeAndSketch/Core/TemplatesBoards.swift */; };
+		D8985BD8C18FD25DC92C31A7 /* SwipeAndSketch/Core/TemplatesBoxes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A7BC91FFF07B9D1CE003615 /* SwipeAndSketch/Core/TemplatesBoxes.swift */; };
+		D1581AE27866C1EA4D7AE989 /* SwipeAndSketch/Canvas/ModelPicture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 500B62A91E8768DF802070F0 /* SwipeAndSketch/Canvas/ModelPicture.swift */; };
+		939839D0F80D544076BD82A0 /* SwipeAndSketch/App/TemplateGallery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 928E59A00BA577811C11A1D8 /* SwipeAndSketch/App/TemplateGallery.swift */; };
+		FC0929F62D58473989BB4A69 /* SwipeAndSketch/App/RecentProjects.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AC32679AD6445D0ACF6993D /* SwipeAndSketch/App/RecentProjects.swift */; };
+		A2A57983162A4C6FBEC73A3A /* SwipeAndSketch/App/HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01FF8B448E584D2685A229CA /* SwipeAndSketch/App/HomeView.swift */; };
+		2E8F369BD03E9D17702022E3 /* SwipeAndSketch/App/HelpPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 153046CC09E86B1E75FAD1CF /* SwipeAndSketch/App/HelpPanel.swift */; };
+		A1B2C3D4E5F6071829300001 /* SwipeAndSketch/App/AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6071829300002 /* SwipeAndSketch/App/AboutView.swift */; };
+		0F1DBC631C697709450244EA /* SwipeAndSketch/App/PurchasesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25EC3E4EDB9FE03808AFC001 /* SwipeAndSketch/App/PurchasesView.swift */; };
+		09428B6B5CE4AFE55FD4DDCD /* SwipeAndSketch/App/Licensing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 881A27928DFD07B3C42C953F /* SwipeAndSketch/App/Licensing.swift */; };
+		E510146FAE9B48949B5AEBC4 /* SwipeAndSketch/App/PrintExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1C38B8AF6084522AC849439 /* SwipeAndSketch/App/PrintExport.swift */; };
+		60433D785C138D710099DFB8 /* SwipeAndSketch/App/HelpTopics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99CD2616992F0A1BEF867C10 /* SwipeAndSketch/App/HelpTopics.swift */; };
+		0236E86CE05A9AC7687A13C5 /* Tests/AppTests/FaceSketchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BDF94EC4AAE4DC5771E16D6 /* Tests/AppTests/FaceSketchTests.swift */; };
+		03066284C6AF3282C8640C25 /* SwipeAndSketch/Core/Workspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6E7E8C055A07A444FDA8585 /* SwipeAndSketch/Core/Workspace.swift */; };
+		03D4BB6825A26A2FA0BF0D7C /* SwipeAndSketch/Core/Sketches.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5090CA8D4FA28DC90100D0E /* SwipeAndSketch/Core/Sketches.swift */; };
+		0A10E23B58BA40F8BA1C9AB2 /* SwipeAndSketch/App/SwipeSketchIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCC661DB4C4744F5B68CDB8C /* SwipeAndSketch/App/SwipeSketchIcon.swift */; };
+		81B86009136D40F1B3320EC5 /* SwipeAndSketch/Assistant/AssistantEntitlement.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF1F85F663EA4801B7F49E0F /* SwipeAndSketch/Assistant/AssistantEntitlement.swift */; };
+		D2B18F60759549EAAD92C8CB /* SwipeAndSketch/Core/AssistantWorkbench.swift in Sources */ = {isa = PBXBuildFile; fileRef = FABAEDA45F6342B7865522C6 /* SwipeAndSketch/Core/AssistantWorkbench.swift */; };
+		FF0D01DB7ED548A28868B580 /* SwipeAndSketch/Assistant/AssistantTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613F3938402A4A92B06DFE19 /* SwipeAndSketch/Assistant/AssistantTools.swift */; };
+		E2651F1E542642F6BDD667A6 /* SwipeAndSketch/Assistant/AssistantEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78B7754E0B3C43D8B4916209 /* SwipeAndSketch/Assistant/AssistantEngine.swift */; };
+		D2E951E13DB44292B79D4FE0 /* SwipeAndSketch/Assistant/AssistantPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37B0C3A68BDB48B59F04375A /* SwipeAndSketch/Assistant/AssistantPlanner.swift */; };
+		A1305287E5104052AC7EDEC4 /* SwipeAndSketch/App/AssistantController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 536FF5084800478C995C2369 /* SwipeAndSketch/App/AssistantController.swift */; };
+		1B01BA37F133464BA4723CE3 /* SwipeAndSketch/App/AssistantPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DF59EC755984EB7AB15699C /* SwipeAndSketch/App/AssistantPanel.swift */; };
+		0B1F7EA3CD206EBE6C78D760 /* Tests/AppTests/SplitToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65E6273D9094C0FA02DC1A8A /* Tests/AppTests/SplitToolTests.swift */; };
+		1D5EBE32E3DF4141A4B07280 /* SwipeAndSketch/Core/Project.swift in Sources */ = {isa = PBXBuildFile; fileRef = F091501D2BB84F36A1F41053 /* SwipeAndSketch/Core/Project.swift */; };
+		2227ED9581715FE0013F5154 /* SwipeAndSketch/App/ModelingSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 950AC9B7240EC79A191296B4 /* SwipeAndSketch/App/ModelingSession.swift */; };
+		253225145680B14EC426AE33 /* SwipeAndSketch/Core/FaceExtrusion.swift in Sources */ = {isa = PBXBuildFile; fileRef = F06A6B516900ED2F61446A96 /* SwipeAndSketch/Core/FaceExtrusion.swift */; };
+		2933EFDECA9595F6874BC10F /* Vendor/SSKernel.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4F173D963821E7A2929501C6 /* Vendor/SSKernel.xcframework */; };
+		2D7ACD7C99DC4C11AFD84C28 /* Tests/AppTests/MirrorToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD745786B0C4AB59C789C99 /* Tests/AppTests/MirrorToolTests.swift */; };
+		ED198A1EBE3448718B750FC7 /* Tests/AppTests/PatternToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0C6F1963B411FA88693CF /* Tests/AppTests/PatternToolTests.swift */; };
+		E2C8F7B4CE5E4571933A9479 /* Tests/AppTests/FitToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E49BC26BBD2548D6A521BFB6 /* Tests/AppTests/FitToolTests.swift */; };
+		211A38F75FC144DD96AF193F /* Tests/AppTests/PrintExportToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B7FB426A6B0448D8230FE28 /* Tests/AppTests/PrintExportToolTests.swift */; };
+		0E4B8524E48B4AE2BEDC0EB1 /* Tests/AppTests/TextToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6DD6C51F8F54F0A890C409C /* Tests/AppTests/TextToolTests.swift */; };
+		4A099D23D7D44582810A26C6 /* Tests/AppTests/ThreadToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02855DB21DA44D3BB2F01188 /* Tests/AppTests/ThreadToolTests.swift */; };
+		3033A63182D64B4494837FAD /* Tests/AppTests/AssistantTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B38294A86F84D149339BA18 /* Tests/AppTests/AssistantTests.swift */; };
+		8933CB1E12A988FD6619AEA9 /* Tests/AppTests/LicenseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1FA58EB4C61842032C3FBF /* Tests/AppTests/LicenseTests.swift */; };
+		2D97207F1A2779A98E7CC603 /* SwipeAndSketch/App/WorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35C7BCC8CA2BA3F29A0441EF /* SwipeAndSketch/App/WorkspaceView.swift */; };
+		33D0FFF8F856308F8036A51A /* SwipeAndSketch/Core/EdgeFinishes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1125E8DC5E888459061EB96D /* SwipeAndSketch/Core/EdgeFinishes.swift */; };
+		37327D8C0B6CE9CDE0DA3850 /* Tests/AppTests/FinishToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E65A6987E10939F88B18A9E /* Tests/AppTests/FinishToolTests.swift */; };
+		37E6603E65173E034BFADDB4 /* SwipeAndSketch/Core/Split.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF4478A9ADDFEB1B8678BACE /* SwipeAndSketch/Core/Split.swift */; };
+		3DACF5076761435191747223 /* SwipeAndSketch/App/ProjectDocuments.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BB24208A06640A5B1F4264D /* SwipeAndSketch/App/ProjectDocuments.swift */; };
+		3FE26E7AE8C54D45B1513397 /* SwipeAndSketch/Core/Import.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB449467744B407693813A4D /* SwipeAndSketch/Core/Import.swift */; };
+		4495715253A75A783BC0C668 /* Tests/AppTests/RevolveToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE587EA20D4E6D1DB0CFC24F /* Tests/AppTests/RevolveToolTests.swift */; };
+		4B10011F809146CABEC1B210 /* SwipeAndSketch/Core/Mirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0CA09902040446BB7C8860E /* SwipeAndSketch/Core/Mirror.swift */; };
+		B3DA59809EED4A4FA7704FC4 /* SwipeAndSketch/Core/Pattern.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AE636EF17B2473D978EC6E2 /* SwipeAndSketch/Core/Pattern.swift */; };
+		D80279D46CBB48D28C8A2630 /* SwipeAndSketch/Core/Fit.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E15BF2DA9C430AB610C495 /* SwipeAndSketch/Core/Fit.swift */; };
+		7F64811E9BD34DCE89D76A04 /* SwipeAndSketch/Core/Text.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37B6030E3768484F99114843 /* SwipeAndSketch/Core/Text.swift */; };
+		4AD14F4282874B73AF348CD2 /* SwipeAndSketch/Core/Threads.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E04ABF4886C481D8E38456F /* SwipeAndSketch/Core/Threads.swift */; };
+		4E6CB7CA8BEB5A32112D0E43 /* Tests/AppTests/OperationToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7034BE1E2055764B78AEB3D /* Tests/AppTests/OperationToolTests.swift */; };
+		50A27319FF3D2B56E34AB9DF /* SwipeAndSketch/Canvas/ModelingCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3646179919F87BCB2F2BD219 /* SwipeAndSketch/Canvas/ModelingCanvas.swift */; };
+		580FA31DFE1666C63522E76C /* SwipeAndSketch/Core/MoreOperations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38B803830EEFD3A2F4038B1A /* SwipeAndSketch/Core/MoreOperations.swift */; };
+		6C3D0BC935FFD984A41AFCB9 /* Tests/UITests/SwipeAndSketchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 657DD32164E165828BFDB7B4 /* Tests/UITests/SwipeAndSketchUITests.swift */; };
+		6D962548A0711A09D878D200 /* Tests/AppTests/ProjectionToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E054FBD9FE6D3567BA8F0F02 /* Tests/AppTests/ProjectionToolTests.swift */; };
+		73F23F626F72B3F12B6169B9 /* Tests/AppTests/ConstructionPlaneToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 816868C6AA205370AE9163D2 /* Tests/AppTests/ConstructionPlaneToolTests.swift */; };
+		7AB28AFFEF66CC12ED83C1BB /* SwipeAndSketch/Core/SolidKernel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3777EAB9D5911F62D69B1A5F /* SwipeAndSketch/Core/SolidKernel.swift */; };
+		81B9D065EA0895E85AAEAD66 /* SwipeAndSketch/Core/Cuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF2594D86137729378A9C57F /* SwipeAndSketch/Core/Cuts.swift */; };
+		86A46A525D4251B7B4140623 /* Tests/AppTests/KernelSceneTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2626DB4D602ECD2EE71B2AFB /* Tests/AppTests/KernelSceneTests.swift */; };
+		8E75D50EB316D922054EDEEA /* Tests/AppTests/FaceExtrusionToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8147A9E314B42887C310D656 /* Tests/AppTests/FaceExtrusionToolTests.swift */; };
+		8F89FEE67D1AAED9C942104F /* Tests/AppTests/JoinToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F738E7ECEBDB2192068EE6C9 /* Tests/AppTests/JoinToolTests.swift */; };
+		9452A588649A745F656E467D /* SwipeAndSketch/App/SwipeAndSketchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEDB1DF22053EDB4B1263A1F /* SwipeAndSketch/App/SwipeAndSketchApp.swift */; };
+		96B02BCF046A174438AAA9C2 /* SwipeAndSketch/Core/Export.swift in Sources */ = {isa = PBXBuildFile; fileRef = 670776899FD3227D80DC1FE1 /* SwipeAndSketch/Core/Export.swift */; };
+		A21E82DFCBE8368CE30A92A7 /* SwipeAndSketch/Core/Geometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E7E569F9CEB4E78C84FC119 /* SwipeAndSketch/Core/Geometry.swift */; };
+		A4999AB9BEDAA688F65B68A8 /* SwipeAndSketch/Core/Revolve.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F85DAAAC380CE1B4B2F53A8 /* SwipeAndSketch/Core/Revolve.swift */; };
+		A903D1F2E888CDB65F777F37 /* SwipeAndSketch/Core/ConstructionPlanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B591D3990DE4944AEEBE5949 /* SwipeAndSketch/Core/ConstructionPlanes.swift */; };
+		A9841ED803C54B6AB22D8510 /* SwipeAndSketch/Canvas/ViewCube.swift in Sources */ = {isa = PBXBuildFile; fileRef = B105C9AC4FBD48D2A4D07365 /* SwipeAndSketch/Canvas/ViewCube.swift */; };
+		ABC7C2376A69050C716D8BD7 /* Tests/AppTests/BodyTransformToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B478F678A1C30B4989CFFAE /* Tests/AppTests/BodyTransformToolTests.swift */; };
+		B41B335C658F54CB12AAA97F /* SwipeAndSketch/Core/Align.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27745638E573BB853338027D /* SwipeAndSketch/Core/Align.swift */; };
+		C84D4254B84FA4B2DE25C0E2 /* Tests/AppTests/SketchingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 618180C2B1650579CC894D34 /* Tests/AppTests/SketchingTests.swift */; };
+		CB1790C5EAB3EDB1A9319743 /* SwipeAndSketch/Core/SketchPlanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66060981B3FBCA6E212ECB79 /* SwipeAndSketch/Core/SketchPlanes.swift */; };
+		D339E4C574643E9A3EC47319 /* Tests/AppTests/CanvasTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86A881F290F7F31E0ACB27B1 /* Tests/AppTests/CanvasTests.swift */; };
+		D46C077D6021ECC41CAE84EB /* SwipeAndSketch/Core/Projection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C96DF5DA71597424CB15F0B0 /* SwipeAndSketch/Core/Projection.swift */; };
+		E22521F7A1AFE44A545A9416 /* Tests/AppTests/CutToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0FF5FAF995107ED6714C2D1 /* Tests/AppTests/CutToolTests.swift */; };
+		EDCF250D54664EFE990AADBF /* Tests/AppTests/ImportToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED2E242DCD8B46688AB73B71 /* Tests/AppTests/ImportToolTests.swift */; };
+		EE9F5E2C5571DF89E4D798DB /* SwipeAndSketch/Canvas/KernelSceneGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DD365FAD1FA636267D31D5B /* SwipeAndSketch/Canvas/KernelSceneGeometry.swift */; };
+		F3BB66BA957C4B83A54E1813 /* Tests/AppTests/ProjectDocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7415BFE439F3457F997E9345 /* Tests/AppTests/ProjectDocumentTests.swift */; };
+		F4F6CB4A7258C10BDA3163B6 /* SwipeAndSketch/Core/SketchTransforms.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06A5EB7F31C2DA03AC84A205 /* SwipeAndSketch/Core/SketchTransforms.swift */; };
+		FB90684E69A6C96ED866993E /* SwipeAndSketch/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5000B3C73EE6FA5B6FDAA413 /* SwipeAndSketch/Assets.xcassets */; };
+		DE68629178954211AF169CBB /* SwipeAndSketch/PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = DC7085646C7E481A8FD6987D /* SwipeAndSketch/PrivacyInfo.xcprivacy */; };
+		FFED0DC3AEE810B781D45B4C /* SwipeAndSketch/Core/SketchGuides.swift in Sources */ = {isa = PBXBuildFile; fileRef = 948AB146F9322C1A874D7EE2 /* SwipeAndSketch/Core/SketchGuides.swift */; };
+		4FD5187C7B134041A05B982C /* SwipeAndSketch/Core/Regions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A72DC06F98647DFB477A979 /* SwipeAndSketch/Core/Regions.swift */; };
+		208F1D3C6A4A44469CAE996B /* SwipeAndSketch/Core/SketchModify.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6C35E1B90B34884BC6F583A /* SwipeAndSketch/Core/SketchModify.swift */; };
+		DFC026CA1AD8488BA84A3BCB /* SwipeAndSketch/Core/SketchDimensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2FA6DACD3D041B784B19F62 /* SwipeAndSketch/Core/SketchDimensions.swift */; };
+		D29F30C494B34804A94B5075 /* SwipeAndSketch/Core/Measuring.swift in Sources */ = {isa = PBXBuildFile; fileRef = 221851B73AAC4432BE5787BA /* SwipeAndSketch/Core/Measuring.swift */; };
+		01FD45B97FC94BB9B65F50A1 /* Tests/AppTests/SketchToolsToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43691DD3546F4AC69431AACC /* Tests/AppTests/SketchToolsToolTests.swift */; };
+		9CCA122BC4CC42B0975EC4B6 /* Tests/AppTests/CanvasTestCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70D89F7260FC43398FA92293 /* Tests/AppTests/CanvasTestCase.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		8838451EC054A6A6A1AB1FAA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98F54143AB4E86B28C3AFEE0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6AD2279008F76C27A260CC37;
+			remoteInfo = SwipeAndSketchThumbnails;
+		};
+		7E85D4A68785761E1DBB22D8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98F54143AB4E86B28C3AFEE0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F75109BEB4DD8800DA6B45F8;
+			remoteInfo = SwipeAndSketch;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		AA81373DE19302EFCA736F4D /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				3DA18709A0FC6EF55A055419 /* SwipeAndSketchThumbnails.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		34F01B425CCD77EFD76F3575 /* SwipeAndSketch/Core/HoleRemoval.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/HoleRemoval.swift; sourceTree = SOURCE_ROOT; };
+		2E56AC85BA95E8224744B8CC /* SwipeAndSketchThumbnails.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SwipeAndSketchThumbnails.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		21B377C8E4B334B299C5796E /* SwipeAndSketchThumbnails/ThumbnailProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketchThumbnails/ThumbnailProvider.swift; sourceTree = SOURCE_ROOT; };
+		21E31698EF6CA14F37C233C5 /* SwipeAndSketchThumbnails/Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = SwipeAndSketchThumbnails/Info.plist; sourceTree = SOURCE_ROOT; };
+		C1CA79626A45A0FAF2D61FEC /* SwipeAndSketch/Core/ProjectPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/ProjectPreview.swift; sourceTree = SOURCE_ROOT; };
+		69910042A2FEA63707AA36DE /* SwipeAndSketch/Core/Groups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Groups.swift; sourceTree = SOURCE_ROOT; };
+		B2E553FC8A8B08381BDC66E6 /* SwipeAndSketch/Core/SketchTools.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/SketchTools.swift; sourceTree = SOURCE_ROOT; };
+		9A13918F78E7055416099C5A /* SwipeAndSketch/Core/Clipboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Clipboard.swift; sourceTree = SOURCE_ROOT; };
+		199CA94DF59EEE8F32275398 /* SwipeAndSketch/Core/Naming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Naming.swift; sourceTree = SOURCE_ROOT; };
+		6E4E3595E501D2C422605253 /* SwipeAndSketch/Core/FaceEdits.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/FaceEdits.swift; sourceTree = SOURCE_ROOT; };
+		778D5A7845409F9408EF15EF /* Tests/AppTests/BasicsToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/BasicsToolTests.swift; sourceTree = SOURCE_ROOT; };
+		CE2DD378C81274D75D8D5F00 /* Tests/AppTests/TemplatePictureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/TemplatePictureTests.swift; sourceTree = SOURCE_ROOT; };
+		A7A1F6B9CC71D8BDE4F61DB8 /* SwipeAndSketch/Core/Scale.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Scale.swift; sourceTree = SOURCE_ROOT; };
+		2F3EB67718A2274EB569C89A /* SwipeAndSketch/Core/Templates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Templates.swift; sourceTree = SOURCE_ROOT; };
+		984D1A095D013A9113E4FFD8 /* SwipeAndSketch/Core/TemplatesGridfinity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesGridfinity.swift; sourceTree = SOURCE_ROOT; };
+		C8C23EC73BEDB0781C2E40B5 /* SwipeAndSketch/Core/TemplatesBoards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesBoards.swift; sourceTree = SOURCE_ROOT; };
+		6A7BC91FFF07B9D1CE003615 /* SwipeAndSketch/Core/TemplatesBoxes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesBoxes.swift; sourceTree = SOURCE_ROOT; };
+		500B62A91E8768DF802070F0 /* SwipeAndSketch/Canvas/ModelPicture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Canvas/ModelPicture.swift; sourceTree = SOURCE_ROOT; };
+		928E59A00BA577811C11A1D8 /* SwipeAndSketch/App/TemplateGallery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/TemplateGallery.swift; sourceTree = SOURCE_ROOT; };
+		0AC32679AD6445D0ACF6993D /* SwipeAndSketch/App/RecentProjects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/RecentProjects.swift; sourceTree = SOURCE_ROOT; };
+		01FF8B448E584D2685A229CA /* SwipeAndSketch/App/HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/HomeView.swift; sourceTree = SOURCE_ROOT; };
+		153046CC09E86B1E75FAD1CF /* SwipeAndSketch/App/HelpPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/HelpPanel.swift; sourceTree = SOURCE_ROOT; };
+		A1B2C3D4E5F6071829300002 /* SwipeAndSketch/App/AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/AboutView.swift; sourceTree = SOURCE_ROOT; };
+		25EC3E4EDB9FE03808AFC001 /* SwipeAndSketch/App/PurchasesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/PurchasesView.swift; sourceTree = SOURCE_ROOT; };
+		881A27928DFD07B3C42C953F /* SwipeAndSketch/App/Licensing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/Licensing.swift; sourceTree = SOURCE_ROOT; };
+		E1C38B8AF6084522AC849439 /* SwipeAndSketch/App/PrintExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/PrintExport.swift; sourceTree = SOURCE_ROOT; };
+		99CD2616992F0A1BEF867C10 /* SwipeAndSketch/App/HelpTopics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/HelpTopics.swift; sourceTree = SOURCE_ROOT; };
+		021BB602308717C800AA9C34 /* SwipeAndSketch.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = SwipeAndSketch.entitlements; path = SwipeAndSketch/SwipeAndSketch.entitlements; sourceTree = "<group>"; };
+		06A5EB7F31C2DA03AC84A205 /* SwipeAndSketch/Core/SketchTransforms.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/SketchTransforms.swift; sourceTree = SOURCE_ROOT; };
+		0E7E569F9CEB4E78C84FC119 /* SwipeAndSketch/Core/Geometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Geometry.swift; sourceTree = SOURCE_ROOT; };
+		1125E8DC5E888459061EB96D /* SwipeAndSketch/Core/EdgeFinishes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/EdgeFinishes.swift; sourceTree = SOURCE_ROOT; };
+		198AA8EA2A3A4B5640AEA2BE /* SwipeAndSketchTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = SwipeAndSketchTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		2455D4A927594EB4A2BBF894 /* SwipeAndSketch/Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = SwipeAndSketch/Info.plist; sourceTree = SOURCE_ROOT; };
+		2626DB4D602ECD2EE71B2AFB /* Tests/AppTests/KernelSceneTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/KernelSceneTests.swift; sourceTree = SOURCE_ROOT; };
+		27745638E573BB853338027D /* SwipeAndSketch/Core/Align.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Align.swift; sourceTree = SOURCE_ROOT; };
+		2BDF94EC4AAE4DC5771E16D6 /* Tests/AppTests/FaceSketchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/FaceSketchTests.swift; sourceTree = SOURCE_ROOT; };
+		35C7BCC8CA2BA3F29A0441EF /* SwipeAndSketch/App/WorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/WorkspaceView.swift; sourceTree = SOURCE_ROOT; };
+		3646179919F87BCB2F2BD219 /* SwipeAndSketch/Canvas/ModelingCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Canvas/ModelingCanvas.swift; sourceTree = SOURCE_ROOT; };
+		3777EAB9D5911F62D69B1A5F /* SwipeAndSketch/Core/SolidKernel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/SolidKernel.swift; sourceTree = SOURCE_ROOT; };
+		38B803830EEFD3A2F4038B1A /* SwipeAndSketch/Core/MoreOperations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/MoreOperations.swift; sourceTree = SOURCE_ROOT; };
+		4DD365FAD1FA636267D31D5B /* SwipeAndSketch/Canvas/KernelSceneGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Canvas/KernelSceneGeometry.swift; sourceTree = SOURCE_ROOT; };
+		4E783A9E10D2A8ABA38CD11C /* SwipeAndSketch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = SwipeAndSketch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4F173D963821E7A2929501C6 /* Vendor/SSKernel.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = Vendor/SSKernel.xcframework; sourceTree = SOURCE_ROOT; };
+		5000B3C73EE6FA5B6FDAA413 /* SwipeAndSketch/Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = SwipeAndSketch/Assets.xcassets; sourceTree = SOURCE_ROOT; };
+		DC7085646C7E481A8FD6987D /* SwipeAndSketch/PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = SwipeAndSketch/PrivacyInfo.xcprivacy; sourceTree = SOURCE_ROOT; };
+		CA401D49A3A5AF1FCFD2D8AD /* SwipeAndSketch/Products.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = SwipeAndSketch/Products.storekit; sourceTree = SOURCE_ROOT; };
+		5F85DAAAC380CE1B4B2F53A8 /* SwipeAndSketch/Core/Revolve.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Revolve.swift; sourceTree = SOURCE_ROOT; };
+		618180C2B1650579CC894D34 /* Tests/AppTests/SketchingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/SketchingTests.swift; sourceTree = SOURCE_ROOT; };
+		657DD32164E165828BFDB7B4 /* Tests/UITests/SwipeAndSketchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/UITests/SwipeAndSketchUITests.swift; sourceTree = SOURCE_ROOT; };
+		65E6273D9094C0FA02DC1A8A /* Tests/AppTests/SplitToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/SplitToolTests.swift; sourceTree = SOURCE_ROOT; };
+		66060981B3FBCA6E212ECB79 /* SwipeAndSketch/Core/SketchPlanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/SketchPlanes.swift; sourceTree = SOURCE_ROOT; };
+		670776899FD3227D80DC1FE1 /* SwipeAndSketch/Core/Export.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Export.swift; sourceTree = SOURCE_ROOT; };
+		6C7CCDEB3609F1FAA874E941 /* SwipeAndSketchUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = SwipeAndSketchUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		7415BFE439F3457F997E9345 /* Tests/AppTests/ProjectDocumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/ProjectDocumentTests.swift; sourceTree = SOURCE_ROOT; };
+		7BB24208A06640A5B1F4264D /* SwipeAndSketch/App/ProjectDocuments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/ProjectDocuments.swift; sourceTree = SOURCE_ROOT; };
+		8147A9E314B42887C310D656 /* Tests/AppTests/FaceExtrusionToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/FaceExtrusionToolTests.swift; sourceTree = SOURCE_ROOT; };
+		816868C6AA205370AE9163D2 /* Tests/AppTests/ConstructionPlaneToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/ConstructionPlaneToolTests.swift; sourceTree = SOURCE_ROOT; };
+		86A881F290F7F31E0ACB27B1 /* Tests/AppTests/CanvasTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/CanvasTests.swift; sourceTree = SOURCE_ROOT; };
+		948AB146F9322C1A874D7EE2 /* SwipeAndSketch/Core/SketchGuides.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/SketchGuides.swift; sourceTree = SOURCE_ROOT; };
+		950AC9B7240EC79A191296B4 /* SwipeAndSketch/App/ModelingSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/ModelingSession.swift; sourceTree = SOURCE_ROOT; };
+		9B478F678A1C30B4989CFFAE /* Tests/AppTests/BodyTransformToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/BodyTransformToolTests.swift; sourceTree = SOURCE_ROOT; };
+		9E65A6987E10939F88B18A9E /* Tests/AppTests/FinishToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/FinishToolTests.swift; sourceTree = SOURCE_ROOT; };
+		A6E7E8C055A07A444FDA8585 /* SwipeAndSketch/Core/Workspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Workspace.swift; sourceTree = SOURCE_ROOT; };
+		AF4478A9ADDFEB1B8678BACE /* SwipeAndSketch/Core/Split.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Split.swift; sourceTree = SOURCE_ROOT; };
+		B0FF5FAF995107ED6714C2D1 /* Tests/AppTests/CutToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/CutToolTests.swift; sourceTree = SOURCE_ROOT; };
+		B105C9AC4FBD48D2A4D07365 /* SwipeAndSketch/Canvas/ViewCube.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Canvas/ViewCube.swift; sourceTree = SOURCE_ROOT; };
+		B591D3990DE4944AEEBE5949 /* SwipeAndSketch/Core/ConstructionPlanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/ConstructionPlanes.swift; sourceTree = SOURCE_ROOT; };
+		C96DF5DA71597424CB15F0B0 /* SwipeAndSketch/Core/Projection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Projection.swift; sourceTree = SOURCE_ROOT; };
+		CB449467744B407693813A4D /* SwipeAndSketch/Core/Import.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Import.swift; sourceTree = SOURCE_ROOT; };
+		D0CA09902040446BB7C8860E /* SwipeAndSketch/Core/Mirror.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Mirror.swift; sourceTree = SOURCE_ROOT; };
+		6AE636EF17B2473D978EC6E2 /* SwipeAndSketch/Core/Pattern.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Pattern.swift; sourceTree = SOURCE_ROOT; };
+		C1E15BF2DA9C430AB610C495 /* SwipeAndSketch/Core/Fit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Fit.swift; sourceTree = SOURCE_ROOT; };
+		37B6030E3768484F99114843 /* SwipeAndSketch/Core/Text.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Text.swift; sourceTree = SOURCE_ROOT; };
+		5E04ABF4886C481D8E38456F /* SwipeAndSketch/Core/Threads.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Threads.swift; sourceTree = SOURCE_ROOT; };
+		DF2594D86137729378A9C57F /* SwipeAndSketch/Core/Cuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Cuts.swift; sourceTree = SOURCE_ROOT; };
+		E054FBD9FE6D3567BA8F0F02 /* Tests/AppTests/ProjectionToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/ProjectionToolTests.swift; sourceTree = SOURCE_ROOT; };
+		EBD745786B0C4AB59C789C99 /* Tests/AppTests/MirrorToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/MirrorToolTests.swift; sourceTree = SOURCE_ROOT; };
+		DEC0C6F1963B411FA88693CF /* Tests/AppTests/PatternToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/PatternToolTests.swift; sourceTree = SOURCE_ROOT; };
+		E49BC26BBD2548D6A521BFB6 /* Tests/AppTests/FitToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/FitToolTests.swift; sourceTree = SOURCE_ROOT; };
+		1B7FB426A6B0448D8230FE28 /* Tests/AppTests/PrintExportToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/PrintExportToolTests.swift; sourceTree = SOURCE_ROOT; };
+		B6DD6C51F8F54F0A890C409C /* Tests/AppTests/TextToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/TextToolTests.swift; sourceTree = SOURCE_ROOT; };
+		02855DB21DA44D3BB2F01188 /* Tests/AppTests/ThreadToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/ThreadToolTests.swift; sourceTree = SOURCE_ROOT; };
+		7B38294A86F84D149339BA18 /* Tests/AppTests/AssistantTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/AssistantTests.swift; sourceTree = SOURCE_ROOT; };
+		7A1FA58EB4C61842032C3FBF /* Tests/AppTests/LicenseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/LicenseTests.swift; sourceTree = SOURCE_ROOT; };
+		ED2E242DCD8B46688AB73B71 /* Tests/AppTests/ImportToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/ImportToolTests.swift; sourceTree = SOURCE_ROOT; };
+		EE587EA20D4E6D1DB0CFC24F /* Tests/AppTests/RevolveToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/RevolveToolTests.swift; sourceTree = SOURCE_ROOT; };
+		EEDB1DF22053EDB4B1263A1F /* SwipeAndSketch/App/SwipeAndSketchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/SwipeAndSketchApp.swift; sourceTree = SOURCE_ROOT; };
+		F06A6B516900ED2F61446A96 /* SwipeAndSketch/Core/FaceExtrusion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/FaceExtrusion.swift; sourceTree = SOURCE_ROOT; };
+		F091501D2BB84F36A1F41053 /* SwipeAndSketch/Core/Project.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Project.swift; sourceTree = SOURCE_ROOT; };
+		F5090CA8D4FA28DC90100D0E /* SwipeAndSketch/Core/Sketches.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Sketches.swift; sourceTree = SOURCE_ROOT; };
+		F7034BE1E2055764B78AEB3D /* Tests/AppTests/OperationToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/OperationToolTests.swift; sourceTree = SOURCE_ROOT; };
+		F738E7ECEBDB2192068EE6C9 /* Tests/AppTests/JoinToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/JoinToolTests.swift; sourceTree = SOURCE_ROOT; };
+		FCC661DB4C4744F5B68CDB8C /* SwipeAndSketch/App/SwipeSketchIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/SwipeSketchIcon.swift; sourceTree = SOURCE_ROOT; };
+		AF1F85F663EA4801B7F49E0F /* SwipeAndSketch/Assistant/AssistantEntitlement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Assistant/AssistantEntitlement.swift; sourceTree = SOURCE_ROOT; };
+		FABAEDA45F6342B7865522C6 /* SwipeAndSketch/Core/AssistantWorkbench.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/AssistantWorkbench.swift; sourceTree = SOURCE_ROOT; };
+		613F3938402A4A92B06DFE19 /* SwipeAndSketch/Assistant/AssistantTools.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Assistant/AssistantTools.swift; sourceTree = SOURCE_ROOT; };
+		78B7754E0B3C43D8B4916209 /* SwipeAndSketch/Assistant/AssistantEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Assistant/AssistantEngine.swift; sourceTree = SOURCE_ROOT; };
+		37B0C3A68BDB48B59F04375A /* SwipeAndSketch/Assistant/AssistantPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Assistant/AssistantPlanner.swift; sourceTree = SOURCE_ROOT; };
+		536FF5084800478C995C2369 /* SwipeAndSketch/App/AssistantController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/AssistantController.swift; sourceTree = SOURCE_ROOT; };
+		7DF59EC755984EB7AB15699C /* SwipeAndSketch/App/AssistantPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/AssistantPanel.swift; sourceTree = SOURCE_ROOT; };
+		7A72DC06F98647DFB477A979 /* SwipeAndSketch/Core/Regions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Regions.swift; sourceTree = SOURCE_ROOT; };
+		D6C35E1B90B34884BC6F583A /* SwipeAndSketch/Core/SketchModify.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/SketchModify.swift; sourceTree = SOURCE_ROOT; };
+		D2FA6DACD3D041B784B19F62 /* SwipeAndSketch/Core/SketchDimensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/SketchDimensions.swift; sourceTree = SOURCE_ROOT; };
+		221851B73AAC4432BE5787BA /* SwipeAndSketch/Core/Measuring.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Measuring.swift; sourceTree = SOURCE_ROOT; };
+		43691DD3546F4AC69431AACC /* Tests/AppTests/SketchToolsToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/SketchToolsToolTests.swift; sourceTree = SOURCE_ROOT; };
+		70D89F7260FC43398FA92293 /* Tests/AppTests/CanvasTestCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/CanvasTestCase.swift; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		BACBA84042718D691451282A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4EFE369E822A01F5F3097F6E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BD92572B49AC16A86614498D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2933EFDECA9595F6874BC10F /* Vendor/SSKernel.xcframework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E05DB79C430AA1B0BA487AFC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		B18E21612AB158A57CD78BC1 /* SwipeAndSketchThumbnails */ = {
+			isa = PBXGroup;
+			children = (
+				21B377C8E4B334B299C5796E /* SwipeAndSketchThumbnails/ThumbnailProvider.swift */,
+				21E31698EF6CA14F37C233C5 /* SwipeAndSketchThumbnails/Info.plist */,
+			);
+			name = SwipeAndSketchThumbnails;
+			sourceTree = "<group>";
+		};
+		615B463D1028E4E24B674CF7 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				2E56AC85BA95E8224744B8CC /* SwipeAndSketchThumbnails.appex */,
+				4E783A9E10D2A8ABA38CD11C /* SwipeAndSketch.app */,
+				6C7CCDEB3609F1FAA874E941 /* SwipeAndSketchUITests.xctest */,
+				198AA8EA2A3A4B5640AEA2BE /* SwipeAndSketchTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		8309DD304D804F9D7F6302F5 /* SwipeAndSketch */ = {
+			isa = PBXGroup;
+			children = (
+				221851B73AAC4432BE5787BA /* SwipeAndSketch/Core/Measuring.swift */,
+				D2FA6DACD3D041B784B19F62 /* SwipeAndSketch/Core/SketchDimensions.swift */,
+				D6C35E1B90B34884BC6F583A /* SwipeAndSketch/Core/SketchModify.swift */,
+				7A72DC06F98647DFB477A979 /* SwipeAndSketch/Core/Regions.swift */,
+				021BB602308717C800AA9C34 /* SwipeAndSketch.entitlements */,
+				38B803830EEFD3A2F4038B1A /* SwipeAndSketch/Core/MoreOperations.swift */,
+				F06A6B516900ED2F61446A96 /* SwipeAndSketch/Core/FaceExtrusion.swift */,
+				F5090CA8D4FA28DC90100D0E /* SwipeAndSketch/Core/Sketches.swift */,
+				06A5EB7F31C2DA03AC84A205 /* SwipeAndSketch/Core/SketchTransforms.swift */,
+				B591D3990DE4944AEEBE5949 /* SwipeAndSketch/Core/ConstructionPlanes.swift */,
+				C96DF5DA71597424CB15F0B0 /* SwipeAndSketch/Core/Projection.swift */,
+				27745638E573BB853338027D /* SwipeAndSketch/Core/Align.swift */,
+				AF4478A9ADDFEB1B8678BACE /* SwipeAndSketch/Core/Split.swift */,
+				5F85DAAAC380CE1B4B2F53A8 /* SwipeAndSketch/Core/Revolve.swift */,
+				D0CA09902040446BB7C8860E /* SwipeAndSketch/Core/Mirror.swift */,
+				6AE636EF17B2473D978EC6E2 /* SwipeAndSketch/Core/Pattern.swift */,
+				C1E15BF2DA9C430AB610C495 /* SwipeAndSketch/Core/Fit.swift */,
+				A7A1F6B9CC71D8BDE4F61DB8 /* SwipeAndSketch/Core/Scale.swift */,
+				2F3EB67718A2274EB569C89A /* SwipeAndSketch/Core/Templates.swift */,
+				984D1A095D013A9113E4FFD8 /* SwipeAndSketch/Core/TemplatesGridfinity.swift */,
+				C8C23EC73BEDB0781C2E40B5 /* SwipeAndSketch/Core/TemplatesBoards.swift */,
+				6A7BC91FFF07B9D1CE003615 /* SwipeAndSketch/Core/TemplatesBoxes.swift */,
+				500B62A91E8768DF802070F0 /* SwipeAndSketch/Canvas/ModelPicture.swift */,
+				928E59A00BA577811C11A1D8 /* SwipeAndSketch/App/TemplateGallery.swift */,
+				0AC32679AD6445D0ACF6993D /* SwipeAndSketch/App/RecentProjects.swift */,
+				01FF8B448E584D2685A229CA /* SwipeAndSketch/App/HomeView.swift */,
+				B2E553FC8A8B08381BDC66E6 /* SwipeAndSketch/Core/SketchTools.swift */,
+				9A13918F78E7055416099C5A /* SwipeAndSketch/Core/Clipboard.swift */,
+				199CA94DF59EEE8F32275398 /* SwipeAndSketch/Core/Naming.swift */,
+				69910042A2FEA63707AA36DE /* SwipeAndSketch/Core/Groups.swift */,
+				6E4E3595E501D2C422605253 /* SwipeAndSketch/Core/FaceEdits.swift */,
+				34F01B425CCD77EFD76F3575 /* SwipeAndSketch/Core/HoleRemoval.swift */,
+				37B6030E3768484F99114843 /* SwipeAndSketch/Core/Text.swift */,
+				5E04ABF4886C481D8E38456F /* SwipeAndSketch/Core/Threads.swift */,
+				CB449467744B407693813A4D /* SwipeAndSketch/Core/Import.swift */,
+				670776899FD3227D80DC1FE1 /* SwipeAndSketch/Core/Export.swift */,
+				948AB146F9322C1A874D7EE2 /* SwipeAndSketch/Core/SketchGuides.swift */,
+				66060981B3FBCA6E212ECB79 /* SwipeAndSketch/Core/SketchPlanes.swift */,
+				DF2594D86137729378A9C57F /* SwipeAndSketch/Core/Cuts.swift */,
+				1125E8DC5E888459061EB96D /* SwipeAndSketch/Core/EdgeFinishes.swift */,
+				4F173D963821E7A2929501C6 /* Vendor/SSKernel.xcframework */,
+				4DD365FAD1FA636267D31D5B /* SwipeAndSketch/Canvas/KernelSceneGeometry.swift */,
+				3777EAB9D5911F62D69B1A5F /* SwipeAndSketch/Core/SolidKernel.swift */,
+				950AC9B7240EC79A191296B4 /* SwipeAndSketch/App/ModelingSession.swift */,
+				7BB24208A06640A5B1F4264D /* SwipeAndSketch/App/ProjectDocuments.swift */,
+				F091501D2BB84F36A1F41053 /* SwipeAndSketch/Core/Project.swift */,
+				C1CA79626A45A0FAF2D61FEC /* SwipeAndSketch/Core/ProjectPreview.swift */,
+				2455D4A927594EB4A2BBF894 /* SwipeAndSketch/Info.plist */,
+				EEDB1DF22053EDB4B1263A1F /* SwipeAndSketch/App/SwipeAndSketchApp.swift */,
+				35C7BCC8CA2BA3F29A0441EF /* SwipeAndSketch/App/WorkspaceView.swift */,
+				FCC661DB4C4744F5B68CDB8C /* SwipeAndSketch/App/SwipeSketchIcon.swift */,
+				AF1F85F663EA4801B7F49E0F /* SwipeAndSketch/Assistant/AssistantEntitlement.swift */,
+				FABAEDA45F6342B7865522C6 /* SwipeAndSketch/Core/AssistantWorkbench.swift */,
+				613F3938402A4A92B06DFE19 /* SwipeAndSketch/Assistant/AssistantTools.swift */,
+				78B7754E0B3C43D8B4916209 /* SwipeAndSketch/Assistant/AssistantEngine.swift */,
+				37B0C3A68BDB48B59F04375A /* SwipeAndSketch/Assistant/AssistantPlanner.swift */,
+				536FF5084800478C995C2369 /* SwipeAndSketch/App/AssistantController.swift */,
+				7DF59EC755984EB7AB15699C /* SwipeAndSketch/App/AssistantPanel.swift */,
+				153046CC09E86B1E75FAD1CF /* SwipeAndSketch/App/HelpPanel.swift */,
+				A1B2C3D4E5F6071829300002 /* SwipeAndSketch/App/AboutView.swift */,
+				25EC3E4EDB9FE03808AFC001 /* SwipeAndSketch/App/PurchasesView.swift */,
+				881A27928DFD07B3C42C953F /* SwipeAndSketch/App/Licensing.swift */,
+				E1C38B8AF6084522AC849439 /* SwipeAndSketch/App/PrintExport.swift */,
+				99CD2616992F0A1BEF867C10 /* SwipeAndSketch/App/HelpTopics.swift */,
+				3646179919F87BCB2F2BD219 /* SwipeAndSketch/Canvas/ModelingCanvas.swift */,
+				B105C9AC4FBD48D2A4D07365 /* SwipeAndSketch/Canvas/ViewCube.swift */,
+				0E7E569F9CEB4E78C84FC119 /* SwipeAndSketch/Core/Geometry.swift */,
+				A6E7E8C055A07A444FDA8585 /* SwipeAndSketch/Core/Workspace.swift */,
+				5000B3C73EE6FA5B6FDAA413 /* SwipeAndSketch/Assets.xcassets */,
+				DC7085646C7E481A8FD6987D /* SwipeAndSketch/PrivacyInfo.xcprivacy */,
+				CA401D49A3A5AF1FCFD2D8AD /* SwipeAndSketch/Products.storekit */,
+			);
+			name = SwipeAndSketch;
+			sourceTree = "<group>";
+		};
+		870B3294C0CBD48AF6BBCC1B = {
+			isa = PBXGroup;
+			children = (
+				B18E21612AB158A57CD78BC1 /* SwipeAndSketchThumbnails */,
+				8309DD304D804F9D7F6302F5 /* SwipeAndSketch */,
+				A619C04D8A87AB070162A099 /* Tests */,
+				615B463D1028E4E24B674CF7 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A619C04D8A87AB070162A099 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				43691DD3546F4AC69431AACC /* Tests/AppTests/SketchToolsToolTests.swift */,
+				778D5A7845409F9408EF15EF /* Tests/AppTests/BasicsToolTests.swift */,
+				CE2DD378C81274D75D8D5F00 /* Tests/AppTests/TemplatePictureTests.swift */,
+				70D89F7260FC43398FA92293 /* Tests/AppTests/CanvasTestCase.swift */,
+				F7034BE1E2055764B78AEB3D /* Tests/AppTests/OperationToolTests.swift */,
+				EE587EA20D4E6D1DB0CFC24F /* Tests/AppTests/RevolveToolTests.swift */,
+				EBD745786B0C4AB59C789C99 /* Tests/AppTests/MirrorToolTests.swift */,
+				DEC0C6F1963B411FA88693CF /* Tests/AppTests/PatternToolTests.swift */,
+				E49BC26BBD2548D6A521BFB6 /* Tests/AppTests/FitToolTests.swift */,
+				1B7FB426A6B0448D8230FE28 /* Tests/AppTests/PrintExportToolTests.swift */,
+				B6DD6C51F8F54F0A890C409C /* Tests/AppTests/TextToolTests.swift */,
+				02855DB21DA44D3BB2F01188 /* Tests/AppTests/ThreadToolTests.swift */,
+				7B38294A86F84D149339BA18 /* Tests/AppTests/AssistantTests.swift */,
+				7A1FA58EB4C61842032C3FBF /* Tests/AppTests/LicenseTests.swift */,
+				ED2E242DCD8B46688AB73B71 /* Tests/AppTests/ImportToolTests.swift */,
+				F738E7ECEBDB2192068EE6C9 /* Tests/AppTests/JoinToolTests.swift */,
+				8147A9E314B42887C310D656 /* Tests/AppTests/FaceExtrusionToolTests.swift */,
+				618180C2B1650579CC894D34 /* Tests/AppTests/SketchingTests.swift */,
+				816868C6AA205370AE9163D2 /* Tests/AppTests/ConstructionPlaneToolTests.swift */,
+				E054FBD9FE6D3567BA8F0F02 /* Tests/AppTests/ProjectionToolTests.swift */,
+				65E6273D9094C0FA02DC1A8A /* Tests/AppTests/SplitToolTests.swift */,
+				9B478F678A1C30B4989CFFAE /* Tests/AppTests/BodyTransformToolTests.swift */,
+				2BDF94EC4AAE4DC5771E16D6 /* Tests/AppTests/FaceSketchTests.swift */,
+				B0FF5FAF995107ED6714C2D1 /* Tests/AppTests/CutToolTests.swift */,
+				9E65A6987E10939F88B18A9E /* Tests/AppTests/FinishToolTests.swift */,
+				2626DB4D602ECD2EE71B2AFB /* Tests/AppTests/KernelSceneTests.swift */,
+				657DD32164E165828BFDB7B4 /* Tests/UITests/SwipeAndSketchUITests.swift */,
+				86A881F290F7F31E0ACB27B1 /* Tests/AppTests/CanvasTests.swift */,
+				7415BFE439F3457F997E9345 /* Tests/AppTests/ProjectDocumentTests.swift */,
+			);
+			name = Tests;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		6AD2279008F76C27A260CC37 /* SwipeAndSketchThumbnails */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 25DEDA005AA6C77C81734DEB /* Build configuration list for PBXNativeTarget "SwipeAndSketchThumbnails" */;
+			buildPhases = (
+				2FB106BFD30B116AD98D187E /* Sources */,
+				BACBA84042718D691451282A /* Frameworks */,
+				C37ABC3D5B933B3242FE6119 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SwipeAndSketchThumbnails;
+			productName = SwipeAndSketchThumbnails;
+			productReference = 2E56AC85BA95E8224744B8CC /* SwipeAndSketchThumbnails.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		48021BA534050206D31D8AAD /* SwipeAndSketchTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E61796AA3886E57C02398BB3 /* Build configuration list for PBXNativeTarget "SwipeAndSketchTests" */;
+			buildPhases = (
+				5DDB0E64CE5DBFEFCE957171 /* Sources */,
+				4EFE369E822A01F5F3097F6E /* Frameworks */,
+				C9FEA491171BA9854D4C4FFC /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				03C64E9A3C3BED951AC96980 /* PBXTargetDependency */,
+			);
+			name = SwipeAndSketchTests;
+			productName = SwipeAndSketchTests;
+			productReference = 198AA8EA2A3A4B5640AEA2BE /* SwipeAndSketchTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		C062A5A4A7F4F37DD90F54CB /* SwipeAndSketchUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 19170B56EA5642A46C383F29 /* Build configuration list for PBXNativeTarget "SwipeAndSketchUITests" */;
+			buildPhases = (
+				77A03FEE20FE96AD9384861E /* Sources */,
+				E05DB79C430AA1B0BA487AFC /* Frameworks */,
+				D5C76E148680C094C001AC35 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				BAE932EF166B50AB877FDC6F /* PBXTargetDependency */,
+			);
+			name = SwipeAndSketchUITests;
+			productName = SwipeAndSketchUITests;
+			productReference = 6C7CCDEB3609F1FAA874E941 /* SwipeAndSketchUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		F75109BEB4DD8800DA6B45F8 /* SwipeAndSketch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4867F1BF372A84237FA0A5A7 /* Build configuration list for PBXNativeTarget "SwipeAndSketch" */;
+			buildPhases = (
+				949D493B91791558E87BC5D7 /* Sources */,
+				BD92572B49AC16A86614498D /* Frameworks */,
+				8ECC8B5D05B79F879ACDF1A2 /* Resources */,
+				AA81373DE19302EFCA736F4D /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3025D28B5DD4B9CF7BB6D9B3 /* PBXTargetDependency */,
+			);
+			name = SwipeAndSketch;
+			productName = SwipeAndSketch;
+			productReference = 4E783A9E10D2A8ABA38CD11C /* SwipeAndSketch.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		98F54143AB4E86B28C3AFEE0 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					48021BA534050206D31D8AAD = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = F75109BEB4DD8800DA6B45F8;
+					};
+					C062A5A4A7F4F37DD90F54CB = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = F75109BEB4DD8800DA6B45F8;
+					};
+					F75109BEB4DD8800DA6B45F8 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					6AD2279008F76C27A260CC37 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+				};
+			};
+			buildConfigurationList = 640DC9EFD529235A8D9E2727 /* Build configuration list for PBXProject "SwipeAndSketch" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 870B3294C0CBD48AF6BBCC1B;
+			productRefGroup = 615B463D1028E4E24B674CF7 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				F75109BEB4DD8800DA6B45F8 /* SwipeAndSketch */,
+				C062A5A4A7F4F37DD90F54CB /* SwipeAndSketchUITests */,
+				48021BA534050206D31D8AAD /* SwipeAndSketchTests */,
+				6AD2279008F76C27A260CC37 /* SwipeAndSketchThumbnails */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		C37ABC3D5B933B3242FE6119 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8ECC8B5D05B79F879ACDF1A2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FB90684E69A6C96ED866993E /* SwipeAndSketch/Assets.xcassets in Resources */,
+				DE68629178954211AF169CBB /* SwipeAndSketch/PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C9FEA491171BA9854D4C4FFC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D5C76E148680C094C001AC35 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		2FB106BFD30B116AD98D187E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				62F94BA25871B3EF70D63676 /* SwipeAndSketchThumbnails/ThumbnailProvider.swift in Sources */,
+				0CAF3144BC4A4F69BE9FA07F /* SwipeAndSketch/Core/ProjectPreview.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5DDB0E64CE5DBFEFCE957171 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				01FD45B97FC94BB9B65F50A1 /* Tests/AppTests/SketchToolsToolTests.swift in Sources */,
+				08EF15EF7721371D635FCCE4 /* Tests/AppTests/BasicsToolTests.swift in Sources */,
+				7E86E8EC7064EFDE32531491 /* Tests/AppTests/TemplatePictureTests.swift in Sources */,
+				9CCA122BC4CC42B0975EC4B6 /* Tests/AppTests/CanvasTestCase.swift in Sources */,
+				4E6CB7CA8BEB5A32112D0E43 /* Tests/AppTests/OperationToolTests.swift in Sources */,
+				4495715253A75A783BC0C668 /* Tests/AppTests/RevolveToolTests.swift in Sources */,
+				2D7ACD7C99DC4C11AFD84C28 /* Tests/AppTests/MirrorToolTests.swift in Sources */,
+				ED198A1EBE3448718B750FC7 /* Tests/AppTests/PatternToolTests.swift in Sources */,
+				E2C8F7B4CE5E4571933A9479 /* Tests/AppTests/FitToolTests.swift in Sources */,
+				211A38F75FC144DD96AF193F /* Tests/AppTests/PrintExportToolTests.swift in Sources */,
+				0E4B8524E48B4AE2BEDC0EB1 /* Tests/AppTests/TextToolTests.swift in Sources */,
+				4A099D23D7D44582810A26C6 /* Tests/AppTests/ThreadToolTests.swift in Sources */,
+				3033A63182D64B4494837FAD /* Tests/AppTests/AssistantTests.swift in Sources */,
+				8933CB1E12A988FD6619AEA9 /* Tests/AppTests/LicenseTests.swift in Sources */,
+				EDCF250D54664EFE990AADBF /* Tests/AppTests/ImportToolTests.swift in Sources */,
+				8F89FEE67D1AAED9C942104F /* Tests/AppTests/JoinToolTests.swift in Sources */,
+				8E75D50EB316D922054EDEEA /* Tests/AppTests/FaceExtrusionToolTests.swift in Sources */,
+				C84D4254B84FA4B2DE25C0E2 /* Tests/AppTests/SketchingTests.swift in Sources */,
+				73F23F626F72B3F12B6169B9 /* Tests/AppTests/ConstructionPlaneToolTests.swift in Sources */,
+				6D962548A0711A09D878D200 /* Tests/AppTests/ProjectionToolTests.swift in Sources */,
+				0B1F7EA3CD206EBE6C78D760 /* Tests/AppTests/SplitToolTests.swift in Sources */,
+				ABC7C2376A69050C716D8BD7 /* Tests/AppTests/BodyTransformToolTests.swift in Sources */,
+				0236E86CE05A9AC7687A13C5 /* Tests/AppTests/FaceSketchTests.swift in Sources */,
+				E22521F7A1AFE44A545A9416 /* Tests/AppTests/CutToolTests.swift in Sources */,
+				37327D8C0B6CE9CDE0DA3850 /* Tests/AppTests/FinishToolTests.swift in Sources */,
+				86A46A525D4251B7B4140623 /* Tests/AppTests/KernelSceneTests.swift in Sources */,
+				D339E4C574643E9A3EC47319 /* Tests/AppTests/CanvasTests.swift in Sources */,
+				F3BB66BA957C4B83A54E1813 /* Tests/AppTests/ProjectDocumentTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		77A03FEE20FE96AD9384861E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6C3D0BC935FFD984A41AFCB9 /* Tests/UITests/SwipeAndSketchUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		949D493B91791558E87BC5D7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D29F30C494B34804A94B5075 /* SwipeAndSketch/Core/Measuring.swift in Sources */,
+				DFC026CA1AD8488BA84A3BCB /* SwipeAndSketch/Core/SketchDimensions.swift in Sources */,
+				208F1D3C6A4A44469CAE996B /* SwipeAndSketch/Core/SketchModify.swift in Sources */,
+				4FD5187C7B134041A05B982C /* SwipeAndSketch/Core/Regions.swift in Sources */,
+				580FA31DFE1666C63522E76C /* SwipeAndSketch/Core/MoreOperations.swift in Sources */,
+				253225145680B14EC426AE33 /* SwipeAndSketch/Core/FaceExtrusion.swift in Sources */,
+				03D4BB6825A26A2FA0BF0D7C /* SwipeAndSketch/Core/Sketches.swift in Sources */,
+				F4F6CB4A7258C10BDA3163B6 /* SwipeAndSketch/Core/SketchTransforms.swift in Sources */,
+				A903D1F2E888CDB65F777F37 /* SwipeAndSketch/Core/ConstructionPlanes.swift in Sources */,
+				D46C077D6021ECC41CAE84EB /* SwipeAndSketch/Core/Projection.swift in Sources */,
+				B41B335C658F54CB12AAA97F /* SwipeAndSketch/Core/Align.swift in Sources */,
+				37E6603E65173E034BFADDB4 /* SwipeAndSketch/Core/Split.swift in Sources */,
+				A4999AB9BEDAA688F65B68A8 /* SwipeAndSketch/Core/Revolve.swift in Sources */,
+				4B10011F809146CABEC1B210 /* SwipeAndSketch/Core/Mirror.swift in Sources */,
+				B3DA59809EED4A4FA7704FC4 /* SwipeAndSketch/Core/Pattern.swift in Sources */,
+				D80279D46CBB48D28C8A2630 /* SwipeAndSketch/Core/Fit.swift in Sources */,
+				E4F61DB8477D478701161DBC /* SwipeAndSketch/Core/Scale.swift in Sources */,
+				EE54AEE72E1B7100D35BB824 /* SwipeAndSketch/Core/Templates.swift in Sources */,
+				AF745B24C4459DA5EF65ECE8 /* SwipeAndSketch/Core/TemplatesGridfinity.swift in Sources */,
+				D44C808239C9C6941328760B /* SwipeAndSketch/Core/TemplatesBoards.swift in Sources */,
+				D8985BD8C18FD25DC92C31A7 /* SwipeAndSketch/Core/TemplatesBoxes.swift in Sources */,
+				D1581AE27866C1EA4D7AE989 /* SwipeAndSketch/Canvas/ModelPicture.swift in Sources */,
+				939839D0F80D544076BD82A0 /* SwipeAndSketch/App/TemplateGallery.swift in Sources */,
+				FC0929F62D58473989BB4A69 /* SwipeAndSketch/App/RecentProjects.swift in Sources */,
+				A2A57983162A4C6FBEC73A3A /* SwipeAndSketch/App/HomeView.swift in Sources */,
+				1BDC66E620EF0D8965769E2E /* SwipeAndSketch/Core/SketchTools.swift in Sources */,
+				16099C5AD3E84D66CA7D9A4B /* SwipeAndSketch/Core/Clipboard.swift in Sources */,
+				3227539823826E1FC3CC273D /* SwipeAndSketch/Core/Naming.swift in Sources */,
+				07AA36DE94A9E112FD4831CA /* SwipeAndSketch/Core/Groups.swift in Sources */,
+				22605253DF2F164385FB0C24 /* SwipeAndSketch/Core/FaceEdits.swift in Sources */,
+				D76F3575B1B7892C4DEF43E1 /* SwipeAndSketch/Core/HoleRemoval.swift in Sources */,
+				7F64811E9BD34DCE89D76A04 /* SwipeAndSketch/Core/Text.swift in Sources */,
+				4AD14F4282874B73AF348CD2 /* SwipeAndSketch/Core/Threads.swift in Sources */,
+				3FE26E7AE8C54D45B1513397 /* SwipeAndSketch/Core/Import.swift in Sources */,
+				96B02BCF046A174438AAA9C2 /* SwipeAndSketch/Core/Export.swift in Sources */,
+				FFED0DC3AEE810B781D45B4C /* SwipeAndSketch/Core/SketchGuides.swift in Sources */,
+				CB1790C5EAB3EDB1A9319743 /* SwipeAndSketch/Core/SketchPlanes.swift in Sources */,
+				81B9D065EA0895E85AAEAD66 /* SwipeAndSketch/Core/Cuts.swift in Sources */,
+				33D0FFF8F856308F8036A51A /* SwipeAndSketch/Core/EdgeFinishes.swift in Sources */,
+				EE9F5E2C5571DF89E4D798DB /* SwipeAndSketch/Canvas/KernelSceneGeometry.swift in Sources */,
+				7AB28AFFEF66CC12ED83C1BB /* SwipeAndSketch/Core/SolidKernel.swift in Sources */,
+				2227ED9581715FE0013F5154 /* SwipeAndSketch/App/ModelingSession.swift in Sources */,
+				3DACF5076761435191747223 /* SwipeAndSketch/App/ProjectDocuments.swift in Sources */,
+				1D5EBE32E3DF4141A4B07280 /* SwipeAndSketch/Core/Project.swift in Sources */,
+				F2D61FEC98E76173DCBC066C /* SwipeAndSketch/Core/ProjectPreview.swift in Sources */,
+				9452A588649A745F656E467D /* SwipeAndSketch/App/SwipeAndSketchApp.swift in Sources */,
+				2D97207F1A2779A98E7CC603 /* SwipeAndSketch/App/WorkspaceView.swift in Sources */,
+				0A10E23B58BA40F8BA1C9AB2 /* SwipeAndSketch/App/SwipeSketchIcon.swift in Sources */,
+				81B86009136D40F1B3320EC5 /* SwipeAndSketch/Assistant/AssistantEntitlement.swift in Sources */,
+				D2B18F60759549EAAD92C8CB /* SwipeAndSketch/Core/AssistantWorkbench.swift in Sources */,
+				FF0D01DB7ED548A28868B580 /* SwipeAndSketch/Assistant/AssistantTools.swift in Sources */,
+				E2651F1E542642F6BDD667A6 /* SwipeAndSketch/Assistant/AssistantEngine.swift in Sources */,
+				D2E951E13DB44292B79D4FE0 /* SwipeAndSketch/Assistant/AssistantPlanner.swift in Sources */,
+				A1305287E5104052AC7EDEC4 /* SwipeAndSketch/App/AssistantController.swift in Sources */,
+				1B01BA37F133464BA4723CE3 /* SwipeAndSketch/App/AssistantPanel.swift in Sources */,
+				2E8F369BD03E9D17702022E3 /* SwipeAndSketch/App/HelpPanel.swift in Sources */,
+				A1B2C3D4E5F6071829300001 /* SwipeAndSketch/App/AboutView.swift in Sources */,
+				0F1DBC631C697709450244EA /* SwipeAndSketch/App/PurchasesView.swift in Sources */,
+				09428B6B5CE4AFE55FD4DDCD /* SwipeAndSketch/App/Licensing.swift in Sources */,
+				E510146FAE9B48949B5AEBC4 /* SwipeAndSketch/App/PrintExport.swift in Sources */,
+				60433D785C138D710099DFB8 /* SwipeAndSketch/App/HelpTopics.swift in Sources */,
+				50A27319FF3D2B56E34AB9DF /* SwipeAndSketch/Canvas/ModelingCanvas.swift in Sources */,
+				A9841ED803C54B6AB22D8510 /* SwipeAndSketch/Canvas/ViewCube.swift in Sources */,
+				A21E82DFCBE8368CE30A92A7 /* SwipeAndSketch/Core/Geometry.swift in Sources */,
+				03066284C6AF3282C8640C25 /* SwipeAndSketch/Core/Workspace.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		3025D28B5DD4B9CF7BB6D9B3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 6AD2279008F76C27A260CC37 /* SwipeAndSketchThumbnails */;
+			targetProxy = 8838451EC054A6A6A1AB1FAA /* PBXContainerItemProxy */;
+		};
+		03C64E9A3C3BED951AC96980 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F75109BEB4DD8800DA6B45F8 /* SwipeAndSketch */;
+			targetProxy = 7E85D4A68785761E1DBB22D8 /* PBXContainerItemProxy */;
+		};
+		BAE932EF166B50AB877FDC6F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F75109BEB4DD8800DA6B45F8 /* SwipeAndSketch */;
+			targetProxy = 7E85D4A68785761E1DBB22D8 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		5578E6FBF7C8F9D36CB953C6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JFKP9T7B3Z;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SwipeAndSketchThumbnails/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Swipe & Sketch Thumbnails";
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = noventix.SwipeAndSketch.Thumbnails;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Debug;
+		};
+		3121E04CDC1ABEEA12BBCE0A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JFKP9T7B3Z;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SwipeAndSketchThumbnails/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Swipe & Sketch Thumbnails";
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = noventix.SwipeAndSketch.Thumbnails;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Release;
+		};
+		5A8C91857F674E16E2724F47 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = SwipeAndSketch/SwipeAndSketch.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = JFKP9T7B3Z;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SwipeAndSketch/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Swipe & Sketch";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				PRODUCT_BUNDLE_IDENTIFIER = noventix.SwipeAndSketch;
+				MARKETING_VERSION = 1.0;
+				CURRENT_PROJECT_VERSION = 1;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Release;
+		};
+		89E1FD6268CC0F221A2BE178 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+			};
+			name = Debug;
+		};
+		942EEBBACD6C88CAE7F29B29 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				PRODUCT_BUNDLE_IDENTIFIER = noventix.SwipeAndSketch.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 2;
+				TEST_TARGET_NAME = SwipeAndSketch;
+			};
+			name = Release;
+		};
+		9BB52494F7CCFD3DFCED98B0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				PRODUCT_BUNDLE_IDENTIFIER = noventix.SwipeAndSketch.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 2;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SwipeAndSketch.app/SwipeAndSketch";
+			};
+			name = Release;
+		};
+		AEE072417D1ABB34757C5072 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				PRODUCT_BUNDLE_IDENTIFIER = noventix.SwipeAndSketch.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 2;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SwipeAndSketch.app/SwipeAndSketch";
+			};
+			name = Debug;
+		};
+		E6DE6C99132752C914FEF632 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_TESTABILITY = NO;
+			};
+			name = Release;
+		};
+		E9B2E96ABC5F6856F2BE79CF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = SwipeAndSketch/SwipeAndSketch.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = JFKP9T7B3Z;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SwipeAndSketch/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Swipe & Sketch";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				PRODUCT_BUNDLE_IDENTIFIER = noventix.SwipeAndSketch;
+				MARKETING_VERSION = 1.0;
+				CURRENT_PROJECT_VERSION = 1;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Debug;
+		};
+		FCB48D8F88BCDB0ED9FADFD7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				PRODUCT_BUNDLE_IDENTIFIER = noventix.SwipeAndSketch.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 2;
+				TEST_TARGET_NAME = SwipeAndSketch;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		25DEDA005AA6C77C81734DEB /* Build configuration list for PBXNativeTarget "SwipeAndSketchThumbnails" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5578E6FBF7C8F9D36CB953C6 /* Debug */,
+				3121E04CDC1ABEEA12BBCE0A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		19170B56EA5642A46C383F29 /* Build configuration list for PBXNativeTarget "SwipeAndSketchUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FCB48D8F88BCDB0ED9FADFD7 /* Debug */,
+				942EEBBACD6C88CAE7F29B29 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4867F1BF372A84237FA0A5A7 /* Build configuration list for PBXNativeTarget "SwipeAndSketch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E9B2E96ABC5F6856F2BE79CF /* Debug */,
+				5A8C91857F674E16E2724F47 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		640DC9EFD529235A8D9E2727 /* Build configuration list for PBXProject "SwipeAndSketch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				89E1FD6268CC0F221A2BE178 /* Debug */,
+				E6DE6C99132752C914FEF632 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E61796AA3886E57C02398BB3 /* Build configuration list for PBXNativeTarget "SwipeAndSketchTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AEE072417D1ABB34757C5072 /* Debug */,
+				9BB52494F7CCFD3DFCED98B0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 98F54143AB4E86B28C3AFEE0 /* Project object */;
+}

@@ -1,0 +1,15 @@
+# Swipe & Sketch: notes for coding agents
+
+- **Product:** a native iPad CAD app for designing parts for 3D printing (iPadOS 27+). Apple Pencil draws, selects, and drags geometry; fingers navigate the canvas. Both may press buttons and dimension labels. There is no finger-drawing mode. Preserve the existing Pencil feel and palm rejection.
+- **Terminology:** use standard CAD terms in anything the user sees. Code identifiers, stored values, and accessibility identifiers keep their existing names even where the interface wording differs (for example `items.toggle`, `keepOriginals`, `total`, `uniform`), because saved files and tests depend on them.
+- **Look:** app chrome uses the Swipe & Sketch icon set and palette in `SwipeAndSketch/Assets.xcassets` (`ss-icon-*` images, `ss-*` colors, drawn by `SSIconTile`/`SSIconGlyph` in `SwipeAndSketch/App/SwipeSketchIcon.swift`). Don't substitute SF Symbols or new colors. Canvas geometry keeps its modeling colors (blue selection, purple guides, gray solids).
+- **Toolbar:** tools live in the bottom dock, which swaps between modeling and sketching. Add new tools to an existing group (or a new group) rather than lengthening the dock.
+- **Files:** projects are `.swipesketch` files (type `noventix.SwipeAndSketch.project`, format version 1) with editable analytic geometry in explicit millimeters. Use UIDocument for coordination and safe saving. Never silently replace an unreadable or future-version file with an empty model. See `Docs/ProjectFiles.md`.
+- **Editing behavior:** dragging previews live, keeps joined endpoints connected, commits one undo step at Pencil lift, and rolls back on cancellation. Numeric edits are validated before they change the document.
+- **Assistant:** changes go through `AssistantWorkbench` (Core) on a draft, are previewed, and are kept as one undo step or discarded. New modeling tools get a workbench operation and an assistant tool (and, for the on-device planner, an action). Never call the cloud model from a build without the Private Cloud Compute entitlement; `PrivateCloudEntitlement` checks.
+- **Help:** new tools get a `HelpTopic` with an overview in `SwipeAndSketch/App/HelpTopics.swift`.
+- **Paid features:** all gating goes through `LicenseStore`/`LicenseAccess` (`SwipeAndSketch/App/Licensing.swift`) and `isEditingBlocked`.
+- **Kernel:** Open CASCADE is reached only through the C facade in `SwipeAndSketch/Kernel` (`SSKernel.h`) and `SwipeAndSketch/Core/SolidKernel.swift`. See `Docs/Kernel.md`.
+- **Xcode project:** maintained by hand. Add new sources to `SwipeAndSketch.xcodeproj` carefully; never regenerate it, and don't commit signing, team, or bundle changes.
+- **Verification:** verify geometry, input and rendering integration, and simulator UI behavior with tests. Simulator tests don't prove real Apple Pencil or palm behavior; say which was checked.
+- **Licensing:** the code is under the PolyForm Shield License 1.0.0 and the name and icon are trademarks (`LICENSE`, `TRADEMARKS.md`). Use only original or appropriately licensed code, assets, and text.

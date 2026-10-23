@@ -1,0 +1,16 @@
+{
+  "images": [
+    {
+      "filename": "ss-icon-more.pdf",
+      "idiom": "universal"
+    }
+  ],
+  "info": {
+    "author": "SwipeAndSketch",
+    "version": 1
+  },
+  "properties": {
+    "preserves-vector-representation": true,
+    "template-rendering-intent": "template"
+  }
+}

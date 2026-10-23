@@ -1,0 +1,24 @@
+# macOS and Xcode
+.DS_Store
+xcuserdata/
+*.xcuserstate
+DerivedData/
+TestResults/
+*.xcresult
+
+# Build products (the kernel is built locally by Scripts/build_kernel.sh)
+.build/
+build/
+.swiftpm/
+Vendor/SSKernel.xcframework/
+
+# Local settings and agent files
+.claude/
+CLAUDE.local.md
+Local.xcconfig
+
+# Local working files at the top level
+/outputs/
+/*.step
+/*.stp
+/*.zip
