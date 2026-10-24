@@ -20,7 +20,7 @@ import simd
 
 @Generable struct AssistantRequestPart {
     @Guide(description: """
-    new box: a new rectangular solid or plate. new cylinder: a new round solid. \
+    new box: a new rectangular solid or plate. new cylinder: a new round solid. new sphere: a ball. new torus: a ring or donut. \
     boss / round boss: raise a rectangle / circle on a body's face. pocket / round pocket: cut a rectangle / circle into a face. \
     slot: cut a slot with rounded ends into a face. \
     hole: a round hole of a given diameter. screw hole: one metric (M2–M5) screw hole. corner screw holes: screw holes near each corner. \
@@ -33,7 +33,7 @@ import simd
     group: put bodies into a named group in the Model Tree (hide and show also take a group's name). \
     delete hole: remove a hole from a body. \
     change feature: change a hole, thread, text, or peg already made (its size, depth, height, or words).
-    """, .anyOf(["scale", "color", "rename", "group", "delete hole", "change feature", "new box", "new cylinder", "boss", "round boss", "pocket", "round pocket", "slot", "hole", "screw hole", "corner screw holes",
+    """, .anyOf(["scale", "color", "rename", "group", "delete hole", "change feature", "new sphere", "new torus", "new box", "new cylinder", "boss", "round boss", "pocket", "round pocket", "slot", "hole", "screw hole", "corner screw holes",
                  "fillet", "chamfer", "shell", "set height", "move", "copy", "rotate", "delete", "hide", "show", "extrude sketch", "peg", "fit test", "thread", "matching part", "text"]))
     var action: String
     @Guide(description: "The user's own words for this change, copied exactly (not rephrased), with all of its numbers and sizes")
@@ -50,6 +50,13 @@ import simd
     @Guide(description: "Size along X in mm: the first number of \"A by B\" (all three sides are equal for a cube)") var width: Double
     @Guide(description: "Size along Y in mm: the second number of \"A by B\"") var length: Double
     @Guide(description: "Thickness or height in mm") var height: Double
+}
+@Generable struct NewSphereValues {
+    @Guide(description: "Diameter (size across) in mm") var diameter: Double
+}
+@Generable struct NewTorusValues {
+    @Guide(description: "Diameter of the ring, through the middle of the tube, in mm") var diameter: Double
+    @Guide(description: "Thickness of the tube in mm") var tube: Double
 }
 @Generable struct NewCylinderValues {
     @Guide(description: "Diameter (size across) in mm") var diameter: Double
@@ -404,6 +411,12 @@ enum AssistantPlanner {
             try bench.rename(item: name, to: v.name)
         case "delete":
             try bench.delete(items: [try await body(for: part, in: bench)])
+        case "new sphere":
+            let v = try await values(NewSphereValues.self, for: part, bench: bench)
+            try bench.primitive(kind: "sphere", sizes: [try positive(v.diameter, "diameter")], at: nil)
+        case "new torus":
+            let v = try await values(NewTorusValues.self, for: part, bench: bench)
+            try bench.primitive(kind: "torus", sizes: [try positive(v.diameter, "diameter"), try positive(v.tube, "tube thickness")], at: nil)
         case "change feature":
             // The body's newest one of the kind its words name.
             let name = try await body(for: part, in: bench)

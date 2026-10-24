@@ -9,6 +9,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
     case extrude, extrudeFace, cut, join, revolve, fillet, chamfer, shell
     case union, subtract, intersect, split, align, mirror, pattern, scale, deleteFace, section, offsetPlane, midplane, project, measure, assistant
     case peg, fitTest, thread, matingPart, text
+    case primitives
     case xray
 
     var id: String { rawValue }
@@ -66,6 +67,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .scale: "Scale"
         case .deleteFace: "Delete Face"
         case .section: "Section View"
+        case .primitives: "Primitives"
         case .xray: "X-ray"
         case .offsetPlane: "Offset Plane"
         case .midplane: "Midplane"
@@ -119,6 +121,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .scale: .scale
         case .deleteFace: .deleteFace
         case .section: .section
+        case .primitives: .primitives
         case .xray: .xray
         case .offsetPlane: .offsetPlane
         case .midplane: .midplane
@@ -345,6 +348,11 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                 summary: "X-ray shows solids see-through, so you can look inside an enclosure or at parts hidden behind others. It changes nothing in the model.",
                 steps: ["Tap X-ray in the rail at the top left to see every solid through.", "Or long-press a solid (or a group) in the Model Tree and choose X-ray to see only that one through.", "Tap X-ray again, or choose Turn Off X-ray, to see them solid again."],
                 tips: ["With one solid X-rayed, a tap goes through it to a part inside, so you can select what it hides.", "X-ray is not saved with the project."])
+        case .primitives:
+            HelpOverview(
+                summary: "Make a ready-made box, cylinder, sphere, or torus (a ring) in one step, without sketching.",
+                steps: ["Choose Create, then Box, Cylinder, Sphere, or Torus.", "Tap the grid, or a flat face of a solid, where it goes. It stands on what you tapped.", "Tap a size beside it to type a new one. Tap elsewhere to move it.", "Tap Done. It is a solid of its own, ready to move, combine, fillet, or shell."],
+                tips: ["A torus's diameter runs through the middle of its tube.", "A box or cylinder is an ordinary extrusion and a sphere or torus a revolve, so their faces can be resized and pushed like any other.", "The next one starts from the sizes you used last."])
         case .section:
             HelpOverview(
                 summary: "The section view cuts your solids open along a plane, so you can check walls, holes, threads, and sockets inside. It changes nothing.",
@@ -571,6 +579,7 @@ extension ModelingSession {
         case .fitTest: return .fitTest
         case .thread: return .thread
         case .text: return .text
+        case .box, .cylinder, .sphere, .torus: return .primitives
         }
     }
 }

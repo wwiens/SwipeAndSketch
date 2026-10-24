@@ -60,6 +60,12 @@ struct CanvasDimension {
             target.accessibilityName != "thread.diameter" ? "Ø " : ["radius", "finish.radius"].contains(target.accessibilityName) ? "R " : ""
         if target.unit == "%" { return formatted(value) + " %" }
         if target == .polygonSides { return "\(Int(value.rounded())) sides" }
+        if case .primitiveSize = target {
+            // Which size it is: W, L, H, Ø, or the torus's Tube Ø.
+            let name = target.title
+            let mark = name == "Diameter" ? "Ø " : name == "Tube" ? "Tube Ø " : String(name.prefix(1)) + " "
+            return mark + formatted(length: value, unit: unit) + " " + unit.symbol
+        }
         return target.isLength ? prefix + formatted(length: value, unit: unit) + " " + unit.symbol : prefix + formatted(value) + "°"
     }
     var font: UIFont { target.isOperationValue ? .systemFont(ofSize: 12, weight: .semibold) : .systemFont(ofSize: 14) }
@@ -1709,6 +1715,15 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
                 default: session.placePeg(at: result.point)
                 }
                 session.snapLabel = session.snapEnabled ? result.label : ""
+            }
+            return
+        }
+        if session.tool.primitiveKind != nil {
+            // On a flat face it stands on the face; elsewhere on the grid's plane.
+            if let face = solidFace(at: point), let plane = face.plane {
+                session.placePrimitive(on: plane, at: plane.coordinates(of: face.point))
+            } else if let local = pointOnPlane(point, plane: session.plane) {
+                session.placePrimitive(on: session.plane, at: snapped(local).point)
             }
             return
         }
@@ -3699,6 +3714,25 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             let out = CGPoint(x: center.x + dx / reach * (reach + 60), y: center.y + dy / reach * (reach + 60))
             return [CanvasDimension(target: .threadDiameter, value: spec.majorDiameter, center: out),
                     CanvasDimension(target: .threadPitch, value: spec.pitch, center: CGPoint(x: out.x, y: out.y + 34))]
+        }
+        if let draft = session.primitiveDraft {
+            // Its sizes in a column to the right of the primitive.
+            let corners: [CGPoint]
+            if let body = session.primitivePreview?.bodies.last, let bounds = try? SolidKernel.solid(for: body).bounds {
+                var points: [CGPoint] = []
+                for x in [bounds.min.x, bounds.max.x] { for y in [bounds.min.y, bounds.max.y] { for z in [bounds.min.z, bounds.max.z] {
+                    points.append(project(SIMD3<Float>(Float(x), Float(y), Float(z))))
+                } } }
+                corners = points
+            } else {
+                corners = [project(SIMD3<Float>(draft.plane.point(draft.center)))]
+            }
+            let right = corners.map(\.x).max() ?? 0, middle = (corners.map(\.y).min()! + corners.map(\.y).max()!) / 2
+            let count = draft.sizes.count
+            return draft.sizes.indices.map { index in
+                CanvasDimension(target: .primitiveSize(draft.kind, index), value: draft.sizes[index],
+                                center: CGPoint(x: right + 64, y: middle + CGFloat(index) * 36 - CGFloat(count - 1) * 18))
+            }
         }
         if let draft = session.pegDraft {
             // Diameter to the right of the peg, height below it.

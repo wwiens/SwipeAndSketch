@@ -363,6 +363,24 @@ struct EditFeatureTool: Tool {
     }
 }
 
+struct AddPrimitiveTool: Tool {
+    let context: AssistantContext
+    let name = "add_primitive"
+    let description = "Makes a ready-made solid standing on the Top plane: a box (width, length, height), cylinder (diameter, height), sphere (diameter), or torus (diameter through the tube's middle, tube diameter)."
+    @Generable struct Arguments {
+        @Guide(.anyOf(["box", "cylinder", "sphere", "torus"])) var kind: String
+        @Guide(description: "Sizes in mm, in the order the kind takes them") var sizes: [Double]
+        @Guide(description: "Center x, world mm; omit for the origin") var x: Double?
+        @Guide(description: "Center y, world mm") var y: Double?
+    }
+    func call(arguments: Arguments) async throws -> String {
+        await context.run("Making a \(arguments.kind)") { bench in
+            try bench.primitive(kind: arguments.kind, sizes: arguments.sizes,
+                                at: arguments.x == nil && arguments.y == nil ? nil : SIMD3(arguments.x ?? 0, arguments.y ?? 0, 0))
+        }
+    }
+}
+
 struct ResizeFaceTool: Tool {
     let context: AssistantContext
     let name = "resize_face"
@@ -865,7 +883,7 @@ extension AssistantContext {
          FilletEdgesTool(context: self), ChamferEdgesTool(context: self), ShellTool(context: self), AddHoleTool(context: self), AddPegTool(context: self), AddThreadTool(context: self), AddMatingPartTool(context: self), AddTextTool(context: self), FitTestTool(context: self),
          MoveItemsTool(context: self), SetDimensionTool(context: self), DeleteItemsTool(context: self), SetVisibilityTool(context: self), CombineTool(context: self),
          MirrorTool(context: self), PatternTool(context: self), AddPlaneTool(context: self), RevolveTool(context: self), RoundSketchCornersTool(context: self), MeasureTool(context: self),
-         ScaleItemsTool(context: self), DeleteFacesTool(context: self), DeleteHoleTool(context: self), EditFinishTool(context: self), EditFeatureTool(context: self), ResizeFaceTool(context: self), OffsetSketchTool(context: self), RenameItemTool(context: self), GroupItemsTool(context: self), UngroupTool(context: self),
+         ScaleItemsTool(context: self), DeleteFacesTool(context: self), DeleteHoleTool(context: self), EditFinishTool(context: self), EditFeatureTool(context: self), AddPrimitiveTool(context: self), ResizeFaceTool(context: self), OffsetSketchTool(context: self), RenameItemTool(context: self), GroupItemsTool(context: self), UngroupTool(context: self),
          SetColorTool(context: self)]
     }
     /// The everyday tools, which fit the on-device model's smaller context.

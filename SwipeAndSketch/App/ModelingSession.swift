@@ -25,6 +25,9 @@ enum ModelingTool: String, CaseIterable {
     /// Sketch tools (October 21, 2026): an ellipse, a point, and a regular polygon to draw; and
     /// Extend, Offset, and Mirror, which work on drawn shapes.
     case ellipse, point, polygon, extend, offset, sketchMirror
+    /// Primitives (October 24, 2026): a ready-made solid placed with a tap (Create ▸ Box …).
+    case box, cylinder, sphere, torus
+    var primitiveKind: PrimitiveKind? { PrimitiveKind(rawValue: rawValue) }
     var title: String {
         switch self {
         case .offsetPlane: "Offset Plane"
@@ -82,6 +85,10 @@ enum ModelingTool: String, CaseIterable {
         case .fitTest: .fitTest
         case .thread: .thread
         case .text: .text
+        case .box: .box
+        case .cylinder: .cylinder
+        case .sphere: .sphere
+        case .torus: .torus
         }
     }
     var shapeKind: ShapeKind? { ShapeKind(rawValue: rawValue) }
@@ -181,6 +188,8 @@ enum DimensionTarget: Hashable {
     case offsetDistance
     /// The radius or distance of the fillet or chamfer whose face is selected.
     case selectedFinish(EdgeFinish.Kind)
+    /// A size of the primitive being placed, by its index in `PrimitiveKind.sizes`.
+    case primitiveSize(PrimitiveKind, Int)
     var unit: String {
         switch self {
         case .scalePercent: "%"
@@ -220,6 +229,7 @@ enum DimensionTarget: Hashable {
         case .faceDiameter: "Diameter"
         case .faceDistance: "Distance"
         case .selectedFinish(let kind): kind.sizeTitle
+        case .primitiveSize(let kind, let index): kind.sizes[index].name
         case .extrusionTaper: "Taper"
         case .sectionOffset: "Offset"
         case .polygonSides: "Sides"
@@ -253,6 +263,7 @@ enum DimensionTarget: Hashable {
         case .faceDiameter: "face.diameter"
         case .faceDistance: "face.distance"
         case .selectedFinish(let kind): kind == .fillet ? "finish.radius" : "finish.distance"
+        case .primitiveSize(let kind, let index): "\(kind.rawValue).\(kind.sizes[index].name.lowercased())"
         case .extrusionTaper: "extrusion.taper"
         case .sectionOffset: "section.offset"
         case .polygonSides: "polygon.sides"
@@ -290,7 +301,7 @@ enum DimensionTarget: Hashable {
         switch self {
         case .extrusion, .finishSize, .shellThickness, .holeDiameter, .holeDepth, .pegDiameter, .pegHeight, .pegEmbed, .transformDistance, .transformAngle,
              .planeOffset, .alignOffset, .alignAngle, .revolveAngle, .cornerRadius, .patternDistance, .patternAngle, .threadDiameter, .threadPitch, .threadLength, .textHeight, .textDepth,
-             .scalePercent, .sectionOffset, .polygonSides, .offsetDistance: true
+             .scalePercent, .sectionOffset, .polygonSides, .offsetDistance, .primitiveSize: true
         case .shape, .bodyDepth, .bodyAngle, .relation, .patternCount, .clearance, .fitClearance, .faceDiameter, .faceDistance, .selectedFinish, .extrusionTaper: false
         }
     }
@@ -544,6 +555,14 @@ struct ShellOpening: Equatable {
     var face: Int
     var name: ExtrusionFace?
     var point: SIMD3<Double>
+}
+
+/// A primitive being placed: where it stands and its sizes (see `PrimitiveKind.sizes`).
+struct PrimitiveDraft: Equatable {
+    var kind: PrimitiveKind
+    var plane: SketchPlane
+    var center: Point2
+    var sizes: [Double]
 }
 
 /// A hole being placed on a face in sketch mode.
@@ -967,6 +986,10 @@ struct DimensionEdit: Identifiable {
     @Published private(set) var shellPreview: Workspace?
     @Published private(set) var holeDraft: HoleDraft?
     @Published private(set) var holePreview: Workspace?
+    @Published private(set) var primitiveDraft: PrimitiveDraft?
+    @Published private(set) var primitivePreview: Workspace?
+    /// The sizes each primitive was last made with, for the next one.
+    private var lastPrimitiveSizes: [PrimitiveKind: [Double]] = [:]
     @Published private(set) var textDraft: TextDraft?
     @Published private(set) var textPreview: Workspace?
     @Published private(set) var isBuildingText = false
@@ -1042,7 +1065,7 @@ struct DimensionEdit: Identifiable {
     func canEditDimension(_ target: DimensionTarget) -> Bool { target == .sectionOffset ? !isViewingBlocked : !isEditingBlocked }
     var projectName: String { document?.fileURL.deletingPathExtension().lastPathComponent ?? "Untitled Project" }
     var workspace: Workspace { history.workspace }
-    var displayWorkspace: Workspace { assistantPreview ?? editPreview ?? finishPreview ?? shellPreview ?? holePreview ?? pegPreview ?? threadPreview ?? textPreview ?? splitPreview ?? mirrorPreview ?? patternPreview ?? scalePreview ?? deleteFacePreview ?? sketchMirrorPreview ?? unionPreview ?? subtractPreview ?? alignPreview ?? revolvePreview ?? operationPreview ?? workspace }
+    var displayWorkspace: Workspace { assistantPreview ?? editPreview ?? finishPreview ?? shellPreview ?? primitivePreview ?? holePreview ?? pegPreview ?? threadPreview ?? textPreview ?? splitPreview ?? mirrorPreview ?? patternPreview ?? scalePreview ?? deleteFacePreview ?? sketchMirrorPreview ?? unionPreview ?? subtractPreview ?? alignPreview ?? revolvePreview ?? operationPreview ?? workspace }
     var isShelling: Bool { shellDraft != nil }
     var isPlacingHole: Bool { holeDraft != nil }
     var isPlacingPeg: Bool { pegDraft != nil }
@@ -2168,6 +2191,11 @@ struct DimensionEdit: Identifiable {
         case .chamfer: return "Tap the solid edges to bevel with your Apple Pencil."
         case .shell: return "Tap the faces of a solid to leave open, such as the top of a box."
         case .hole: return guidePrefix + "Tap the face where the hole goes."
+        case .box, .cylinder, .sphere, .torus:
+            let name = tool.rawValue
+            guard primitiveDraft != nil else { return "Tap the grid, or a flat face of a solid, where the \(name) goes." }
+            return primitivePreview == nil ? "The tube must be thinner than the torus's diameter. Tap a size to change it." :
+                "Tap a size to change it, or tap elsewhere to move the \(name). Done makes it a solid of its own."
         case .peg: return sketchMode?.face != nil ? guidePrefix + "Tap where the peg stands. Any solid it pushes into gets a socket, even a hidden one." :
             "Tap the flat face the peg stands on, such as a box's rim (hide the lid first to reach it)."
         case .fitTest: return ""
@@ -2293,6 +2321,14 @@ struct DimensionEdit: Identifiable {
         if value == .subtract { beginSubtract(); return }
         if value == .align { beginAlign(); return }
         if value == .fitTest { addFitTest(); return }
+        if value.primitiveKind != nil {
+            // Placed with a tap on the grid or a flat face.
+            cancelTransient()
+            endSketchMode()
+            selection = nil
+            tool = value
+            return
+        }
         if value == .thread {
             // A selected hole wall or boss side is threaded at once.
             if let face = selectedFace, canThreadSelectedFace { beginThread(bodyID: face.bodyID, face: face.face); return }
@@ -3284,6 +3320,7 @@ struct DimensionEdit: Identifiable {
         clearCutPreview()
         clearShellDraft()
         clearHoleDraft()
+        clearPrimitive()
         clearPegDraft()
         clearThread()
         clearTextDraft()
@@ -4748,6 +4785,47 @@ struct DimensionEdit: Identifiable {
         }
     }
 
+    // MARK: Primitives
+
+    /// Places (or moves) the chosen primitive standing on `plane` at `center`.
+    func placePrimitive(on plane: SketchPlane, at center: Point2) {
+        guard let kind = tool.primitiveKind, !isEditingBlocked else { return }
+        dimensionEdit = nil
+        let sizes = primitiveDraft.flatMap { $0.kind == kind ? $0.sizes : nil } ?? lastPrimitiveSizes[kind] ?? kind.sizes.map(\.value)
+        updatePrimitive(PrimitiveDraft(kind: kind, plane: plane, center: center, sizes: sizes))
+    }
+
+    private func updatePrimitive(_ draft: PrimitiveDraft) {
+        primitiveDraft = draft
+        guard let body = Primitives.body(draft.kind, sizes: draft.sizes, on: draft.plane, at: draft.center),
+              (try? SolidKernel.solid(for: body)) != nil else {
+            primitivePreview = nil
+            return
+        }
+        var next = workspace
+        next.bodies.append(body)
+        primitivePreview = next
+    }
+
+    /// One undo step; the new solid is selected.
+    func confirmPrimitive() {
+        guard let draft = primitiveDraft, let preview = primitivePreview, let body = preview.bodies.last, !isEditingBlocked else { return }
+        commit(preview)
+        lastPrimitiveSizes[draft.kind] = draft.sizes
+        clearPrimitive()
+        tool = .select
+        selection = .body(body.id)
+        status = "Made a \(draft.kind.rawValue)"
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    func cancelPrimitive() { clearPrimitive(); dimensionEdit = nil; tool = .select }
+
+    private func clearPrimitive() {
+        if primitiveDraft != nil { primitiveDraft = nil }
+        if primitivePreview != nil { primitivePreview = nil }
+    }
+
     // MARK: Peg & Socket
 
     /// Places (or moves) a peg at `center` on the face being sketched.
@@ -5683,6 +5761,7 @@ struct DimensionEdit: Identifiable {
         case .faceDiameter: if case .diameter(let value, _) = selectedFaceSize { return value } else { return nil }
         case .faceDistance: if case .distance(let value, _) = selectedFaceSize { return value } else { return nil }
         case .selectedFinish(let kind): return selectedFinish.flatMap { $0.kind == kind ? $0.size : nil }
+        case .primitiveSize(let kind, let index): return primitiveDraft.flatMap { $0.kind == kind && $0.sizes.indices.contains(index) ? $0.sizes[index] : nil }
         case .relation(let index, _):
             let dimensions = sketchDimensions
             return dimensions.indices.contains(index) ? dimensions[index].value : nil
@@ -5926,6 +6005,15 @@ struct DimensionEdit: Identifiable {
             // The rounded face moves with its size: keep it selected where it went.
             selection = finishFaceSelection(of: resized, source: finish.source, near: face.point ?? face.center).map { .face($0) } ?? .body(body.id)
             status = "\(kind.title) changed to \(lengthText(value))"
+        case .primitiveSize(let kind, let index):
+            guard var draft = primitiveDraft, draft.kind == kind, draft.sizes.indices.contains(index) else { return false }
+            guard Primitives.sizeRange.contains(value) else { dimensionError = "Enter a size from \(lengthText(0.1)) to \(lengthText(10_000))."; return false }
+            draft.sizes[index] = value
+            guard Primitives.body(kind, sizes: draft.sizes, on: draft.plane, at: draft.center) != nil else {
+                dimensionError = "The tube must be thinner than the torus's diameter."
+                return false
+            }
+            updatePrimitive(draft)
         case .scalePercent(let axis):
             guard scaleDraft != nil else { return false }
             guard (0.1...10_000).contains(value) else { dimensionError = "Enter a percentage from 0.1 to 10000."; return false }

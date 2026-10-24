@@ -58,7 +58,7 @@ struct WorkspaceView: View {
     private var sketching: Bool { (session.sketchMode != nil || session.isPickingPlane) && !session.isExtruding && !session.isRevolving && !session.isFinishing }
     /// An operation is being set up: its own controls replace the dock until Done or Cancel.
     private var operationActive: Bool {
-        session.isExtruding || session.isRevolving || session.isFinishing || session.isShelling || session.holeDraft != nil || session.pegDraft != nil || session.threadDraft != nil || session.textDraft != nil || session.tool.isPlaneTool ||
+        session.isExtruding || session.isRevolving || session.isFinishing || session.isShelling || session.holeDraft != nil || session.primitiveDraft != nil || session.pegDraft != nil || session.threadDraft != nil || session.textDraft != nil || session.tool.isPlaneTool ||
             session.projectionDraft != nil || session.splitDraft != nil || session.mirrorDraft != nil || session.patternDraft != nil || session.unionDraft != nil || session.subtractDraft != nil ||
             session.alignDraft != nil || session.isMeasuring || session.scaleDraft != nil || session.deleteFaceDraft != nil || session.section != nil ||
             session.offsetDraft != nil || session.sketchMirrorDraft != nil
@@ -1462,6 +1462,20 @@ struct WorkspaceView: View {
                         .disabled(session.draftError != nil || session.pegPreview == nil)
                 }
             }
+        } else if let draft = session.primitiveDraft {
+            VStack(spacing: 8) {
+                HStack(spacing: 10) {
+                    SSIconGlyph(icon: session.tool.icon, size: 22, color: ink).padding(.leading, 8)
+                    Text(draft.kind.title).font(.system(size: 15, weight: .medium)).foregroundStyle(ink).padding(.trailing, 8)
+                        .accessibilityIdentifier("primitive.kind")
+                }
+                .padding(6).background(white.opacity(0.94), in: RoundedRectangle(cornerRadius: 10))
+                HStack(spacing: 8) {
+                    actionButton("Cancel", icon: .exit, id: "primitive.cancel") { session.cancelPrimitive() }
+                    actionButton("Done", icon: .done, id: "primitive.confirm") { session.confirmPrimitive() }
+                        .disabled(session.primitivePreview == nil)
+                }
+            }
         } else if session.isMeasuring {
             measureBar
         } else if session.isFinishing {
@@ -2018,7 +2032,7 @@ enum ToolGroup: String, CaseIterable {
         switch self {
         case .curves: [.circle, .arc, .slot, .ellipse, .polygon, .point]
         case .modify: [.trim, .extend, .cornerFillet, .offset, .sketchMirror]
-        case .create: [.extrude, .revolve]
+        case .create: [.extrude, .revolve, .box, .cylinder, .sphere, .torus]
         case .edges: [.fillet, .chamfer, .shell, .deleteFace, .split]
         case .combine: [.union, .subtract, .intersect]
         case .fit: [.peg, .thread, .fitTest]

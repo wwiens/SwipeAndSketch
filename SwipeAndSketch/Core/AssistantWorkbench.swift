@@ -1062,6 +1062,26 @@ struct AssistantWorkbench {
         return "Made a \(spec.title) \(mate.noun) screwed onto \(host), as \(self.bodyName(part.id))."
     }
 
+    /// A primitive standing on the Top plane at `point` (its x and y; default the origin): box
+    /// (width, length, height), cylinder (diameter, height), sphere (diameter), or torus (diameter
+    /// through the tube's middle, tube diameter).
+    @discardableResult mutating func primitive(kind name: String, sizes: [Double], at point: SIMD3<Double>?) throws -> String {
+        guard let kind = PrimitiveKind(rawValue: name.trimmingCharacters(in: .whitespaces).lowercased()) else {
+            throw Failure("Primitives are box, cylinder, sphere, and torus.")
+        }
+        let names = kind.sizes.map { $0.name.lowercased() }
+        guard sizes.count == names.count else { throw Failure("A \(kind.rawValue) takes \(names.joined(separator: ", ")) in mm.") }
+        let center = Point2(x: point?.x ?? 0, y: point?.y ?? 0)
+        guard let body = Primitives.body(kind, sizes: sizes, on: .top, at: center) else {
+            throw Failure(kind == .torus ? "A torus's tube must be thinner than its diameter, and sizes 0.1–10000 mm." : "Sizes must be 0.1–10000 mm.")
+        }
+        var next = workspace
+        next.bodies.append(body)
+        let change = "Made a \(kind.rawValue) (\(zip(names, sizes).map { "\($0) \(Self.mm($1)) mm" }.joined(separator: ", "))) at \(Self.point(SketchPlane.top.point(center)))"
+        try keep(next, change: change, checking: [body.id], focus: .body(body.id))
+        return change + "."
+    }
+
     /// The Fit Test coupon beside the model: a plate with holes at 0.10–0.40 mm clearance and a peg.
     @discardableResult mutating func fitTest() throws -> String {
         let coupon = FitTest.coupon(at: FitTest.origin(beside: workspace))
