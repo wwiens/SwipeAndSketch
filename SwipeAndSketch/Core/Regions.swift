@@ -250,7 +250,8 @@ extension SketchShape {
             let loop = outline + [outline[0]], half = loop.count / 2
             return [SketchCurve(kind: .polyline(Array(loop[0...half]))), SketchCurve(kind: .polyline(Array(loop[half...])))]
         case .curve:
-            guard let points, points.count >= 2 else { return [] }
+            // A spline is followed along its smooth outline, not the points it passes through.
+            guard let points = isSpline ? outline : points, points.count >= 2 else { return [] }
             guard isClosed else { return [SketchCurve(kind: .polyline(points))] }
             let loop = points + [points[0]], half = loop.count / 2
             return [SketchCurve(kind: .polyline(Array(loop[0...half]))), SketchCurve(kind: .polyline(Array(loop[half...])))]

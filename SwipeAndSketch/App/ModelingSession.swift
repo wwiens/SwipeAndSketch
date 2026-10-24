@@ -31,6 +31,8 @@ enum ModelingTool: String, CaseIterable {
     /// More construction (October 24, 2026): planes at an angle about a line, through three points,
     /// and tangent to a round face, and axes (Planes ▸ …).
     case planeAngle, plane3Point, planeTangent, axis
+    /// A smooth curve drawn freehand and fitted through a few points (Shapes ▸ Spline).
+    case spline
     var isConstructionTool: Bool { [.planeAngle, .plane3Point, .planeTangent, .axis].contains(self) }
     var title: String {
         switch self {
@@ -100,9 +102,10 @@ enum ModelingTool: String, CaseIterable {
         case .plane3Point: .plane3Point
         case .planeTangent: .planeTangent
         case .axis: .axis
+        case .spline: .spline
         }
     }
-    var shapeKind: ShapeKind? { ShapeKind(rawValue: rawValue) }
+    var shapeKind: ShapeKind? { self == .spline ? .curve : ShapeKind(rawValue: rawValue) }
     var finishKind: EdgeFinish.Kind? { EdgeFinish.Kind(rawValue: rawValue) }
 }
 
@@ -2286,6 +2289,7 @@ struct DimensionEdit: Identifiable {
         case .trim: return "Tap or scribble over the part of a shape to remove: it goes back to where other shapes cross it. Tap empty space when done."
         case .ellipse: return guidePrefix + "Place Pencil at the center, then drag to a corner of the box around it. Drag its handles to turn or resize it."
         case .point: return guidePrefix + "Tap to place a point: something to snap, dimension, and align to."
+        case .spline: return guidePrefix + "Draw the curve with Pencil; it becomes a smooth spline through a few points. End where you began to close it. Drag its points to reshape it."
         case .polygon: return editablePolygon != nil ? "Tap the number of sides to change it, or draw another polygon." :
             guidePrefix + "Place Pencil at the center, then drag to a corner. It has \(polygonSides) sides; tap the number afterward to change it."
         case .extend: return "Tap a line near the end to extend: it reaches on to the next shape it meets."

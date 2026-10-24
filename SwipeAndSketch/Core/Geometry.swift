@@ -83,7 +83,11 @@ struct SketchShape: Codable, Equatable, Identifiable, Sendable {
     /// Construction geometry (October 21, 2026): a reference that is drawn dashed, snapped to, and
     /// usable as an axis or mirror line, but bounds no region. Omitted otherwise.
     var construction: Bool?
+    /// Spline (October 24, 2026): a `curve` whose `points` are the points it passes through, drawn
+    /// as a smooth curve through them (see `splineOutline`). Omitted for other curves.
+    var spline: Bool?
     var isConstruction: Bool { construction == true }
+    var isSpline: Bool { kind == .curve && spline == true }
     var isCentered: Bool { kind == .rectangle && centered == true }
     var center: Point2 { (start + end) * 0.5 }
     /// Whether the outline returns to its start: circles, rectangles, and closed curves.
@@ -112,6 +116,68 @@ struct SketchShape: Codable, Equatable, Identifiable, Sendable {
 
     /// The arc from `start` to `end` through `middle` (a 3-point arc), counterclockwise whichever way
     /// it was drawn. Nil when the three points are (nearly) in a line.
+    /// A spline through `points` (open, or `closed` back to the first); nil when it has too few.
+    static func spline(through points: [Point2], closed: Bool, plane: SketchPlane) -> SketchShape? {
+        guard points.count >= (closed ? 3 : 2), let first = points.first, let last = points.last else { return nil }
+        var shape = SketchShape(kind: .curve, plane: plane, start: first, end: closed ? first : last)
+        shape.points = points
+        shape.closed = closed ? true : nil
+        shape.spline = true
+        return shape.isValid ? shape : nil
+    }
+
+    /// The smooth curve through `points`: a uniform Catmull-Rom spline (it passes through every
+    /// point, and moving, turning, mirroring, or scaling the points carries the curve exactly), in
+    /// `steps` straight pieces between each two points. An open spline's ends are its first and
+    /// last points; a closed one does not repeat its first point.
+    static func splineOutline(_ points: [Point2], closed: Bool, steps: Int = 16) -> [Point2] {
+        guard points.count >= 2 else { return points }
+        let n = points.count
+        func p(_ i: Int) -> Point2 {
+            if closed { return points[((i % n) + n) % n] }
+            if i < 0 { return points[0] * 2 - points[1] }
+            if i >= n { return points[n - 1] * 2 - points[n - 2] }
+            return points[i]
+        }
+        var result: [Point2] = []
+        for i in 0..<(closed ? n : n - 1) {
+            let p0 = p(i - 1), p1 = p(i), p2 = p(i + 1), p3 = p(i + 2)
+            for step in 0..<steps {
+                let t = Double(step) / Double(steps), t2 = t * t, t3 = t2 * t
+                let a = p1 * 2, b = (p2 - p0) * t, c = (p0 * 2 - p1 * 5 + p2 * 4 - p3) * t2, d = (p1 * 3 - p0 - p2 * 3 + p3) * t3
+                result.append((a + b + c + d) * 0.5)
+            }
+        }
+        if !closed { result.append(points[n - 1]) }
+        return result
+    }
+
+    /// The fewest points a freehand stroke needs for a spline through them to stay within
+    /// `tolerance` of it (Ramer–Douglas–Peucker), at most `maximum`; the ends are kept.
+    static func splinePoints(fitting stroke: [Point2], tolerance: Double, maximum: Int = 24) -> [Point2] {
+        guard stroke.count > 2 else { return stroke }
+        var tolerance = max(tolerance, 1e-6)
+        func simplify(_ range: ClosedRange<Int>, _ keep: inout Set<Int>) {
+            guard range.upperBound - range.lowerBound > 1 else { return }
+            let a = stroke[range.lowerBound], b = stroke[range.upperBound]
+            var far = range.lowerBound, distance = 0.0
+            for i in (range.lowerBound + 1)..<range.upperBound {
+                let d = Geometry.distance(stroke[i], toSegment: a, b)
+                if d > distance { distance = d; far = i }
+            }
+            guard distance > tolerance else { return }
+            keep.insert(far)
+            simplify(range.lowerBound...far, &keep)
+            simplify(far...range.upperBound, &keep)
+        }
+        while true {
+            var keep: Set<Int> = [0, stroke.count - 1]
+            simplify(0...(stroke.count - 1), &keep)
+            if keep.count <= maximum { return keep.sorted().map { stroke[$0] } }
+            tolerance *= 1.5
+        }
+    }
+
     static func arc(from start: Point2, through middle: Point2, to end: Point2, plane: SketchPlane) -> SketchShape? {
         guard let center = Geometry.circumcenter(start, middle, end) else { return nil }
         // Counterclockwise from start, the arc reaches the middle before the end, or it runs the other way.
@@ -163,7 +229,7 @@ struct SketchShape: Codable, Equatable, Identifiable, Sendable {
 
     var isValid: Bool {
         guard start.isValid, end.isValid, plane.isValid else { return false }
-        guard (width != nil) == (kind == .slot || kind == .ellipse), construction != false else { return false }
+        guard (width != nil) == (kind == .slot || kind == .ellipse), construction != false, spline == nil || isSpline && spline == true else { return false }
         switch kind {
         case .point: return start == end && arcCenter == nil && points == nil
         case .ellipse:
@@ -182,7 +248,8 @@ struct SketchShape: Codable, Equatable, Identifiable, Sendable {
             guard let points, (2...4_096).contains(points.count), points.allSatisfy(\.isValid), arcCenter == nil,
                   start == points[0], end == (isClosed ? points[0] : points[points.count - 1]),
                   zip(points, points.dropFirst()).allSatisfy({ $0.distance(to: $1) >= 1e-9 }) else { return false }
-            if isClosed { return points.count >= 3 && abs(Geometry.signedArea(points)) > 1e-8 }
+            if isSpline && points.count > 256 { return false }
+            if isClosed { return points.count >= 3 && abs(Geometry.signedArea(isSpline ? outline : points)) > 1e-8 }
             return zip(points, points.dropFirst()).reduce(0) { $0 + $1.0.distance(to: $1.1) } >= 0.01
         }
     }
@@ -192,7 +259,9 @@ struct SketchShape: Codable, Equatable, Identifiable, Sendable {
         case .slot: return slotOutline.points
         case .ellipse: return ellipseProfile?.outline() ?? [start]
         case .point: return [start]
-        case .curve: return points ?? [start, end]
+        case .curve:
+            guard let points else { return [start, end] }
+            return isSpline ? Self.splineOutline(points, closed: isClosed) : points
         case .arc:
             // Every 3° at most; the ends are exact.
             guard let c = arcCenter else { return [start, end] }
@@ -818,6 +887,13 @@ enum SketchEditing {
             let old = shape.outline[index % 4]
             if old.x == shape.start.x { result.start.x = point.x } else { result.end.x = point.x }
             if old.y == shape.start.y { result.start.y = point.y } else { result.end.y = point.y }
+        case (.curve, .corner(let index)) where shape.isSpline:
+            // A spline's point: the curve still passes through it.
+            guard var points = shape.points, points.indices.contains(index) else { return nil }
+            points[index] = point
+            result.points = points
+            result.start = points[0]
+            result.end = shape.isClosed ? points[0] : points[points.count - 1]
         case (.rectangle, .side(let index)):
             let old = handlePoint(handle, on: shape)
             if index.isMultiple(of: 2) {

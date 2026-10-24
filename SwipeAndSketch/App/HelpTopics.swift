@@ -9,6 +9,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
     case extrude, extrudeFace, cut, join, revolve, fillet, chamfer, shell
     case union, subtract, intersect, split, align, mirror, pattern, scale, deleteFace, section, offsetPlane, midplane, project, measure, assistant
     case peg, fitTest, thread, matingPart, text
+    case spline
     case axis
     case planeTangent
     case plane3Point
@@ -72,6 +73,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .scale: "Scale"
         case .deleteFace: "Delete Face"
         case .section: "Section View"
+        case .spline: "Spline"
         case .axis: "Axis"
         case .planeTangent: "Tangent Plane"
         case .plane3Point: "3-Point Plane"
@@ -131,6 +133,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .scale: .scale
         case .deleteFace: .deleteFace
         case .section: .section
+        case .spline: .spline
         case .axis: .axis
         case .planeTangent: .planeTangent
         case .plane3Point: .plane3Point
@@ -393,6 +396,11 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                 summary: "A construction axis: a straight reference line in space, to revolve about, mirror across, or align to.",
                 steps: ["Choose Planes, then Axis.", "Tap a round face or circular edge for its center line, a straight edge or sketch line to run along it, or two points.", "Tap Done. The axis is a sketch named Axis 01 holding one construction line."],
                 tips: ["Revolve, Mirror, and Align pick it like any sketch line.", "Hide, rename, group, or delete it in the Model Tree like a sketch."])
+        case .spline:
+            HelpOverview(
+                summary: "A smooth curve: draw it freehand with Pencil, and it becomes a spline through a few points that you can drag to reshape it.",
+                steps: ["Choose Shapes, then Spline.", "Draw the curve with Pencil. End where you began to close it into a region.", "Tap the spline and drag any of its points: the curve still passes through every point."],
+                tips: ["A closed spline bounds a region that extrudes, revolves, and cuts like any other.", "Its sides are made of many short flat pieces, fine enough for printing."])
         case .section:
             HelpOverview(
                 summary: "The section view cuts your solids open along a plane, so you can check walls, holes, threads, and sockets inside. It changes nothing.",
@@ -625,6 +633,7 @@ extension ModelingSession {
         case .plane3Point: return .plane3Point
         case .planeTangent: return .planeTangent
         case .axis: return .axis
+        case .spline: return .spline
         }
     }
 }

@@ -63,6 +63,7 @@
 		2D97207F1A2779A98E7CC603 /* SwipeAndSketch/App/WorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35C7BCC8CA2BA3F29A0441EF /* SwipeAndSketch/App/WorkspaceView.swift */; };
 		33D0FFF8F856308F8036A51A /* SwipeAndSketch/Core/EdgeFinishes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1125E8DC5E888459061EB96D /* SwipeAndSketch/Core/EdgeFinishes.swift */; };
 		37327D8C0B6CE9CDE0DA3850 /* Tests/AppTests/FinishToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E65A6987E10939F88B18A9E /* Tests/AppTests/FinishToolTests.swift */; };
+		6EAD6D431DA81CE2C7C24062 /* Tests/AppTests/SplineToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECE3AB55E5B261014B5D8B09 /* Tests/AppTests/SplineToolTests.swift */; };
 		037B79108B988F1B1847E648 /* Tests/AppTests/ConstructionToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C849B7F5932C56457A37E0E3 /* Tests/AppTests/ConstructionToolTests.swift */; };
 		1D8134DB14460A0B88AF24D3 /* Tests/AppTests/PickSeveralToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F5DB65197D01052FE7C099 /* Tests/AppTests/PickSeveralToolTests.swift */; };
 		939E3A384B130092FCCC1757 /* Tests/AppTests/GroupUnitToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48CACDEDA021490FA9953CD7 /* Tests/AppTests/GroupUnitToolTests.swift */; };
@@ -217,6 +218,7 @@
 		950AC9B7240EC79A191296B4 /* SwipeAndSketch/App/ModelingSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/ModelingSession.swift; sourceTree = SOURCE_ROOT; };
 		9B478F678A1C30B4989CFFAE /* Tests/AppTests/BodyTransformToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/BodyTransformToolTests.swift; sourceTree = SOURCE_ROOT; };
 		9E65A6987E10939F88B18A9E /* Tests/AppTests/FinishToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/FinishToolTests.swift; sourceTree = SOURCE_ROOT; };
+		ECE3AB55E5B261014B5D8B09 /* Tests/AppTests/SplineToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/SplineToolTests.swift; sourceTree = SOURCE_ROOT; };
 		C849B7F5932C56457A37E0E3 /* Tests/AppTests/ConstructionToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/ConstructionToolTests.swift; sourceTree = SOURCE_ROOT; };
 		36F5DB65197D01052FE7C099 /* Tests/AppTests/PickSeveralToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/PickSeveralToolTests.swift; sourceTree = SOURCE_ROOT; };
 		48CACDEDA021490FA9953CD7 /* Tests/AppTests/GroupUnitToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/GroupUnitToolTests.swift; sourceTree = SOURCE_ROOT; };
@@ -448,6 +450,7 @@
 				B0FF5FAF995107ED6714C2D1 /* Tests/AppTests/CutToolTests.swift */,
 				AC7E921DE81906840AB5A5A3 /* Tests/AppTests/MultiSelectToolTests.swift */,
 				9E65A6987E10939F88B18A9E /* Tests/AppTests/FinishToolTests.swift */,
+				ECE3AB55E5B261014B5D8B09 /* Tests/AppTests/SplineToolTests.swift */,
 				C849B7F5932C56457A37E0E3 /* Tests/AppTests/ConstructionToolTests.swift */,
 				36F5DB65197D01052FE7C099 /* Tests/AppTests/PickSeveralToolTests.swift */,
 				48CACDEDA021490FA9953CD7 /* Tests/AppTests/GroupUnitToolTests.swift */,
@@ -657,6 +660,7 @@
 				E22521F7A1AFE44A545A9416 /* Tests/AppTests/CutToolTests.swift in Sources */,
 				BCBB3024AE8BF150FF4B6976 /* Tests/AppTests/MultiSelectToolTests.swift in Sources */,
 				37327D8C0B6CE9CDE0DA3850 /* Tests/AppTests/FinishToolTests.swift in Sources */,
+				6EAD6D431DA81CE2C7C24062 /* Tests/AppTests/SplineToolTests.swift in Sources */,
 				037B79108B988F1B1847E648 /* Tests/AppTests/ConstructionToolTests.swift in Sources */,
 				1D8134DB14460A0B88AF24D3 /* Tests/AppTests/PickSeveralToolTests.swift in Sources */,
 				939E3A384B130092FCCC1757 /* Tests/AppTests/GroupUnitToolTests.swift in Sources */,

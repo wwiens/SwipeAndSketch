@@ -97,9 +97,9 @@ struct InspectItemTool: Tool {
 struct AddSketchTool: Tool {
     let context: AssistantContext
     let name = "add_sketch"
-    let description = "Draws rectangles, circles, slots (rounded-end slots), ellipses, regular polygons, arcs, lines, and points as a new sketch on a plane or flat face (or adds them to an existing sketch). Positions are world x, y, z in mm, projected onto the plane. construction: true makes a dashed reference that bounds no region (a mirror line or revolve axis)."
+    let description = "Draws rectangles, circles, slots (rounded-end slots), ellipses, regular polygons, arcs, lines, splines (smooth curves through points), and points as a new sketch on a plane or flat face (or adds them to an existing sketch). Positions are world x, y, z in mm, projected onto the plane. construction: true makes a dashed reference that bounds no region (a mirror line or revolve axis)."
     @Generable struct Shape {
-        @Guide(.anyOf(["rectangle", "circle", "slot", "ellipse", "polygon", "arc", "line", "point"])) var kind: String
+        @Guide(.anyOf(["rectangle", "circle", "slot", "ellipse", "polygon", "arc", "line", "point", "spline"])) var kind: String
         @Guide(description: "Center (rectangle, circle, slot) or start (line, arc), world mm") var x: Double
         var y: Double
         var z: Double
@@ -114,6 +114,8 @@ struct AddSketchTool: Tool {
         var throughZ: Double?
         @Guide(description: "Polygon: number of sides (diameter is across its corners), e.g. 6 for a hex nut trap") var sides: Int?
         @Guide(description: "A dashed reference that makes no region") var construction: Bool?
+        @Guide(description: "Spline: the points it passes through after x, y, z, as world mm triples flattened (x1, y1, z1, x2, …)") var through: [Double]?
+        @Guide(description: "Spline: true to close it back to its first point") var closed: Bool?
     }
     @Generable struct Arguments {
         @Guide(description: "top, front, right, a construction plane (Plane 01), an existing sketch to add to (Sketch 02), or a body name to sketch on its face")
@@ -127,12 +129,14 @@ struct AddSketchTool: Tool {
             let target = try planeTarget(arguments.on, face: arguments.face, in: bench)
             let inputs = try arguments.shapes.map { shape -> AssistantWorkbench.ShapeInput in
                 guard let kind = AssistantWorkbench.ShapeInput.Kind(rawValue: shape.kind.lowercased()) else {
-                    throw AssistantWorkbench.Failure("Shapes are rectangle, circle, slot, ellipse, polygon, arc, line, or point.")
+                    throw AssistantWorkbench.Failure("Shapes are rectangle, circle, slot, ellipse, polygon, arc, line, spline, or point.")
                 }
                 let end = shape.endX != nil || shape.endY != nil || shape.endZ != nil ? point(shape.endX, shape.endY, shape.endZ) : nil
                 let through = shape.throughX != nil || shape.throughY != nil || shape.throughZ != nil ? point(shape.throughX, shape.throughY, shape.throughZ) : nil
+                let c = shape.through ?? []
+                let points = stride(from: 0, to: c.count - c.count % 3, by: 3).map { SIMD3(c[$0], c[$0 + 1], c[$0 + 2]) }
                 return .init(kind: kind, point: SIMD3(shape.x, shape.y, shape.z), width: shape.width, height: shape.height, diameter: shape.diameter, end: end,
-                             through: through, sides: shape.sides, construction: shape.construction)
+                             through: through, sides: shape.sides, construction: shape.construction, points: points.isEmpty ? nil : points, closed: shape.closed)
             }
             return try bench.addShapes(inputs, on: target)
         }

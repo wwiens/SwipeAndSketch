@@ -2049,6 +2049,23 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         }
         let result = snapped(local, start: strokeStart ?? shape.start, align: shape.kind == .line)
         liveSnap = (result, plane)
+        if shape.kind == .curve, let start = strokeStart {
+            // Spline: the stroke fitted with a few points; ending where it began closes it.
+            strokePoints.append(local)
+            let tolerance = max(0.05, unitsPerPoint * 3)
+            let closes = strokePoints.count > 8 && result.point.distance(to: start) < unitsPerPoint * 12 &&
+                strokePoints.contains { $0.distance(to: start) > unitsPerPoint * 40 }
+            var stroke = [start] + strokePoints.dropFirst() + [closes ? start : result.point]
+            stroke = stroke.enumerated().filter { $0.offset == 0 || $0.element.distance(to: stroke[$0.offset - 1]) > 1e-6 }.map(\.element)
+            var points = SketchShape.splinePoints(fitting: stroke, tolerance: tolerance)
+            if closes, points.count > 3 { points.removeLast() }
+            if let spline = SketchShape.spline(through: points, closed: closes && points.count >= 3, plane: plane) { shape = spline }
+            else { shape.end = result.point }
+            activeShape = shape
+            session.preview = shape
+            session.snapLabel = session.snapEnabled ? result.label : ""
+            return
+        }
         if shape.kind == .arc, let start = strokeStart {
             // Three points: the ends, and the stroke's point farthest from the line between them.
             strokePoints.append(local)
@@ -2171,7 +2188,8 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         case .slot: return [(.start, shape.start), (.end, shape.end), (.side(0), SketchEditing.handlePoint(.side(0), on: shape))]
         case .ellipse: return [(.center, shape.start), (.end, shape.end), (.side(0), SketchEditing.handlePoint(.side(0), on: shape))]
         case .point: return [(.center, shape.start)]
-        case .curve: return []   // projected geometry: delete or project again rather than drag
+        // A spline's points drag; other curves are projected geometry: delete or project again rather than drag.
+        case .curve: return shape.isSpline ? (shape.points ?? []).enumerated().map { (.corner($0.offset), $0.element) } : []
         }
     }
 

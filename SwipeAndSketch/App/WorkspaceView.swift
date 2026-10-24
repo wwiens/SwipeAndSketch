@@ -2082,7 +2082,7 @@ enum ToolGroup: String, CaseIterable {
     case curves, modify, faceFeatures
     var tools: [ModelingTool] {
         switch self {
-        case .curves: [.circle, .arc, .slot, .ellipse, .polygon, .point]
+        case .curves: [.circle, .arc, .slot, .ellipse, .polygon, .spline, .point]
         case .modify: [.trim, .extend, .cornerFillet, .offset, .sketchMirror]
         case .create: [.extrude, .revolve, .box, .cylinder, .sphere, .torus]
         case .edges: [.fillet, .chamfer, .shell, .deleteFace, .split]

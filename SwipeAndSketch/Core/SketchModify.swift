@@ -42,7 +42,7 @@ extension SketchShape {
         case .circle:
             return (SketchCurve(kind: .arc(center: start, radius: start.distance(to: end), from: atan2(end.y - start.y, end.x - start.x), sweep: 2 * .pi)), true)
         case .curve:
-            guard let points, points.count >= 2 else { return nil }
+            guard let points = isSpline ? outline : points, points.count >= 2 else { return nil }
             return (SketchCurve(kind: .polyline(isClosed ? points + [points[0]] : points)), isClosed)
         case .ellipse:
             // Trimmed, an ellipse becomes stretches of its outline.

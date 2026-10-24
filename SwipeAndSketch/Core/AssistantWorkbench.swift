@@ -30,7 +30,7 @@ struct AssistantWorkbench {
 
     /// One input shape, in world millimeters: a point is projected onto the sketch plane.
     struct ShapeInput: Equatable, Sendable {
-        enum Kind: String, Sendable { case rectangle, circle, line, slot, arc, ellipse, point, polygon }
+        enum Kind: String, Sendable { case rectangle, circle, line, slot, arc, ellipse, point, polygon, spline }
         var kind: Kind
         /// Rectangle, circle, and slot center, or line and arc start.
         var point: SIMD3<Double>
@@ -47,6 +47,9 @@ struct AssistantWorkbench {
         var sides: Int? = nil
         /// Construction geometry: a reference that bounds no region.
         var construction: Bool? = nil
+        /// Spline: the points it passes through after `point` (the last is its end, unless closed).
+        var points: [SIMD3<Double>]? = nil
+        var closed: Bool? = nil
     }
 
     /// Where new sketch shapes go.
@@ -212,7 +215,7 @@ struct AssistantWorkbench {
             let radius = shape.arcCenter.map { shape.start.distance(to: $0) } ?? 0
             return "radius \(Self.mm(radius)), \(Self.mm(shape.arcSweep * 180 / .pi))°"
         case .curve:
-            return "\(shape.points?.count ?? 0) points\(shape.isClosed ? ", closed" : "")"
+            return "\(shape.isSpline ? "spline through " : "")\(shape.points?.count ?? 0) points\(shape.isClosed ? ", closed" : "")"
         case .slot:
             return "slot \(Self.mm(shape.start.distance(to: shape.end))) between centers × \(Self.mm(shape.width ?? 0)) wide, from \(Self.point(plane.point(shape.start))) to \(Self.point(plane.point(shape.end)))"
         case .ellipse:
@@ -606,6 +609,12 @@ struct AssistantWorkbench {
                 shape = SketchShape(kind: .ellipse, plane: plane, start: p, end: p + Point2(x: w / 2, y: 0), width: h)
             case .point:
                 shape = SketchShape(kind: .point, plane: plane, start: p, end: p)
+            case .spline:
+                let through = [p] + (input.points ?? []).map(plane.coordinates(of:))
+                guard let spline = SketchShape.spline(through: through, closed: input.closed == true, plane: plane) else {
+                    throw Failure("A spline needs at least two points (three when closed), not all the same.")
+                }
+                shape = spline
             case .polygon:
                 guard let d = input.diameter ?? input.width, d >= 0.02 else { throw Failure("A polygon needs a diameter (across its corners).") }
                 let sides = input.sides ?? 6
