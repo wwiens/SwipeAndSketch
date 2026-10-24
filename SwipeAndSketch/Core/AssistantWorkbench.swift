@@ -1135,6 +1135,7 @@ struct AssistantWorkbench {
                 case .sketch(let id): center = next.sketch(id).flatMap(next.center(of:))
                 case .shape(let id): center = next.shapes.first { $0.id == id }.flatMap(next.center(of:))
                 case .group(let id): center = next.center(ofGroup: id)
+                case .items(let bodies, let sketches): center = next.center(ofBodies: bodies, sketches: sketches)
                 }
                 guard let result = next.transforming(current, by: .rotate(degrees: degrees, about: axisVector, through: pivot ?? center ?? .zero), copy: copy) else {
                     throw Failure("\(name) cannot be turned that way.")

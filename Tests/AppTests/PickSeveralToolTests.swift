@@ -29,7 +29,7 @@ import simd
         XCTAssertEqual(session.pickedSummary, "2 solids")
         XCTAssertEqual(session.selectedMembers.bodies, [big, small])
         XCTAssertTrue(session.hint.contains("2 solids picked"), session.hint)
-        XCTAssertNil(session.transformWidgetTarget, "The widget moves one item")
+        XCTAssertEqual(session.transformWidgetTarget, .items(bodies: [big, small], sketches: []), "The widget moves them all")
         attach(controller, "Two solids picked")
 
         session.setColor(.orange, of: session.pickedBodies)
@@ -79,5 +79,43 @@ import simd
         XCTAssertEqual(session.selectedProfiles.count, 2)
         XCTAssertTrue(session.isMultipleSelection)
         XCTAssertTrue(session.canExtrude)
+    }
+
+    func testSeveralPickedSolidsMoveTogether() throws {
+        let (session, controller, big, small) = try twoBoxes()
+        let before = session.workspace
+        session.select(.body(big))
+        session.pickBody(small, after: [.body(big)])
+        XCTAssertEqual(session.transformWidgetTarget, .items(bodies: [big, small], sketches: []))
+        XCTAssertNotNil(controller.transformWidget())
+        XCTAssertTrue(session.beginTransform(.move(2)))
+        session.updateTransform(12)
+        session.finishTransform(cancelled: false)
+        for (index, original) in before.bodies.enumerated() {
+            let moved = try SolidKernel.solid(for: session.workspace.bodies[index]).bounds.min.z
+            XCTAssertEqual(moved, try SolidKernel.solid(for: original).bounds.min.z + 12, accuracy: 1e-6, "Both moved up")
+        }
+        XCTAssertEqual(session.pickedBodies, [big, small], "Still picked, for the next drag")
+        XCTAssertTrue(session.applyDimension(20, target: .transformDistance), "The keypad changes the move")
+        XCTAssertEqual(try SolidKernel.solid(for: session.workspace.bodies[0]).bounds.min.z, 20, accuracy: 1e-6)
+        session.undo()
+        XCTAssertEqual(session.workspace, before, "One undo step")
+    }
+
+    func testModelTreeRowsPickedInSelectModeMoveAndCopyTogether() throws {
+        let (session, controller, big, small) = try twoBoxes()
+        session.beginSelectingRows()
+        session.togglePicked(.body(big))
+        session.togglePicked(.body(small))
+        XCTAssertEqual(session.transformWidgetTarget, .items(bodies: [big, small], sketches: []))
+        XCTAssertNotNil(controller.transformWidget())
+        session.transformCopies = true
+        XCTAssertTrue(session.beginTransform(.move(0)))
+        session.updateTransform(100)
+        session.finishTransform(cancelled: false)
+        XCTAssertEqual(session.workspace.bodies.count, 4, "Each copied")
+        XCTAssertEqual(session.pickedRows.count, 2)
+        XCTAssertFalse(session.pickedRows.contains(.body(big)), "The copies are picked now")
+        session.transformCopies = false
     }
 }

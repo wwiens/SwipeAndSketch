@@ -76,6 +76,8 @@ enum TransformTarget: Hashable, Sendable {
     case sketch(UUID), body(UUID), shape(UUID)
     /// Everything in a Model Tree group, nested groups included (October 24, 2026).
     case group(UUID)
+    /// Several solids and sketches picked together (on the canvas, or Model Tree rows).
+    case items(bodies: [UUID], sketches: [UUID])
 }
 
 extension SolidBody {
@@ -136,7 +138,34 @@ extension Workspace {
         case .body(let id): transformingBody(id, by: transform, copy: copy).map { ($0.workspace, .body($0.bodyID)) }
         case .shape(let id): transformingShape(id, by: transform, copy: copy).map { ($0.workspace, .shape($0.shapeID)) }
         case .group(let id): transformingGroup(id, by: transform, copy: copy).map { ($0.workspace, .group($0.group)) }
+        case .items(let bodies, let sketches): transformingItems(bodies: bodies, sketches: sketches, by: transform, copy: copy)
+            .map { ($0.workspace, .items(bodies: $0.bodies, sketches: $0.sketches)) }
         }
+    }
+
+    /// Moves or turns several solids and sketches together (or copies of them, each after its
+    /// original). Returns what moved; nil when a solid no longer builds.
+    func transformingItems(bodies: [UUID], sketches: [UUID], by transform: RigidTransform, copy: Bool) -> (workspace: Workspace, bodies: [UUID], sketches: [UUID])? {
+        var result = self, movedBodies: [UUID] = [], movedSketches: [UUID] = []
+        for id in bodies {
+            guard let moved = result.transformingBody(id, by: transform, copy: copy) else { return nil }
+            result = moved.workspace
+            movedBodies.append(moved.bodyID)
+        }
+        for id in sketches {
+            guard let moved = result.transformingSketch(id, by: transform, copy: copy) else { return nil }
+            result = moved.workspace
+            movedSketches.append(moved.sketchID)
+        }
+        return (result, movedBodies, movedSketches)
+    }
+
+    /// The middle of several solids and sketches together.
+    func center(ofBodies bodyIDs: [UUID], sketches sketchIDs: [UUID]) -> SIMD3<Double>? {
+        var points = bodyIDs.compactMap { id in bodies.first { $0.id == id } }.compactMap { try? SolidKernel.solid(for: $0).bounds }.flatMap { [$0.min, $0.max] }
+        points += sketchIDs.compactMap(sketch).flatMap { sketch in shapes(in: sketch.id).flatMap(\.outline).map { sketch.plane.point($0) } }
+        guard let first = points.first else { return nil }
+        return (points.reduce(first, simd_min) + points.reduce(first, simd_max)) / 2
     }
 
     /// The middle of a shape's extent, in world millimeters.

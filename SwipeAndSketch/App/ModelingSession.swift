@@ -2278,7 +2278,7 @@ struct DimensionEdit: Identifiable {
         if isDraggingPivot { return "Drag the center onto a corner, an edge, or a circle or face center. Lift Pencil to turn about it there." }
         if isMultipleSelection {
             if pickedBodies.count > 1 {
-                return "\(pickedSummary) picked. Double-tap another solid to add it, or a picked one to take it out. Combine, Transform, Color, Duplicate, Export, and Delete take them all."
+                return "\(pickedSummary) picked. Drag an arrow to move them all or an arc to turn them. Double-tap another solid to add it, or a picked one to take it out. Combine, Transform, Color, Duplicate, Export, and Delete take them all."
             }
             if pickedEdges.count > 1 {
                 return "\(pickedSummary) picked. Tap more edges of this solid to add them, or a picked one to take it out. Fillet or Chamfer takes them all."
@@ -4387,6 +4387,8 @@ struct DimensionEdit: Identifiable {
         case .group(let id):
             // Everything in it, about its middle, along the world axes.
             plane = .top; center = workspace.center(ofGroup: id)
+        case .items(let bodies, let sketches):
+            plane = .top; center = workspace.center(ofBodies: bodies, sketches: sketches)
         }
         return center.map { ($0, [plane.xAxis, plane.yAxis, plane.normalAxis]) }
     }
@@ -4448,7 +4450,11 @@ struct DimensionEdit: Identifiable {
     /// a drag in progress.
     var transformWidgetTarget: TransformTarget? {
         if let transformDrag { return transformDrag.target }
-        // Several picked sketch items are for Extrude and Revolve; the widget moves one item.
+        // Several solids picked on the canvas, or rows picked in the Model Tree's Select mode, move together.
+        if !isExtruding, !isEditingBlocked, tool == .select, sketchMode == nil, let items = movableItems {
+            return .items(bodies: items.bodies, sketches: items.sketches)
+        }
+        // Several picked sketch regions are for Extrude and Revolve.
         guard !isExtruding, !isEditingBlocked, extraSelection.isEmpty else { return nil }
         // Inside a sketch, a selected shape moves and turns within it.
         if sketchMode != nil {
@@ -4459,6 +4465,39 @@ struct DimensionEdit: Identifiable {
         if let body = selectedBody, tool == .select { return .body(body.id) }
         if let group = selectedGroup, tool == .select, workspace.center(ofGroup: group) != nil { return .group(group) }
         return nil
+    }
+
+    /// What the widget moves when several things are picked (October 24, 2026): the solids picked
+    /// together on the canvas, or the Model Tree rows picked in Select mode (with everything in a
+    /// picked group). Nil otherwise.
+    var movableItems: (bodies: [UUID], sketches: [UUID])? {
+        if isSelectingRows {
+            var bodies: [UUID] = [], sketches: [UUID] = []
+            for member in workspace.outermost(pickedRows) {
+                switch member {
+                case .body(let id): bodies.append(id)
+                case .sketch(let id): sketches.append(id)
+                case .group(let id): bodies += workspace.contents(of: id).bodies; sketches += workspace.contents(of: id).sketches
+                case .plane: break
+                }
+            }
+            // In document order, so copies land where Duplicate would put them.
+            bodies = workspace.bodies.map(\.id).filter(bodies.contains)
+            sketches = workspace.sketches.map(\.id).filter(sketches.contains)
+            return bodies.isEmpty && sketches.isEmpty ? nil : (bodies, sketches)
+        }
+        return pickedBodies.count > 1 ? (pickedBodies, []) : nil
+    }
+
+    /// After a move of several items: the same items (or their copies) picked again.
+    private func pickAgain(_ target: TransformTarget) {
+        guard case .items(let bodies, let sketches) = target else { selection = selection(for: target); return }
+        if isSelectingRows {
+            pickedRows = Set(bodies.map { GroupMember.body($0) } + sketches.map { GroupMember.sketch($0) })
+        } else {
+            selection = bodies.first.map { .body($0) }
+            extraSelection = bodies.dropFirst().map { .body($0) }
+        }
     }
 
     /// The Model Tree group selected (its row), which moves and transforms as a unit.
@@ -4472,12 +4511,15 @@ struct DimensionEdit: Identifiable {
             let contents = workspace.contents(of: group)
             return (Set(contents.bodies), Set(contents.sketches))
         }
-        if pickedBodies.count > 1 { return (Set(pickedBodies), []) }
+        if let items = movableItems { return (Set(items.bodies), Set(items.sketches)) }
         return (Set(selectedBody.map { [$0.id] } ?? []), Set(selectedSketch.map { [$0.id] } ?? []))
     }
 
     private func selection(for target: TransformTarget) -> ModelSelection {
-        switch target { case .sketch(let id): .sketch(id); case .body(let id): .body(id); case .shape(let id): .shape(id); case .group(let id): .group(id) }
+        switch target {
+        case .sketch(let id): .sketch(id); case .body(let id): .body(id); case .shape(let id): .shape(id); case .group(let id): .group(id)
+        case .items(let bodies, let sketches): bodies.first.map { .body($0) } ?? sketches.first.map { .sketch($0) } ?? .body(UUID())
+        }
     }
 
     @discardableResult func beginTransform(_ handle: TransformHandle) -> Bool {
@@ -4512,7 +4554,7 @@ struct DimensionEdit: Identifiable {
         editPreview = nil
         guard !cancelled, abs(drag.amount) > 1e-9, let result = drag.result, let moved = drag.resultTarget else { return }
         commit(result)
-        selection = selection(for: moved)
+        pickAgain(moved)
         carryPivot(of: drag, to: moved)
         lastTransform = drag
         status = drag.copy ? "Copied" : drag.handle.isRotation ? "Rotated" : "Moved"
@@ -4530,7 +4572,7 @@ struct DimensionEdit: Identifiable {
         updated.normalizeSketches()
         history.amend(updated)
         save()
-        selection = selection(for: moved.target)
+        pickAgain(moved.target)
         carryPivot(of: record, to: moved.target)
         lastTransform = record
         return true
@@ -4538,8 +4580,9 @@ struct DimensionEdit: Identifiable {
 
     /// The last transform's amount while it can still be changed (nothing else has happened since).
     var editableTransform: TransformRecord? {
-        guard let record = lastTransform, record.result == workspace,
-              let moved = record.resultTarget, selection == selection(for: moved) else { return nil }
+        guard let record = lastTransform, record.result == workspace, let moved = record.resultTarget else { return nil }
+        if case .items = moved { return transformWidgetTarget == moved ? record : nil }
+        guard selection == selection(for: moved) else { return nil }
         return record
     }
 
