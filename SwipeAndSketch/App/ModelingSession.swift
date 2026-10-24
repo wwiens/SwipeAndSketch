@@ -1175,8 +1175,10 @@ struct DimensionEdit: Identifiable {
     /// Rounds or bevels the selected edge: opens the Fillet or Chamfer draft with it picked.
     func finishSelectedEdge(_ kind: EdgeFinish.Kind) {
         guard let picked = selectedEdge, !isEditingBlocked else { return }
+        let others = pickedEdges.dropFirst()
         chooseTool(kind == .fillet ? .fillet : .chamfer)
         toggleFinishEdge(bodyID: picked.bodyID, edge: picked.edge)
+        for other in others { toggleFinishEdge(bodyID: other.bodyID, edge: other.edge) }
     }
 
     /// Purple snap anchors for the locked sketch plane: solid corners, edge midpoints, centers, and
@@ -1289,7 +1291,9 @@ struct DimensionEdit: Identifiable {
     /// selecting it alone: no tool or sketch is open, a region or whole sketch is selected, and
     /// `item` is one on the same plane.
     func addsToSelection(_ item: ModelSelection) -> Bool {
-        guard tool == .select, sketchMode == nil, !hasOperationInProgress, let first = selection,
+        // Inside an open sketch, regions add too (October 24, 2026); a whole sketch is picked outside one.
+        if sketchMode != nil, case .sketch = item { return false }
+        guard tool == .select, !hasOperationInProgress, let first = selection,
               let plane = sketchPickPlane(first), let other = sketchPickPlane(item) else { return false }
         if !isMultipleSelection {
             // Alone, the selected item stays picked, and its own sketch's line still opens the sketch.
@@ -1322,8 +1326,54 @@ struct DimensionEdit: Identifiable {
         UISelectionFeedbackGenerator().selectionChanged()
     }
 
+    // MARK: Several solids or edges (October 24, 2026)
+
+    /// The solids picked together: with a whole solid selected, a double-tap on another adds it (a
+    /// double-tap on a picked one takes it out). Faces stay single, so a tap still moves to a face.
+    var pickedBodies: [UUID] {
+        let items = selectedItems
+        let ids = items.compactMap { item -> UUID? in if case .body(let id) = item { id } else { nil } }
+        return ids.count == items.count ? ids : []
+    }
+    /// Edges of one solid picked together: with an edge selected, a tap on another edge of the same
+    /// solid adds it (a tap on a picked one takes it out), for Fillet and Chamfer.
+    var pickedEdges: [(bodyID: UUID, edge: PickedEdge)] {
+        let items = selectedItems
+        let edges = items.compactMap { item -> (UUID, PickedEdge)? in if case .edge(let body, let edge) = item { (body, edge) } else { nil } }
+        return edges.count == items.count ? edges.map { (bodyID: $0.0, edge: $0.1) } : []
+    }
+
+    /// A double-tap on solid `id`: added to the solids picked before the tap (`before`, the
+    /// selection before the double-tap's first tap) or taken out of them, else selected alone.
+    func pickBody(_ id: UUID, after before: [ModelSelection]) {
+        let picked = before.compactMap { item -> UUID? in if case .body(let id) = item { id } else { nil } }
+        guard tool == .select, sketchMode == nil, !hasOperationInProgress, !picked.isEmpty, picked.count == before.count,
+              picked != [id] else { select(.body(id)); return }
+        var items = picked
+        if let index = items.firstIndex(of: id) { items.remove(at: index) } else { items.append(id) }
+        dimensionEdit = nil
+        selection = items.first.map { .body($0) }
+        extraSelection = items.dropFirst().map { .body($0) }
+        UISelectionFeedbackGenerator().selectionChanged()
+    }
+
+    /// A tap on an edge: added to (or taken out of) the edges picked on the same solid, else selected alone.
+    func pickEdge(_ bodyID: UUID, _ edge: PickedEdge) {
+        let picked = pickedEdges
+        guard tool == .select, sketchMode == nil, !hasOperationInProgress, !picked.isEmpty, picked.allSatisfy({ $0.bodyID == bodyID }),
+              !(picked.count == 1 && picked[0].edge.index == edge.index) else { select(.edge(bodyID, edge)); return }
+        var items = picked.map(\.edge)
+        if let index = items.firstIndex(where: { $0.index == edge.index }) { items.remove(at: index) } else { items.append(edge) }
+        dimensionEdit = nil
+        selection = items.first.map { .edge(bodyID, $0) }
+        extraSelection = items.dropFirst().map { .edge(bodyID, $0) }
+        UISelectionFeedbackGenerator().selectionChanged()
+    }
+
     /// "3 regions", "2 sketches", "2 sketches · 1 region": what is picked, for the strip and hint.
     var pickedSummary: String {
+        if pickedBodies.count > 1 { return "\(pickedBodies.count) solids" }
+        if pickedEdges.count > 1 { return "\(pickedEdges.count) edges" }
         let sketches = selectedItems.filter { if case .sketch = $0 { true } else { false } }.count
         let regions = selectedItems.count - sketches
         let sketchText = "\(sketches) \(sketches == 1 ? "sketch" : "sketches")", regionText = "\(regions) \(regions == 1 ? "region" : "regions")"
@@ -1705,6 +1755,14 @@ struct DimensionEdit: Identifiable {
     }
 
     /// A solid's color (one undo step); gray is the default.
+    /// Several solids colored at once (picked together), as one undo step.
+    func setColor(_ color: BodyColor, of ids: [UUID]) {
+        guard !isEditingBlocked else { return }
+        var next = workspace
+        for index in next.bodies.indices where ids.contains(next.bodies[index].id) { next.bodies[index].color = color == .gray ? nil : color }
+        commit(next)
+    }
+
     func setColor(_ color: BodyColor, of id: UUID) {
         guard !isEditingBlocked, let index = workspace.bodies.firstIndex(where: { $0.id == id }) else { return }
         var next = workspace
@@ -1715,6 +1773,8 @@ struct DimensionEdit: Identifiable {
     /// The solids and sketches Copy and Duplicate take: the selected solid (or its face or edge's),
     /// or the selected sketch (or a shape's sketch), or an item row.
     private func copyTargets(_ item: ModelSelection?) -> (bodies: [UUID], sketches: [UUID]) {
+        // Several solids picked together go together.
+        if item == selection, pickedBodies.count > 1 { return (pickedBodies, []) }
         switch item {
         case .body(let id), .edge(let id, _): return ([id], [])
         case .face(let face): return ([face.bodyID], [])
@@ -2143,15 +2203,21 @@ struct DimensionEdit: Identifiable {
         if transformDrag?.copy == true { return "Copying. Lift Pencil to place the copy." }
         if isDraggingPivot { return "Drag the center onto a corner, an edge, or a circle or face center. Lift Pencil to turn about it there." }
         if isMultipleSelection {
+            if pickedBodies.count > 1 {
+                return "\(pickedSummary) picked. Double-tap another solid to add it, or a picked one to take it out. Combine, Transform, Color, Duplicate, Export, and Delete take them all."
+            }
+            if pickedEdges.count > 1 {
+                return "\(pickedSummary) picked. Tap more edges of this solid to add them, or a picked one to take it out. Fillet or Chamfer takes them all."
+            }
             return "\(pickedSummary) picked. Tap more regions or sketches on this plane to add them, or a picked one to take it out. Extrude or Revolve takes them all; tap empty space to start over."
         }
         if selectedSketch != nil {
             return "Drag an arrow to move the sketch or an arc to turn it. Turn on Create Copy to keep the original. Tap a line to keep drawing in it, or another sketch or region on its plane to pick it too."
         }
         if selectedBody != nil, tool == .select {
-            return "Solid selected. Drag an arrow to move it or an arc to turn it, or drag the center dot onto a corner or edge to turn about it. Turn on Create Copy to keep the original."
+            return "Solid selected. Drag an arrow to move it or an arc to turn it, or drag the center dot onto a corner or edge to turn about it. Turn on Create Copy to keep the original. Double-tap another solid to pick it too."
         }
-        if selectedEdge != nil { return "Edge selected. Drag the double-arrow to round it, or choose Fillet or Chamfer." }
+        if selectedEdge != nil { return "Edge selected. Drag the double-arrow to round it, or choose Fillet or Chamfer. Tap another edge of this solid to pick it too." }
         if selectedShape != nil {
             return "Tap a dimension to edit it. Drag a point or edge with Pencil to resize." + (sketchMode == nil ? " Tap more regions or sketches on its plane to pick them too." : "")
         }
@@ -2643,6 +2709,7 @@ struct DimensionEdit: Identifiable {
         case .group(let id): (draft.bodies, draft.sketches) = (workspace.contents(of: id).bodies, workspace.contents(of: id).sketches)
         default: break
         }
+        if pickedBodies.count > 1 { draft.bodies = pickedBodies }
         if let plane = selectedConstructionPlane { draft.plane = MirrorPlane(source: .plane(plane.id), plane: plane.plane) }
         if !draft.isEmpty { draft.step = .plane }
         cancelTransient()
@@ -2746,6 +2813,7 @@ struct DimensionEdit: Identifiable {
         case .group(let id): (draft.bodies, draft.sketches) = (workspace.contents(of: id).bodies, workspace.contents(of: id).sketches)
         default: break
         }
+        if pickedBodies.count > 1 { draft.bodies = pickedBodies }
         cancelTransient()
         endSketchMode()
         selection = nil
@@ -2943,6 +3011,7 @@ struct DimensionEdit: Identifiable {
         case .group(let id): (draft.bodies, draft.sketches) = (workspace.contents(of: id).bodies, workspace.contents(of: id).sketches)
         default: break
         }
+        if pickedBodies.count > 1 { draft.bodies = pickedBodies }
         cancelTransient()
         endSketchMode()
         selection = nil
@@ -3979,6 +4048,7 @@ struct DimensionEdit: Identifiable {
             let contents = workspace.contents(of: group)
             return (Set(contents.bodies), Set(contents.sketches))
         }
+        if pickedBodies.count > 1 { return (Set(pickedBodies), []) }
         return (Set(selectedBody.map { [$0.id] } ?? []), Set(selectedSketch.map { [$0.id] } ?? []))
     }
 
@@ -4367,6 +4437,7 @@ struct DimensionEdit: Identifiable {
     /// Subtract. A selected solid (or its face or edge) is the first target; the tools come next.
     func beginSubtract() {
         guard !isEditingBlocked else { return }
+        let picked = pickedBodies
         let bodyID: UUID?
         switch selection {
         case .body(let id), .edge(let id, _): bodyID = id
@@ -4379,6 +4450,8 @@ struct DimensionEdit: Identifiable {
         tool = .subtract
         var draft = SubtractDraft()
         if let bodyID { draft.targets = [bodyID]; draft.step = .tools }
+        // Several solids picked: the first is cut by the rest.
+        if picked.count > 1 { draft.tools = Array(picked.dropFirst()) }
         subtractDraft = draft
         updateSubtractPreview()
     }
@@ -4485,11 +4558,12 @@ struct DimensionEdit: Identifiable {
         case .face(let face): bodyID = face.bodyID
         default: bodyID = nil
         }
+        let picked = pickedBodies
         cancelTransient()
         endSketchMode()
         selection = nil
         tool = intersect ? .intersect : .union
-        unionDraft = UnionDraft(bodies: bodyID.map { [$0] } ?? [], intersect: intersect)
+        unionDraft = UnionDraft(bodies: picked.count > 1 ? picked : bodyID.map { [$0] } ?? [], intersect: intersect)
         updateUnionPreview()
     }
 
@@ -6108,6 +6182,7 @@ struct DimensionEdit: Identifiable {
             case .shape, .profile:
                 let ids = Set(profile(for: item)?.sourceIDs ?? [])
                 next.shapes.removeAll { ids.contains($0.id) }
+            case .body(let id): next.bodies.removeAll { $0.id == id }
             default: break
             }
         }

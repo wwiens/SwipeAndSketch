@@ -223,7 +223,9 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
     /// How far the Pencil must travel before a press on a sketch handle drags it; a tap drifts a few
     /// points (and snapping would then jump the size to the nearest grid value).
     static let sketchDragSlop: CGFloat = 10
-    private var lastFaceTap: (bodyID: UUID, time: CFTimeInterval, point: CGPoint)?
+    /// The last tap on a solid, for double-taps, with what was selected before it (solids picked
+    /// together, which a double-tap on another solid adds to).
+    private var lastFaceTap: (bodyID: UUID, time: CFTimeInterval, point: CGPoint, before: [ModelSelection])?
     private var lastSketchTap: (sketchID: UUID, time: CFTimeInterval, point: CGPoint)?
     /// A sketch line under the Pencil at touch-down; it becomes `lastSketchTap` only if the Pencil
     /// lifts without moving, so dragging the same line twice is never a double-tap.
@@ -939,7 +941,9 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         if let picked = session.selectedEdge, let body = session.workspace.bodies.first(where: { $0.id == picked.bodyID }),
            let render = solidRender(body) {
             var segments: [(SIMD3<Float>, SIMD3<Float>)] = []
-            for (border, edge) in zip(render.borders, render.borderEdges) where edge == picked.edge.index {
+            // Every edge picked on the solid, when several are.
+            let indices = Set([picked.edge.index] + session.pickedEdges.map(\.edge.index))
+            for (border, edge) in zip(render.borders, render.borderEdges) where indices.contains(edge) {
                 segments += zip(border, border.dropFirst()).map { ($0, $1) }
             }
             let highlight = strokeNode(segments, color: blue, weight: 1.8)
@@ -2206,10 +2210,10 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             let now = CACurrentMediaTime()
             if let last = lastFaceTap, last.bodyID == bodyID, now - last.time < Self.doubleTapInterval, distance(point, last.point) < Self.doubleTapDistance {
                 lastFaceTap = nil
-                session.select(.body(bodyID))
+                session.pickBody(bodyID, after: last.before)
             } else {
-                lastFaceTap = (bodyID, now, point)
-                session.select(.edge(bodyID, edge))
+                lastFaceTap = (bodyID, now, point, session.selectedItems)
+                session.pickEdge(bodyID, edge)
             }
             return
         }
@@ -2222,12 +2226,12 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             if let nearest { tapSketchLine(nearest); return }
             let now = CACurrentMediaTime()
             if let last = lastFaceTap, last.bodyID == hit.bodyID, now - last.time < Self.doubleTapInterval, distance(point, last.point) < Self.doubleTapDistance {
-                // Double-tap: the whole solid.
+                // Double-tap: the whole solid (added to the solids picked before, if any).
                 lastFaceTap = nil
-                session.select(.body(hit.bodyID))
+                session.pickBody(hit.bodyID, after: last.before)
                 return
             }
-            lastFaceTap = (hit.bodyID, now, point)
+            lastFaceTap = (hit.bodyID, now, point, session.selectedItems)
             // A sketch region drawn on the face (or in front of it) wins over the face, so the shape
             // the lines enclose can be extruded or cut; a quick second tap still picks the solid.
             if let profile = region(at: point, over: hit) { selectRegion(profile); return }

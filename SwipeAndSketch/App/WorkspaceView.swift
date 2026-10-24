@@ -553,8 +553,13 @@ struct WorkspaceView: View {
 
     /// What the selection itself offers.
     private var selectionActions: AnyView {
-        if sketching { return AnyView(sketchingActions) }
-        if session.isMultipleSelection { return AnyView(pickedActions) }
+        // Several regions picked inside an open sketch: Extrude and Revolve take them all.
+        if sketching && !session.isMultipleSelection { return AnyView(sketchingActions) }
+        if session.isMultipleSelection {
+            if session.pickedBodies.count > 1 { return AnyView(pickedBodyActions) }
+            if session.pickedEdges.count > 1 { return AnyView(pickedEdgeActions) }
+            return AnyView(pickedActions)
+        }
         if let plane = session.selectedConstructionPlane { return AnyView(planeActions(plane)) }
         if let face = session.selectedFace { return AnyView(faceActions(face)) }
         if session.selectedEdge != nil { return AnyView(edgeActions) }
@@ -730,6 +735,32 @@ struct WorkspaceView: View {
         }
         AnyView(transformMenu(solid: false))
         stripButton("Duplicate", icon: .copy, id: "selection.duplicate") { session.duplicate() }
+    }
+
+    /// Several solids picked together: they combine, transform, color, copy, export, and delete together.
+    @ViewBuilder private var pickedBodyActions: some View {
+        let ids = session.pickedBodies
+        stripLabel(session.pickedSummary, id: "selection.pickedCount")
+        AnyView(combineMenu)
+        AnyView(transformMenu(solid: true))
+        Menu {
+            ForEach(BodyColor.allCases, id: \.self) { color in
+                Button { session.setColor(color, of: ids) } label: {
+                    Label { Text(color.title) } icon: { Image(uiImage: Self.swatch(color)) }
+                }
+                .accessibilityIdentifier("color.\(color.rawValue)")
+            }
+        } label: { StripLabel(title: "Color", icon: .color, showsMenu: true) }
+            .accessibilityLabel("Color").accessibilityIdentifier("selection.color")
+        stripButton("Duplicate", icon: .copy, id: "selection.duplicate") { session.duplicate() }
+        stripButton("Export", icon: .export, id: "selection.export") { session.printSheet = .export }
+    }
+
+    /// Several edges of one solid picked together: Fillet and Chamfer take them all.
+    @ViewBuilder private var pickedEdgeActions: some View {
+        stripLabel(session.pickedSummary, id: "selection.pickedCount")
+        stripButton("Fillet", icon: .fillet, id: "selection.fillet") { session.finishSelectedEdge(.fillet) }
+        stripButton("Chamfer", icon: .chamfer, id: "selection.chamfer") { session.finishSelectedEdge(.chamfer) }
     }
 
     /// Several sketch regions and whole sketches picked together: Extrude and Revolve take them all.
