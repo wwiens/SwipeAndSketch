@@ -27,8 +27,9 @@ struct WorkspaceView: View {
     /// The assistant panel at the right edge, and a request to put the cursor in its field.
     @State private var showAssistant = false
     @State private var assistantFocus = 0
-    /// The Files picker for Import STEP.
+    /// The Files picker for Import STEP, or Import Mesh (STL or 3MF files).
     @State private var importingSTEP = false
+    @State private var importingMesh = false
     /// About Swipe & Sketch: version, requirements, and the Open CASCADE notice and licenses.
     @State private var showAbout = false
     /// The dock group whose tools are popped up above it.
@@ -178,9 +179,10 @@ struct WorkspaceView: View {
         }
         .sheet(item: $session.exportItem) { item in ShareSheet(url: item.url).ignoresSafeArea() }
         .sheet(item: $session.printSheet) { mode in PrintSheet(session: session, mode: mode) }
-        .fileImporter(isPresented: $importingSTEP, allowedContentTypes: ["step", "stp"].compactMap { UTType(filenameExtension: $0) }) { result in
+        .fileImporter(isPresented: Binding(get: { importingSTEP || importingMesh }, set: { if !$0 { importingSTEP = false; importingMesh = false } }),
+                      allowedContentTypes: (importingMesh ? ["stl", "3mf"] : ["step", "stp"]).compactMap { UTType(filenameExtension: $0) }) { result in
             switch result {
-            case .success(let url): session.importSTEP(from: url)
+            case .success(let url): if ["stl", "3mf"].contains(url.pathExtension.lowercased()) { session.importMesh(from: url) } else { session.importSTEP(from: url) }
             case .failure(let error): session.saveError = "Import failed. \(error.localizedDescription)"
             }
         }
@@ -315,6 +317,8 @@ struct WorkspaceView: View {
                     .disabled(!session.canExport).accessibilityIdentifier("project.export.stl")
                 menuButton("Import STEP…", icon: .open) { importingSTEP = true }
                     .disabled(session.isEditingBlocked).accessibilityIdentifier("project.importSTEP")
+                menuButton("Import Mesh (STL, 3MF)…", icon: .mesh) { importingMesh = true }
+                    .disabled(session.isEditingBlocked).accessibilityIdentifier("project.importMesh")
                 Divider()
                 // Plain buttons: an inline Picker here keeps the app from ever settling (UI tests wait on it).
                 Menu {
@@ -2008,7 +2012,7 @@ struct WorkspaceView: View {
                     Text("Create and open .swipesketch projects in Files, on your iPad or in iCloud Drive. Completed changes save automatically. Use the project menu for New Project, Open Project, Save, or Save As; the home button returns to the Home screen.")
                     Text("Save As creates and opens a separate editable copy. New Project starts with an empty file and keeps the current project. Canceled file pickers leave your current project open. Finish an extrusion with Done before saving it.")
                 }
-                Section("Import") { Text("Import STEP in the project menu brings in the solids of a .step or .stp file from Files, each as a solid of its own, where the file put them, converted to millimeters, together in a Model Tree group named after the file (hide or show them all with its eye). Open surfaces are joined into solids where they close. Imported solids are ordinary solids: move, rotate, mirror, align, cut, drill, shell, fillet any edge, combine, split, sketch on their faces, and export them. Their exact shapes are saved in the project, so it does not need the STEP file again.") }
+                Section("Import") { Text("Import STEP in the project menu brings in the solids of a .step or .stp file from Files, each as a solid of its own, where the file put them, converted to millimeters, together in a Model Tree group named after the file (hide or show them all with its eye). Open surfaces are joined into solids where they close. Imported solids are ordinary solids: move, rotate, mirror, align, cut, drill, shell, fillet any edge, combine, split, sketch on their faces, and export them. Their exact shapes are saved in the project, so it does not need the STEP file again. Import Mesh brings in STL and 3MF files the same way, such as downloaded models to remix: each closed mesh becomes a solid whose flat areas are single faces (a mesh with holes in it is left out; repair it in a mesh tool first).") }
                 Section("Export") { Text("Export 3MF in the project menu makes a print-ready file: choose all visible solids or the selected one, Arrange on Plate (side by side, each resting on the plate) or As Modeled, and your printer's plate. Each part is named as in the Model Tree, and a picture of the view is the file's preview. Export STL saves every visible solid in one watertight millimeter file. Both open the share sheet for AirDrop, Files, or a slicer app.") }
                 Section("Send to Slicer") { Text("Send to Slicer in the project menu makes the same print-ready 3MF and saves it into a print folder you choose once, such as a folder in iCloud Drive that the slicer on your Mac opens. Each send replaces the file there, so the newest version is always the one you open. Or share it with AirDrop or another app.") }
                 Section("Units") { Text("Choose Millimeters or Inches under Units in the project menu. Values, the keypad, the grid, and snapping follow the choice; type in, mm, cm, or m after a number to give another unit. Projects always store millimeters.") }

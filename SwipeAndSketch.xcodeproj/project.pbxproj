@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		D76F3575B1B7892C4DEF43E1 /* SwipeAndSketch/Core/HoleRemoval.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34F01B425CCD77EFD76F3575 /* SwipeAndSketch/Core/HoleRemoval.swift */; };
+		9ACB945B1F5E6A2A271FB778 /* SwipeAndSketch/Core/MeshImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5676B3DA4758D42D08BE30A /* SwipeAndSketch/Core/MeshImport.swift */; };
 		14412ACF88978A8383357377 /* SwipeAndSketch/Core/ShapeOperations.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7A2EEA7A27E025431D40FAB /* SwipeAndSketch/Core/ShapeOperations.swift */; };
 		2C5297B7B5B8FB25F5D6DAEC /* SwipeAndSketch/Core/Primitives.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12BB77046BFCC8F258D42152 /* SwipeAndSketch/Core/Primitives.swift */; };
 		4D87AB0596AF2D540028F8D9 /* SwipeAndSketch/Core/FeatureEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1BC48202638A9ACB1888273 /* SwipeAndSketch/Core/FeatureEditing.swift */; };
@@ -64,6 +65,7 @@
 		2D97207F1A2779A98E7CC603 /* SwipeAndSketch/App/WorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35C7BCC8CA2BA3F29A0441EF /* SwipeAndSketch/App/WorkspaceView.swift */; };
 		33D0FFF8F856308F8036A51A /* SwipeAndSketch/Core/EdgeFinishes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1125E8DC5E888459061EB96D /* SwipeAndSketch/Core/EdgeFinishes.swift */; };
 		37327D8C0B6CE9CDE0DA3850 /* Tests/AppTests/FinishToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E65A6987E10939F88B18A9E /* Tests/AppTests/FinishToolTests.swift */; };
+		09A9DD6575A195C7DB849CF7 /* Tests/AppTests/MeshImportToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB5017D427C3DA8D7EDA954C /* Tests/AppTests/MeshImportToolTests.swift */; };
 		83A05C6E3F0AE7E760C2E58F /* Tests/AppTests/ShapeToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32C48F18021141C37DA55443 /* Tests/AppTests/ShapeToolTests.swift */; };
 		6EAD6D431DA81CE2C7C24062 /* Tests/AppTests/SplineToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECE3AB55E5B261014B5D8B09 /* Tests/AppTests/SplineToolTests.swift */; };
 		037B79108B988F1B1847E648 /* Tests/AppTests/ConstructionToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C849B7F5932C56457A37E0E3 /* Tests/AppTests/ConstructionToolTests.swift */; };
@@ -157,6 +159,7 @@
 
 /* Begin PBXFileReference section */
 		34F01B425CCD77EFD76F3575 /* SwipeAndSketch/Core/HoleRemoval.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/HoleRemoval.swift; sourceTree = SOURCE_ROOT; };
+		B5676B3DA4758D42D08BE30A /* SwipeAndSketch/Core/MeshImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/MeshImport.swift; sourceTree = SOURCE_ROOT; };
 		F7A2EEA7A27E025431D40FAB /* SwipeAndSketch/Core/ShapeOperations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/ShapeOperations.swift; sourceTree = SOURCE_ROOT; };
 		12BB77046BFCC8F258D42152 /* SwipeAndSketch/Core/Primitives.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Primitives.swift; sourceTree = SOURCE_ROOT; };
 		B1BC48202638A9ACB1888273 /* SwipeAndSketch/Core/FeatureEditing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/FeatureEditing.swift; sourceTree = SOURCE_ROOT; };
@@ -221,6 +224,7 @@
 		950AC9B7240EC79A191296B4 /* SwipeAndSketch/App/ModelingSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/ModelingSession.swift; sourceTree = SOURCE_ROOT; };
 		9B478F678A1C30B4989CFFAE /* Tests/AppTests/BodyTransformToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/BodyTransformToolTests.swift; sourceTree = SOURCE_ROOT; };
 		9E65A6987E10939F88B18A9E /* Tests/AppTests/FinishToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/FinishToolTests.swift; sourceTree = SOURCE_ROOT; };
+		DB5017D427C3DA8D7EDA954C /* Tests/AppTests/MeshImportToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/MeshImportToolTests.swift; sourceTree = SOURCE_ROOT; };
 		32C48F18021141C37DA55443 /* Tests/AppTests/ShapeToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/ShapeToolTests.swift; sourceTree = SOURCE_ROOT; };
 		ECE3AB55E5B261014B5D8B09 /* Tests/AppTests/SplineToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/SplineToolTests.swift; sourceTree = SOURCE_ROOT; };
 		C849B7F5932C56457A37E0E3 /* Tests/AppTests/ConstructionToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/ConstructionToolTests.swift; sourceTree = SOURCE_ROOT; };
@@ -369,6 +373,7 @@
 				69910042A2FEA63707AA36DE /* SwipeAndSketch/Core/Groups.swift */,
 				6E4E3595E501D2C422605253 /* SwipeAndSketch/Core/FaceEdits.swift */,
 				34F01B425CCD77EFD76F3575 /* SwipeAndSketch/Core/HoleRemoval.swift */,
+				B5676B3DA4758D42D08BE30A /* SwipeAndSketch/Core/MeshImport.swift */,
 				F7A2EEA7A27E025431D40FAB /* SwipeAndSketch/Core/ShapeOperations.swift */,
 				12BB77046BFCC8F258D42152 /* SwipeAndSketch/Core/Primitives.swift */,
 				B1BC48202638A9ACB1888273 /* SwipeAndSketch/Core/FeatureEditing.swift */,
@@ -455,6 +460,7 @@
 				B0FF5FAF995107ED6714C2D1 /* Tests/AppTests/CutToolTests.swift */,
 				AC7E921DE81906840AB5A5A3 /* Tests/AppTests/MultiSelectToolTests.swift */,
 				9E65A6987E10939F88B18A9E /* Tests/AppTests/FinishToolTests.swift */,
+				DB5017D427C3DA8D7EDA954C /* Tests/AppTests/MeshImportToolTests.swift */,
 				32C48F18021141C37DA55443 /* Tests/AppTests/ShapeToolTests.swift */,
 				ECE3AB55E5B261014B5D8B09 /* Tests/AppTests/SplineToolTests.swift */,
 				C849B7F5932C56457A37E0E3 /* Tests/AppTests/ConstructionToolTests.swift */,
@@ -666,6 +672,7 @@
 				E22521F7A1AFE44A545A9416 /* Tests/AppTests/CutToolTests.swift in Sources */,
 				BCBB3024AE8BF150FF4B6976 /* Tests/AppTests/MultiSelectToolTests.swift in Sources */,
 				37327D8C0B6CE9CDE0DA3850 /* Tests/AppTests/FinishToolTests.swift in Sources */,
+				09A9DD6575A195C7DB849CF7 /* Tests/AppTests/MeshImportToolTests.swift in Sources */,
 				83A05C6E3F0AE7E760C2E58F /* Tests/AppTests/ShapeToolTests.swift in Sources */,
 				6EAD6D431DA81CE2C7C24062 /* Tests/AppTests/SplineToolTests.swift in Sources */,
 				037B79108B988F1B1847E648 /* Tests/AppTests/ConstructionToolTests.swift in Sources */,
@@ -725,6 +732,7 @@
 				07AA36DE94A9E112FD4831CA /* SwipeAndSketch/Core/Groups.swift in Sources */,
 				22605253DF2F164385FB0C24 /* SwipeAndSketch/Core/FaceEdits.swift in Sources */,
 				D76F3575B1B7892C4DEF43E1 /* SwipeAndSketch/Core/HoleRemoval.swift in Sources */,
+				9ACB945B1F5E6A2A271FB778 /* SwipeAndSketch/Core/MeshImport.swift in Sources */,
 				14412ACF88978A8383357377 /* SwipeAndSketch/Core/ShapeOperations.swift in Sources */,
 				2C5297B7B5B8FB25F5D6DAEC /* SwipeAndSketch/Core/Primitives.swift in Sources */,
 				4D87AB0596AF2D540028F8D9 /* SwipeAndSketch/Core/FeatureEditing.swift in Sources */,

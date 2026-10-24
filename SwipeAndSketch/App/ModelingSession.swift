@@ -4146,7 +4146,25 @@ struct DimensionEdit: Identifiable {
         }
     }
 
-    private func finishImport(_ result: Result<STEPImport.Result, any Error>) {
+    /// Imports an STL or 3MF file (read off the main thread): each closed mesh becomes a solid of
+    /// its own, its flat areas single faces, as one undo step, like a STEP import.
+    func importMesh(from url: URL) {
+        guard !isEditingBlocked else { return }
+        cancelTransient()
+        endSketchMode()
+        selection = nil
+        isProjectBusy = true
+        status = "Importing \(url.lastPathComponent)…"
+        let name = url.deletingPathExtension().lastPathComponent
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            let result = Result { try MeshImport.read(url, name: name) }
+            await self?.finishImport(result, meshes: true)
+        }
+    }
+
+    private func finishImport(_ result: Result<STEPImport.Result, any Error>, meshes: Bool = false) {
         isProjectBusy = false
         switch result {
         case .failure(let error):
@@ -4165,7 +4183,7 @@ struct DimensionEdit: Identifiable {
             let group = workspace.bodies.first { $0.id == imported.bodies.first?.id }?.group
             status = (count == 1 ? "Imported 1 solid" : "Imported \(count) solids") +
                 (group.flatMap { workspace.groupNames[$0] }.map { " into the group \($0)" } ?? "") +
-                (imported.skipped > 0 ? "; \(imported.skipped) open surface\(imported.skipped == 1 ? "" : "s") left out" : "")
+                (imported.skipped > 0 ? "; \(imported.skipped) \(meshes ? "open mesh" : "open surface")\(imported.skipped == 1 ? "" : "s") left out" : "")
             requestCamera(.reset)
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
         }
