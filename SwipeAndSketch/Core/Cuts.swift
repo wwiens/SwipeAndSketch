@@ -43,6 +43,9 @@ struct ExtrusionCut: Codable, Equatable, Identifiable, Sendable {
     var thread: ThreadSpec?
     /// Text: letters raised from (positive `depth`) or sunk into (negative) the face on `profile.plane` (Text.swift).
     var text: TextSpec?
+    /// The peg this join, tip bevel, or socket belongs to (October 24, 2026; FeatureEditing.swift), so the
+    /// peg can be edited with its sockets. Omitted otherwise, and on pegs made before then.
+    var peg: UUID?
     /// The solid a merge or subtract carries.
     var nestedSolid: SolidBody? { merged ?? subtracted ?? intersected }
     /// Face extrusion (schema 7): extrude the solid's own flat face on `profile.plane` that

@@ -1393,6 +1393,129 @@ struct AssistantWorkbench {
         return change + "."
     }
 
+    /// The entry `which` names among `count` (1 for the first made, or "last"), counting from 0.
+    private func numbered(_ which: String, of count: Int, _ noun: String, in name: String) throws -> Int {
+        guard count > 0 else { throw Failure("\(name) has no \(noun)s.") }
+        let text = which.trimmingCharacters(in: .whitespaces).lowercased()
+        let number = text == "last" || text.isEmpty ? count : Int(text.trimmingCharacters(in: CharacterSet(charactersIn: "#"))) ?? 0
+        guard (1...count).contains(number) else { throw Failure("\(name) has \(count) \(noun)\(count == 1 ? "" : "s"); give 1…\(count) or last.") }
+        return number - 1
+    }
+
+    /// Changes one of a body's holes, threads, text, or pegs after it was made (`which`: 1 for the
+    /// first made, or "last"); values left nil stay as they are. Hole: `kind` and `size` pick a
+    /// preset, `diameter` a plain round hole, `depth` a blind depth or `through`. Thread: `size`
+    /// ("M8", "M8x1"), or `diameter` and `pitch`, `length` from its open end, `clearance`, `starts`.
+    /// Text: `text`, `height`, `depth` (negative sinks it). Peg: `diameter`, `height`, `clearance`.
+    @discardableResult mutating func editFeature(body bodyName: String, feature: String, which: String, kind: String? = nil, size: String? = nil,
+                                                 diameter: Double? = nil, depth: Double? = nil, through: Bool? = nil, height: Double? = nil,
+                                                 pitch: Double? = nil, length: Double? = nil, clearance: Double? = nil, starts: Int? = nil,
+                                                 text newText: String? = nil) throws -> String {
+        let body = try body(named: bodyName)
+        _ = try buildable(body)
+        let name = self.bodyName(body.id)
+        guard let bodyIndex = workspace.bodies.firstIndex(where: { $0.id == body.id }) else { throw Failure("That body no longer exists.") }
+        var next = workspace, checking = [body.id]
+        let change: String
+        switch feature.trimmingCharacters(in: .whitespaces).lowercased() {
+        case "hole":
+            let holes = body.cuts.indices.filter { body.cuts[$0].hole != nil }
+            let index = holes[try numbered(which, of: holes.count, "hole", in: name)]
+            let cut = body.cuts[index]
+            guard var spec = cut.hole, let circle = cut.profile.circle else { throw Failure("That hole cannot be changed.") }
+            if let diameter {
+                guard (0.1...200).contains(diameter) else { throw Failure("Hole diameters must be 0.1–200 mm.") }
+                spec = HoleSpec(kind: .simple, size: "Ø\(Self.mm(diameter))", diameter: diameter)
+            } else if kind != nil || size != nil {
+                let label = size?.uppercased().replacingOccurrences(of: " ", with: "") ?? (HolePresets.sizes.contains(spec.size) ? spec.size : "M3")
+                guard HolePresets.sizes.contains(label) else { throw Failure("Hole sizes are \(HolePresets.sizes.joined(separator: ", ")), or give a diameter.") }
+                spec = HolePresets.spec(kind.flatMap { HoleSpec.Kind(rawValue: $0.lowercased()) } ?? spec.kind, size: label)
+            }
+            let newDepth: Double? = through == true ? nil : depth ?? (cut.throughAll ? nil : cut.depth)
+            if let newDepth, !(0.01...10_000).contains(newDepth) { throw Failure("Hole depth must be 0.01–10000 mm.") }
+            guard let operation = ExtrusionCut.hole(spec, at: circle.center, on: cut.profile.plane, depth: newDepth) else { throw Failure("That hole cannot be made.") }
+            next.bodies[bodyIndex] = body.placing(operation, replacing: index)
+            change = "Changed a hole of \(name) to Ø\(Self.mm(spec.diameter))\(spec.kind == .simple ? "" : " " + spec.kind.title.lowercased()) \(newDepth.map { "\(Self.mm($0)) mm deep" } ?? "through")"
+        case "text":
+            let texts = body.cuts.indices.filter { body.cuts[$0].text != nil }
+            let index = texts[try numbered(which, of: texts.count, "text", in: name)]
+            let cut = body.cuts[index]
+            guard let old = cut.text else { throw Failure("That text cannot be changed.") }
+            let words = newText ?? old.text, size = height ?? old.height, newDepth = depth ?? cut.depth
+            guard TextSpec.heightRange.contains(size) else { throw Failure("Text height must be 0.5–500 mm.") }
+            guard newDepth.isFinite, abs(newDepth) >= 0.05, abs(newDepth) <= 100 else { throw Failure("Text depth must be 0.05–100 mm (negative to sink it).") }
+            guard let spec = TextSpec.make(words, font: old.font, height: size, center: old.center, angle: old.angle),
+                  let operation = ExtrusionCut.text(spec, on: cut.profile.plane, depth: newDepth) else { throw Failure("That text cannot be drawn; use letters, digits, or symbols.") }
+            next.bodies[bodyIndex] = body.placing(operation, replacing: index)
+            change = "Changed text on \(name) to \"\(words)\", \(Self.mm(size)) mm tall, \(newDepth > 0 ? "raised" : "sunk") \(Self.mm(abs(newDepth))) mm"
+        case "thread":
+            let threads = body.cuts.indices.filter { body.cuts[$0].thread != nil }
+            let index = threads[try numbered(which, of: threads.count, "thread", in: name)]
+            guard let setup = body.threadSetup(at: index) else { throw Failure("The face of that thread is gone, so it cannot be changed.") }
+            var thread = setup.spec
+            if let size, !size.isEmpty {
+                let parts = size.lowercased().replacingOccurrences(of: "×", with: "x").split(separator: "x", maxSplits: 1).map(String.init)
+                guard let standard = ThreadPresets.size(named: parts[0]) else {
+                    throw Failure("Thread sizes are \(ThreadPresets.names.joined(separator: ", ")), or give a diameter and pitch.")
+                }
+                thread = thread.with(size: standard, diameter: standard.diameter, pitch: parts.count > 1 ? Double(parts[1]) ?? standard.coarse : standard.coarse)
+            }
+            if let diameter { thread = thread.with(size: nil, diameter: diameter, pitch: thread.pitch) }
+            if let pitch { thread = diameter == nil ? thread.with(pitch: pitch) : thread.with(size: thread.standardSize, diameter: thread.majorDiameter, pitch: pitch) }
+            if let clearance {
+                guard clearance == 0 || Fit.clearanceRange.contains(clearance) else { throw Failure("Clearance must be 0–2 mm.") }
+                thread.clearance = clearance
+            }
+            if let starts {
+                guard ThreadSpec.startsRange.contains(starts) else { throw Failure("A thread has 1 to 4 starts.") }
+                thread.starts = starts > 1 ? starts : nil
+            }
+            guard thread.isValid else {
+                throw Failure("That thread cannot be cut: the pitch must be 0.2–20 mm, and at most \(Self.mm(max(0, thread.largestPitch))) mm for a \(Self.mm(thread.majorDiameter)) mm thread.")
+            }
+            guard thread.fit.isUsable else { throw Failure(thread.fitSummary { "\(Self.mm($0)) mm" }) }
+            var built = thread
+            if let threaded = length ?? setup.length, threaded < thread.threadedLength - 1e-6 {
+                guard let shorter = thread.shortened(to: threaded, atEnd: setup.atEnd) else {
+                    throw Failure("A thread is at least one turn (\(Self.mm(thread.shortestLength)) mm) long.")
+                }
+                built = shorter
+            }
+            guard var rebuilt = setup.base.threading(built, at: index) else {
+                throw Failure("\(built.title) could not be built on that \(built.isInternal ? "hole" : "boss"); try a nearby pitch or size.")
+            }
+            rebuilt.cuts[index].id = body.cuts[index].id
+            next.bodies[bodyIndex] = rebuilt
+            change = "Changed a thread of \(name) to \(built.title), \(Self.mm(built.threadedLength)) mm long"
+        case "peg":
+            var tags: [UUID] = []
+            if let pin = body.peg { tags = [pin.id] }
+            for cut in body.cuts where cut.operation == .join { if let tag = cut.peg, !tags.contains(tag) { tags.append(tag) } }
+            if tags.isEmpty { for cut in body.cuts { if let tag = cut.peg, !tags.contains(tag) { tags.append(tag) } } }
+            let id = tags[try numbered(which, of: tags.count, "peg", in: name)]
+            guard let old = PegJoint.existing(id, in: workspace, preferring: body.id, clearance: Fit.preferredClearance) else {
+                throw Failure("That peg cannot be changed (pegs made before October 24, 2026 can be resized from their faces).")
+            }
+            var spec = old.spec
+            if let diameter { spec.diameter = diameter }
+            if let height { spec.height = height }
+            if let clearance { spec.clearance = clearance }
+            guard spec.isValid else { throw Failure("A peg is 1–50 mm across and 0.5–100 mm tall, with 0.01–2 mm clearance.") }
+            guard let result = PegJoint.replace(old, with: spec, at: old.center) else { throw Failure("A peg that size does not fit there.") }
+            next = result.workspace
+            checking = next.bodies.map(\.id)
+            change = "Changed a peg of \(name) to Ø\(Self.mm(spec.diameter)) × \(Self.mm(spec.height)) mm, \(result.sockets.count == 1 ? "1 socket" : "\(result.sockets.count) sockets")"
+        default:
+            throw Failure("Choose a hole, thread, text, or peg to change.")
+        }
+        do {
+            try keep(next, change: change, checking: checking, focus: .body(body.id))
+        } catch {
+            throw Failure("\(name) does not build with that change (a fillet or chamfer on it may not follow); try other values.")
+        }
+        return change + "."
+    }
+
     /// Sets a round face's diameter, or a flat face's distance to the parallel face behind it.
     @discardableResult mutating func resizeFace(body bodyName: String, face spec: String, value: Double) throws -> String {
         let body = try body(named: bodyName), solid = try buildable(body), index = try face(spec, of: body)

@@ -31,8 +31,9 @@ import simd
     text: raised or sunk lettering on a face. scale: make a body bigger or smaller by a percentage or factor. \
     color: give a body a color. rename: give a body a name. \
     group: put bodies into a named group in the Model Tree (hide and show also take a group's name). \
-    delete hole: remove a hole from a body.
-    """, .anyOf(["scale", "color", "rename", "group", "delete hole", "new box", "new cylinder", "boss", "round boss", "pocket", "round pocket", "slot", "hole", "screw hole", "corner screw holes",
+    delete hole: remove a hole from a body. \
+    change feature: change a hole, thread, text, or peg already made (its size, depth, height, or words).
+    """, .anyOf(["scale", "color", "rename", "group", "delete hole", "change feature", "new box", "new cylinder", "boss", "round boss", "pocket", "round pocket", "slot", "hole", "screw hole", "corner screw holes",
                  "fillet", "chamfer", "shell", "set height", "move", "copy", "rotate", "delete", "hide", "show", "extrude sketch", "peg", "fit test", "thread", "matching part", "text"]))
     var action: String
     @Guide(description: "The user's own words for this change, copied exactly (not rephrased), with all of its numbers and sizes")
@@ -113,6 +114,13 @@ import simd
 @Generable struct ThreadValues {
     @Guide(description: "hole for a thread inside a hole (nut), boss for one on a round post (bolt)", .anyOf(["hole", "boss"])) var face: String
     @Guide(description: "Size such as M8, M8x1 for a fine pitch, or 1/4 for inch; empty to fit the face") var size: String
+}
+@Generable struct FeatureEditValues {
+    @Guide(description: "What is being changed", .anyOf(["hole", "thread", "text", "peg"])) var feature: String
+    @Guide(description: "New size: M2 to M5 for a screw hole, M8 or M8x1 for a thread; empty to keep it") var size: String
+    @Guide(description: "New diameter in mm; 0 to keep it") var diameter: Double
+    @Guide(description: "New depth of a hole, or height of text or a peg, in mm; 0 to keep it") var height: Double
+    @Guide(description: "New words for text, without quotes; empty to keep them") var text: String
 }
 @Generable struct EdgeValues {
     @Guide(description: "Which edges", .anyOf(["all", "top", "bottom", "vertical", "front", "back", "left", "right"])) var edges: String
@@ -396,6 +404,29 @@ enum AssistantPlanner {
             try bench.rename(item: name, to: v.name)
         case "delete":
             try bench.delete(items: [try await body(for: part, in: bench)])
+        case "change feature":
+            // The body's newest one of the kind its words name.
+            let name = try await body(for: part, in: bench)
+            let v = try await values(FeatureEditValues.self, for: part, bench: bench)
+            let words = part.text.lowercased()
+            let named = [("thread", "thread"), ("peg", "peg"), ("pin", "peg"), ("text", "text"), ("label", "text"), ("letter", "text"),
+                         ("word", "text"), ("hole", "hole")].first { words.contains($0.0) }?.1
+            let feature = named ?? v.feature
+            let size = v.size.trimmingCharacters(in: .whitespaces)
+            switch feature {
+            case "hole":
+                try bench.editFeature(body: name, feature: feature, which: "last", kind: holeKind(words) == .simple ? nil : holeKind(words).rawValue,
+                                      size: size.isEmpty ? nil : size, diameter: v.diameter > 0 ? v.diameter : nil,
+                                      depth: v.height > 0 ? v.height : nil, through: words.contains("through") ? true : nil)
+            case "thread":
+                try bench.editFeature(body: name, feature: feature, which: "last", size: size.isEmpty ? nil : size)
+            case "text":
+                try bench.editFeature(body: name, feature: feature, which: "last", height: v.height > 0 ? v.height : nil,
+                                      text: v.text.isEmpty ? nil : v.text)
+            default:
+                try bench.editFeature(body: name, feature: "peg", which: "last", diameter: v.diameter > 0 ? v.diameter : nil,
+                                      height: v.height > 0 ? v.height : nil)
+            }
         case "delete hole":
             // The selected hole, or else the body's first.
             let name = try await body(for: part, in: bench)

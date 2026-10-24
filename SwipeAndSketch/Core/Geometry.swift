@@ -475,12 +475,16 @@ struct SolidBody: Codable, Equatable, Identifiable, Sendable {
     var color: BodyColor?
     /// The Model Tree group it sits in (Groups.swift). Omitted at the top of the tree.
     var group: UUID?
+    /// A separate peg's pin: what it stands on, for editing it with its sockets (FeatureEditing.swift).
+    /// Omitted otherwise.
+    var peg: PegPin?
     /// Where the extrusion starts along the normal: the sketch plane, or half the depth back.
     var baseOffset: Double { symmetric == true ? -depth / 2 : 0 }
     /// Straight sides, starting on the sketch plane: the extrusion whose faces and edges have names.
     var hasPlainSides: Bool { (taper ?? 0) == 0 }
     var isValid: Bool {
-        guard ItemNames.isValid(name), color != .gray else { return false }
+        guard ItemNames.isValid(name), color != .gray,
+              peg.map({ Fit.clearanceRange.contains($0.clearance) && PegSpec.embedRange.contains($0.embed) }) ?? true else { return false }
         if symmetric != nil || taper != nil {
             guard imported == nil, revolve == nil, symmetric != false, ExtrusionCut.taperRange.contains(taper ?? 0) else { return false }
         }
@@ -495,7 +499,7 @@ struct SolidBody: Codable, Equatable, Identifiable, Sendable {
         self.id = id; self.profile = profile; self.depth = depth; self.finishes = finishes; self.cuts = cuts
     }
 
-    private enum CodingKeys: String, CodingKey { case id, profile, depth, finishes, cuts, hidden, revolve, imported, symmetric, taper, name, color, group }
+    private enum CodingKeys: String, CodingKey { case id, profile, depth, finishes, cuts, hidden, revolve, imported, symmetric, taper, name, color, group, peg }
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
@@ -511,6 +515,7 @@ struct SolidBody: Codable, Equatable, Identifiable, Sendable {
         name = try container.decodeIfPresent(String.self, forKey: .name)
         color = try container.decodeIfPresent(BodyColor.self, forKey: .color)
         group = try container.decodeIfPresent(UUID.self, forKey: .group)
+        peg = try container.decodeIfPresent(PegPin.self, forKey: .peg)
     }
     /// Bodies without finishes or cuts encode exactly as schema version 1 did.
     func encode(to encoder: Encoder) throws {
@@ -528,6 +533,7 @@ struct SolidBody: Codable, Equatable, Identifiable, Sendable {
         if let name { try container.encode(name, forKey: .name) }
         if let color { try container.encode(color, forKey: .color) }
         if let group { try container.encode(group, forKey: .group) }
+        if let peg { try container.encode(peg, forKey: .peg) }
     }
 }
 

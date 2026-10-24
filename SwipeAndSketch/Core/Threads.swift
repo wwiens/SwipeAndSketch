@@ -450,10 +450,11 @@ extension SolidBody {
         return axis.z > 1e-6 || abs(axis.z) <= 1e-6 && (axis.y > 1e-6 || abs(axis.y) <= 1e-6 && axis.x > 0)
     }
 
-    /// This solid with `spec` threaded into it, or nil when the kernel cannot build it.
-    func threading(_ spec: ThreadSpec) -> SolidBody? {
+    /// This solid with `spec` threaded into it (at `cuts[index]`, before the steps from there on, when
+    /// given), or nil when the kernel cannot build it.
+    func threading(_ spec: ThreadSpec, at index: Int? = nil) -> SolidBody? {
         var result = self
-        result.cuts.append(.thread(of: self, spec))
+        result.cuts.insert(.thread(of: self, spec), at: index.map { min(max($0, 0), cuts.count) } ?? cuts.count)
         guard result.isValid, (try? SolidKernel.solid(for: result)) != nil else { return nil }
         return result
     }

@@ -554,6 +554,8 @@ struct HoleDraft: Equatable {
     var spec: HoleSpec
     /// nil = through the solid.
     var depth: Double?
+    /// Editing the hole at this step of the solid's `cuts` (Edit Hole) instead of adding one.
+    var replacing: Int?
 }
 
 /// A peg being placed on a face in sketch mode; Done also cuts its socket in whatever it pushes into.
@@ -562,6 +564,8 @@ struct PegDraft: Equatable {
     var plane: SketchPlane
     var center: Point2
     var spec: PegSpec
+    /// Editing this peg and its sockets (Edit Peg) instead of adding one.
+    var editing: PegJoint.Existing?
 }
 
 /// A thread being set up on a hole or round boss. Its preview is built in the background (a long
@@ -575,6 +579,9 @@ struct ThreadDraft: Equatable {
     var length: Double?
     /// The thread is screwed in at the `ends.end` side of the face.
     var atEnd: Bool = true
+    /// Editing the thread at this step of the solid's `cuts` (Edit Thread): `face` is then a face of
+    /// the solid without it.
+    var replacing: Int?
 
     /// What is cut: the spec cut short to `length`.
     var built: ThreadSpec? { length.map { spec.shortened(to: $0, atEnd: atEnd) } ?? spec }
@@ -607,6 +614,8 @@ struct TextDraft: Equatable {
     var depth: Double
     var angle: Double
     var spec: TextSpec?
+    /// Editing the text at this step of the solid's `cuts` (Edit Text) instead of adding it.
+    var replacing: Int?
 }
 
 /// The section view (October 21, 2026): solids drawn cut away on one side of a plane parallel to
@@ -1993,14 +2002,16 @@ struct DimensionEdit: Identifiable {
             return draft.openings.isEmpty ? "Tap at least one face to leave open, such as the top." :
                 "Tap more faces to open or close them. Drag the double-arrow or tap the thickness. Done hollows the solid."
         }
-        if holeDraft != nil {
+        if let draft = holeDraft {
             if let draftError { return draftError }
-            return "Choose the hole type and size below. Tap elsewhere on the face to move it, or tap a value to edit it."
+            return "Choose the hole type and size below. Tap elsewhere on the face to move it, or tap a value to edit it." +
+                (draft.replacing != nil ? " Done keeps the change; Cancel leaves the hole as it was." : "")
         }
         if let draft = textDraft {
             if let textError { return textError }
             if isBuildingText { return "Building the letters…" }
-            return (draft.depth > 0 ? "Raised" : "Sunk") + " text. Type it below, pick a font, or tap the height or depth. Tap elsewhere on the face to move it, or Done."
+            return (draft.depth > 0 ? "Raised" : "Sunk") + " text. Type it below, pick a font, or tap the height or depth. Tap elsewhere on the face to move it, or Done." +
+                (draft.replacing != nil ? " Cancel leaves the text as it was." : "")
         }
         if let draft = threadDraft {
             if let threadError { return threadError }
@@ -2008,7 +2019,8 @@ struct DimensionEdit: Identifiable {
             if let threadWall, let spec = draft.built {
                 return spec.wallWarning(threadWall, lengthText) + " Choose Raised to add the ridges onto the face instead, or change the size or pitch."
             }
-            return draft.spec.fitSummary(lengthText) + " Change the size, pitch, or length below, or tap a value to type your own. Done \(draft.spec.isRaised ? "adds" : "cuts") it."
+            return draft.spec.fitSummary(lengthText) + " Change the size, pitch, or length below, or tap a value to type your own. " +
+                (draft.replacing != nil ? "Done keeps the change; Cancel leaves the thread as it was." : "Done \(draft.spec.isRaised ? "adds" : "cuts") it.")
         }
         if pegDraft != nil {
             if let draftError { return draftError }
@@ -2020,7 +2032,8 @@ struct DimensionEdit: Identifiable {
                 (names[id] ?? "A solid") + (workspace.isHidden(body: id) ? " (hidden)" : "")
             }
             return "Sockets go into \(sockets.joined(separator: ", ")) with the clearance below. Tap elsewhere to move the peg, or Done." +
-                (pegDraft?.spec.separate == true ? " The peg is its own solid, to print separately." : "")
+                (pegDraft?.spec.separate == true ? " The peg is its own solid, to print separately." : "") +
+                (pegDraft?.editing != nil ? " Cancel leaves the peg as it was." : "")
         }
         if let draft = finishDraft {
             if let finishError { return finishError }
@@ -2084,7 +2097,13 @@ struct DimensionEdit: Identifiable {
         }
         if let face = selectedFace {
             if face.plane == nil, selectedThread != nil {
-                return "Thread selected. Choose Matching Part to make the nut, cap, bolt, or plug that screws onto it."
+                return "Thread selected. Edit Thread changes its size, pitch, or length; Matching Part makes the nut, cap, bolt, or plug that screws onto it."
+            }
+            switch selectedFeature {
+            case .hole: return "Hole selected. Edit Hole changes its type, size, or depth, or moves it; Delete Hole takes it out. Double-tap for the whole solid."
+            case .text: return "Text selected. Edit Text changes the words, font, size, or depth, or moves it. Double-tap for the whole solid."
+            case .peg: return "Peg selected. Edit Peg changes its size, clearance, or place, and its sockets follow. Double-tap for the whole solid."
+            case .thread, nil: break
             }
             if let finish = selectedFinish {
                 return "\(finish.kind.title) selected. Tap its \(finish.kind.sizeTitle.lowercased()) to change it, or choose Delete \(finish.kind.title) to make its edges sharp again; double-tap for the whole solid."
@@ -4660,15 +4679,24 @@ struct DimensionEdit: Identifiable {
     }
 
     func confirmHole() {
-        guard holeDraft != nil, draftError == nil, let preview = holePreview else { return }
+        guard let draft = holeDraft, draftError == nil, let preview = holePreview else { return }
         commit(preview)
         clearHoleDraft()
-        revalidateSketchMode()
-        // Stay in the Hole tool on this face for the next hole.
+        if draft.replacing != nil {
+            finishFeatureEdit(draft.bodyID, status: "Hole changed")
+        } else {
+            revalidateSketchMode()
+            // Stay in the Hole tool on this face for the next hole.
+        }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
-    func cancelHole() { clearHoleDraft(); dimensionEdit = nil }
+    func cancelHole() {
+        let editing = holeDraft?.replacing != nil ? holeDraft?.bodyID : nil
+        clearHoleDraft()
+        dimensionEdit = nil
+        if let editing { finishFeatureEdit(editing, status: nil) }
+    }
 
     private func clearHoleDraft() { holeDraft = nil; holePreview = nil; if shellDraft == nil { draftError = nil } }
 
@@ -4682,7 +4710,7 @@ struct DimensionEdit: Identifiable {
             return
         }
         var next = workspace
-        next.bodies[index].cuts.append(operation)
+        next.bodies[index] = next.bodies[index].placing(operation, replacing: draft.replacing)
         do {
             guard next.bodies[index].isValid else { throw SolidKernel.Failure(message: "") }
             _ = try SolidKernel.solid(for: next.bodies[index])
@@ -4690,7 +4718,8 @@ struct DimensionEdit: Identifiable {
             draftError = nil
         } catch {
             holePreview = nil
-            draftError = "This hole does not fit here. Move it onto the solid or change its size."
+            draftError = draft.replacing != nil ? "This hole does not fit here, or a thread or fillet made after it cannot follow. Try another size or place." :
+                "This hole does not fit here. Move it onto the solid or change its size."
         }
     }
 
@@ -4726,15 +4755,25 @@ struct DimensionEdit: Identifiable {
         guard let draft = pegDraft, draftError == nil, let preview = pegPreview, !isEditingBlocked else { return }
         let sockets = pegSockets.count
         commit(preview)
-        lastPeg = draft.spec
         clearPegDraft()
-        revalidateSketchMode()
-        let kind = draft.spec.separate ? "Separate peg added" : "Peg added"
-        status = sockets == 0 ? kind : "\(kind) · \(sockets == 1 ? "1 socket" : "\(sockets) sockets")"
+        let kind = draft.editing != nil ? "Peg changed" : draft.spec.separate ? "Separate peg added" : "Peg added"
+        let text = sockets == 0 ? kind : "\(kind) · \(sockets == 1 ? "1 socket" : "\(sockets) sockets")"
+        if draft.editing != nil {
+            finishFeatureEdit(draft.bodyID, status: text)
+        } else {
+            lastPeg = draft.spec
+            revalidateSketchMode()
+            status = text
+        }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
-    func cancelPeg() { clearPegDraft(); dimensionEdit = nil }
+    func cancelPeg() {
+        let editing = pegDraft?.editing != nil ? pegDraft?.bodyID : nil
+        clearPegDraft()
+        dimensionEdit = nil
+        if let editing { finishFeatureEdit(editing, status: nil) }
+    }
 
     private func clearPegDraft() {
         if pegDraft != nil { pegDraft = nil }
@@ -4745,7 +4784,9 @@ struct DimensionEdit: Identifiable {
 
     private func updatePeg(_ draft: PegDraft) {
         pegDraft = draft
-        guard let result = PegJoint.add(draft.spec, at: draft.center, on: draft.plane, to: draft.bodyID, in: workspace) else {
+        let made = draft.editing.map { PegJoint.replace($0, with: draft.spec, at: draft.center) } ??
+            PegJoint.add(draft.spec, at: draft.center, on: draft.plane, to: draft.bodyID, in: workspace)
+        guard let result = made else {
             // No stale preview: Done would otherwise make the previous peg.
             pegPreview = nil
             pegSockets = []
@@ -4801,12 +4842,21 @@ struct DimensionEdit: Identifiable {
         commit(preview)
         lastText = (draft.text, draft.font, draft.height, draft.depth)
         clearTextDraft()
-        revalidateSketchMode()
-        status = draft.depth > 0 ? "Text raised" : "Text sunk"
+        if draft.replacing != nil {
+            finishFeatureEdit(draft.bodyID, status: "Text changed")
+        } else {
+            revalidateSketchMode()
+            status = draft.depth > 0 ? "Text raised" : "Text sunk"
+        }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
-    func cancelText() { clearTextDraft(); dimensionEdit = nil }
+    func cancelText() {
+        let editing = textDraft?.replacing != nil ? textDraft?.bodyID : nil
+        clearTextDraft()
+        dimensionEdit = nil
+        if let editing { finishFeatureEdit(editing, status: nil) }
+    }
 
     private func clearTextDraft() {
         textGeneration += 1
@@ -4832,7 +4882,7 @@ struct DimensionEdit: Identifiable {
             return
         }
         var next = workspace
-        next.bodies[index].cuts.append(operation)
+        next.bodies[index] = next.bodies[index].placing(operation, replacing: draft.replacing)
         let body = next.bodies[index]
         isBuildingText = true
         Task { [weak self] in
@@ -4966,11 +5016,16 @@ struct DimensionEdit: Identifiable {
         commit(preview)
         clearThread()
         selection = .body(draft.bodyID)
-        status = "Threaded \(draft.built?.title ?? draft.spec.title)"
+        status = (draft.replacing != nil ? "Thread changed to " : "Threaded ") + (draft.built?.title ?? draft.spec.title)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
-    func cancelThread() { clearThread(); dimensionEdit = nil }
+    func cancelThread() {
+        let editing = threadDraft?.replacing != nil ? threadDraft?.bodyID : nil
+        clearThread()
+        dimensionEdit = nil
+        if let editing { selection = .body(editing) }
+    }
 
     private func clearThread() {
         if tool == .thread { tool = .select }
@@ -5006,11 +5061,16 @@ struct DimensionEdit: Identifiable {
             return
         }
         guard let index = workspace.bodies.firstIndex(where: { $0.id == draft.bodyID }) else { return }
-        let body = workspace.bodies[index], base = workspace
+        // Editing: the solid without the old thread, the new one going in at its step.
+        var body = workspace.bodies[index]
+        let replaced = draft.replacing.flatMap { body.cuts.indices.contains($0) ? body.cuts.remove(at: $0) : nil }
+        let base = workspace, step = draft.replacing
         isBuildingThread = true
-        Task { [weak self] in
+        Task { [weak self, body] in
             let (threaded, wall) = await Task.detached(priority: .userInitiated) {
-                (body.threading(spec), (try? SolidKernel.solid(for: body)).flatMap { body.wallBehindThread(spec, in: $0) })
+                var threaded = body.threading(spec, at: step)
+                if let step, let replaced { threaded?.cuts[step].id = replaced.id }
+                return (threaded, (try? SolidKernel.solid(for: body)).flatMap { body.wallBehindThread(spec, in: $0) })
             }.value
             guard let self, generation == self.threadGeneration else { return }
             self.isBuildingThread = false
@@ -5163,6 +5223,109 @@ struct DimensionEdit: Identifiable {
             if distance < (best?.distance ?? .infinity) { best = (distance, moved) }
         }
         return best.flatMap { faceSelection(bodyID: body.id, near: $0.point) }
+    }
+
+    // MARK: Edit after Done (October 24, 2026)
+
+    /// The hole, thread, text, or peg the selection is on, which Edit reopens in its tool: a face
+    /// of one (a socket's wall counts as its peg's), or a separate peg's pin.
+    var selectedFeature: EditableFeature? {
+        guard !isEditingBlocked else { return nil }
+        if let body = selectedBody, let pin = body.peg { return .peg(pin.id, body: body.id) }
+        guard let face = selectedFace, selectedFinish == nil, let body = workspace.bodies.first(where: { $0.id == face.bodyID }) else { return nil }
+        let point = face.point ?? face.center
+        if let cache = featureCache, cache.body == body, cache.face == face.face, cache.point == point { return cache.feature }
+        var feature: EditableFeature?
+        if let thread = selectedThread, thread.bodyID == body.id {
+            feature = .thread(body: body.id, cut: thread.cut)
+        } else if let tag = body.pegTag(at: point), PegJoint.existing(tag, in: workspace, preferring: body.id, clearance: fitClearance) != nil {
+            feature = .peg(tag, body: body.id)
+        } else if let cut = body.textCut(at: point) {
+            feature = .text(body: body.id, cut: cut)
+        } else if face.plane == nil, let probe = selectedHoleProbe?.probe, let cut = body.holeCut(around: probe) {
+            feature = .hole(body: body.id, cut: cut)
+        }
+        featureCache = (body, face.face, point, feature)
+        return feature
+    }
+    private var featureCache: (body: SolidBody, face: Int, point: SIMD3<Double>, feature: EditableFeature?)?
+
+    /// Reopens the selected feature in its tool with the values it was made with; Done puts the
+    /// changed one in its place (one undo step), and Cancel leaves it as it was.
+    func editSelectedFeature() {
+        guard let feature = selectedFeature else { return }
+        switch feature {
+        case .hole(let body, let cut): editHole(bodyID: body, cut: cut)
+        case .thread(let body, let cut): editThread(bodyID: body, cut: cut)
+        case .text(let body, let cut): editText(bodyID: body, cut: cut)
+        case .peg(let id, let body): editPeg(id, from: body)
+        }
+    }
+
+    func editHole(bodyID: UUID, cut: Int) {
+        guard !isEditingBlocked, let body = workspace.bodies.first(where: { $0.id == bodyID }), body.cuts.indices.contains(cut),
+              let spec = body.cuts[cut].hole, let circle = body.cuts[cut].profile.circle else { return }
+        let operation = body.cuts[cut]
+        guard enterFeatureSketch(bodyID: bodyID, plane: operation.profile.plane, at: circle.center, tool: .hole) else { return }
+        updateHole(HoleDraft(bodyID: bodyID, plane: operation.profile.plane, center: circle.center, spec: spec,
+                             depth: operation.throughAll ? nil : operation.depth, replacing: cut))
+    }
+
+    func editText(bodyID: UUID, cut: Int) {
+        guard !isEditingBlocked, let body = workspace.bodies.first(where: { $0.id == bodyID }), body.cuts.indices.contains(cut),
+              let spec = body.cuts[cut].text else { return }
+        let operation = body.cuts[cut]
+        guard enterFeatureSketch(bodyID: bodyID, plane: operation.profile.plane, at: spec.center, tool: .text) else { return }
+        updateText(TextDraft(bodyID: bodyID, plane: operation.profile.plane, center: spec.center, text: spec.text, font: spec.font,
+                             height: spec.height, depth: operation.depth, angle: spec.angle, replacing: cut))
+    }
+
+    func editThread(bodyID: UUID, cut: Int) {
+        guard !isEditingBlocked, let body = workspace.bodies.first(where: { $0.id == bodyID }) else { return }
+        guard let setup = body.threadSetup(at: cut) else {
+            status = "The face this thread is on is gone, so it cannot be edited. Delete it with Undo or Delete Hole."
+            return
+        }
+        cancelTransient()
+        endSketchMode()
+        selection = nil
+        tool = .thread
+        updateThread(ThreadDraft(bodyID: bodyID, face: setup.face, spec: setup.spec, length: setup.length, atEnd: setup.atEnd, replacing: cut))
+    }
+
+    func editPeg(_ id: UUID, from bodyID: UUID?) {
+        guard !isEditingBlocked, let old = PegJoint.existing(id, in: workspace, preferring: bodyID, clearance: fitClearance) else { return }
+        guard enterFeatureSketch(bodyID: old.bodyID, plane: old.plane, at: old.center, tool: .peg) else { return }
+        updatePeg(PegDraft(bodyID: old.bodyID, plane: old.plane, center: old.center, spec: old.spec, editing: old))
+    }
+
+    /// Sketch mode on the face `plane` lies on, looking at `center`, with `tool` ready, as when the
+    /// tool was first used there. False (with a status) when no face of the solid lies on the plane.
+    private func enterFeatureSketch(bodyID: UUID, plane featurePlane: SketchPlane, at center: Point2, tool value: ModelingTool) -> Bool {
+        guard let body = workspace.bodies.first(where: { $0.id == bodyID }), let solid = try? SolidKernel.solid(for: body) else { return false }
+        let normal = featurePlane.normalAxis
+        guard let index = (0..<solid.faceCount).first(where: { index in
+            solid.facePlane(index).map { simd_dot($0.normal, normal) > 1 - 1e-9 && abs(simd_dot($0.origin - featurePlane.origin, normal)) < 1e-6 } ?? false
+        }) else {
+            status = "The face this was made on is gone, so it cannot be edited here."
+            return false
+        }
+        cancelTransient()
+        let middle = featurePlane.point(center)
+        plane = featurePlane
+        sketchMode = SketchMode(plane: featurePlane, face: FaceSelection(bodyID: bodyID, face: index, plane: featurePlane, center: middle))
+        selection = nil
+        tool = value
+        requestCamera(.alignAt(featurePlane, middle))
+        return true
+    }
+
+    /// After Done or Cancel on an edit: out of the tool and the face sketch, with the solid selected.
+    private func finishFeatureEdit(_ bodyID: UUID, status text: String?) {
+        endSketchMode()
+        tool = .select
+        selection = workspace.bodies.contains(where: { $0.id == bodyID }) ? .body(bodyID) : nil
+        if let text { status = text }
     }
 
     /// Waits for a matching part being built (tests).

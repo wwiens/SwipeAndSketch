@@ -231,7 +231,8 @@ enum HelpTopic: String, CaseIterable, Identifiable {
             HelpOverview(
                 summary: "Put a ready-made screw hole in a face: simple, counterbore, countersink, or heat-set insert.",
                 steps: ["Tap the face where the hole goes. It snaps to the purple dots.", "Choose the type and size (M2 to M5) below.", "Tap Done to drill it. The tool stays ready for the next hole."],
-                tips: ["Tap the diameter or depth to type your own. A counterbore or countersink widens with the hole.", "Turn off Through for a hole that stops partway."])
+                tips: ["Tap the diameter or depth to type your own. A counterbore or countersink widens with the hole.", "Turn off Through for a hole that stops partway.",
+                       "To change a hole later, tap its wall and choose Edit Hole: change it, or tap elsewhere on the face to move it, and tap Done."])
         case .editShape:
             HelpOverview(
                 summary: "This shape is selected. Its sizes show beside it.",
@@ -370,7 +371,8 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                         "Any solid the peg pushes into, even a hidden one, gets a socket, wider and deeper by the clearance. Tap Done; the tool stays ready for the next peg."],
                 tips: ["Joined makes the peg part of the face's solid. Separate makes it its own solid, a dowel pin to print on its own (lying down, for strength); it reaches into the face by Into Face, which gets a socket too (0 just stands it on the face).",
                        "Tap the diameter or height to change them.", "The clearance starts from your Fit Clearance (project menu). Tight suits press fits; Loose slides apart easily.",
-                       "The peg's tip is beveled so it starts into its socket easily."])
+                       "The peg's tip is beveled so it starts into its socket easily.",
+                       "To change a peg later, tap it (or its socket, or select a separate peg) and choose Edit Peg. Its sockets follow its new size and place."])
         case .text:
             HelpOverview(
                 summary: "Add raised or sunk lettering to a flat face: labels, names, version numbers.",
@@ -379,7 +381,8 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                         "Choose Raised or Sunk, tap the height or depth to change them, and tap Done."],
                 tips: ["Letters 5 mm tall and 0.6 to 1 mm deep print cleanly on most printers.",
                        "Sunk text on a face that prints facing up comes out crisper than raised text on a side.",
-                       "The letters are saved with the project, so they rebuild the same on any iPad."])
+                       "The letters are saved with the project, so they rebuild the same on any iPad.",
+                       "To change text later, tap a letter and choose Edit Text."])
         case .thread:
             HelpOverview(
                 summary: "Make a real screw thread in a hole (like a nut) or on a round boss (like a bolt), ready to print: cut into the face, or raised onto it.",
@@ -399,6 +402,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                        "More starts wind 2 to 4 ridges side by side, so a lid closes in fewer turns (each turn advances the pitch times the starts). Its matching part gets the same starts.",
                        "Threads finer than about 0.8 mm pitch are hard to print on most FDM printers; M5 and larger work best. Fine pitches under 0.5 mm suit resin printers.",
                        "To make the part that screws on, tap the finished thread and choose Matching Part.",
+                       "To change a thread later, tap it and choose Edit Thread. A matching part already made keeps its own thread: edit it too, or make it again.",
                        "Mirroring a threaded part makes its threads left-hand."])
         case .matingPart:
             HelpOverview(
@@ -407,7 +411,8 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                         "It appears already screwed on, so you can see it fits. Move it aside, or export with Arrange on Plate, to print the parts separately."],
                 tips: ["It gets the same size, clearance, and hand as the thread, so the two turn together once printed.",
                        "A cap's ceiling rests on the end of the thread; a bolt's or plug's head sits on the face the hole opens onto.",
-                       "Print a cap or plug with its flat top on the plate."])
+                       "Print a cap or plug with its flat top on the plate.",
+                       "Edit Thread changes the thread's size, pitch, or length after it is made."])
         case .fitTest:
             HelpOverview(
                 summary: "A small print that finds the right clearance for your printer.",
@@ -511,7 +516,13 @@ extension ModelingSession {
         if selectedShape != nil { return .editShape }
         if selectedFace != nil {
             if let finish = selectedFinish { return finish.kind == .fillet ? .fillet : .chamfer }
-            return selectedThread != nil ? .matingPart : .face
+            if selectedThread != nil { return .matingPart }
+            switch selectedFeature {
+            case .hole: return .hole
+            case .text: return .text
+            case .peg: return .peg
+            case .thread, nil: return .face
+            }
         }
         switch tool {
         case .select: return sketchMode != nil ? .sketching : .gettingStarted

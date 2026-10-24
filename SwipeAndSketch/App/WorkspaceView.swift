@@ -596,8 +596,15 @@ struct WorkspaceView: View {
     }
 
     @ViewBuilder private func plainFaceActions(_ face: FaceSelection) -> some View {
-        stripLabel(face.plane != nil ? "Flat face" : "Curved face")
-        selectionMeasureLabel
+        if let feature = session.selectedFeature {
+            // A finished hole, thread, text, or peg reopens in its tool.
+            stripLabel(feature.title)
+            selectionMeasureLabel
+            stripButton("Edit \(feature.title)", icon: featureIcon(feature), id: "selection.editFeature") { session.editSelectedFeature() }
+        } else {
+            stripLabel(face.plane != nil ? "Flat face" : "Curved face")
+            selectionMeasureLabel
+        }
         if face.plane != nil {
             AnyView(flatFaceActions)
         }
@@ -618,6 +625,10 @@ struct WorkspaceView: View {
         } else {
             AnyView(flatFaceMoreActions)
         }
+    }
+
+    private func featureIcon(_ feature: EditableFeature) -> SSIcon {
+        switch feature { case .hole: .hole; case .thread: .thread; case .text: .text; case .peg: .peg }
     }
 
     @ViewBuilder private var flatFaceActions: some View {
@@ -654,6 +665,10 @@ struct WorkspaceView: View {
         if session.workspace.bodies.count > 1 { AnyView(combineMenu) }
         AnyView(transformMenu(solid: true))
         if !session.matingChoices.isEmpty { matingMenu }
+        if let feature = session.selectedFeature {
+            // A separate peg's pin.
+            stripButton("Edit \(feature.title)", icon: featureIcon(feature), id: "selection.editFeature") { session.editSelectedFeature() }
+        }
         Menu { colorMenu(body.id, current: body.color ?? .gray) } label: { StripLabel(title: "Color", icon: .color, showsMenu: true) }
             .accessibilityLabel("Color").accessibilityIdentifier("selection.color")
         stripButton("Duplicate", icon: .copy, id: "selection.duplicate") { session.duplicate() }

@@ -88,7 +88,8 @@ enum PegJoint {
     /// on a box is hidden to reach the rim under it. A joined peg becomes part of the solid; a separate
     /// one is its own solid after it, reaching `embed` into the face, which then gets a socket too.
     /// Nil when the peg does not sit on the solid.
-    static func add(_ spec: PegSpec, at center: Point2, on plane: SketchPlane, to bodyID: UUID, in workspace: Workspace) -> Result? {
+    /// Its join, tip bevel, pin, and sockets carry the tag `id`, so it can be edited later.
+    static func add(_ spec: PegSpec, at center: Point2, on plane: SketchPlane, to bodyID: UUID, in workspace: Workspace, id: UUID = UUID()) -> Result? {
         guard spec.isValid, let index = workspace.bodies.firstIndex(where: { $0.id == bodyID }),
               let peg = circle(spec.diameter, at: center, on: plane),
               let socket = circle(spec.socketDiameter, at: center, on: plane) else { return nil }
@@ -101,6 +102,7 @@ enum PegJoint {
             guard let base = SketchPlane.through(bottom, normal: plane.normalAxis),
                   let profile = circle(spec.diameter, at: base.coordinates(of: bottom), on: base) else { return nil }
             var pin = SolidBody(profile: profile, depth: spec.embed + spec.height)
+            pin.peg = PegPin(id: id, body: bodyID, clearance: spec.clearance, embed: spec.embed)
             if spec.leadIn > 0 {
                 var ends = [ExtrusionEdge(position: .cap, index: 0)]
                 if spec.embed > 0 { ends.append(ExtrusionEdge(position: .base, index: 0)) }
@@ -111,7 +113,7 @@ enum PegJoint {
             if spec.embed > 0 {
                 // Its socket in the face it stands on proves it sits on the solid.
                 guard let before = try? SolidKernel.solid(for: own).volume else { return nil }
-                own.cuts.append(ExtrusionCut(profile: socket, depth: -(spec.embed + spec.clearance), operation: .cut))
+                own.cuts.append(tagged(ExtrusionCut(profile: socket, depth: -(spec.embed + spec.clearance), operation: .cut), id))
                 guard own.isValid, let after = try? SolidKernel.solid(for: own).volume, after < before - 1e-6 else { return nil }
                 next.bodies[index] = own
                 sockets.append(own.id)
@@ -123,11 +125,12 @@ enum PegJoint {
             pegID = pin.id
         } else {
             var body = next.bodies[index]
-            body.cuts.append(ExtrusionCut(profile: peg, depth: spec.height, operation: .join))
+            body.cuts.append(tagged(ExtrusionCut(profile: peg, depth: spec.height, operation: .join), id))
             guard body.isValid, let solid = try? SolidKernel.solid(for: body) else { return nil }
             // The bevel is a finish on the tip's edge; a peg that cannot take one keeps a square tip.
             if spec.leadIn > 0, let tip = solid.edge(near: plane.point(center + Point2(x: spec.diameter / 2, y: 0), height: spec.height)),
-               let beveled = body.finishing(.chamfer, edges: [tip], size: spec.leadIn) {
+               var beveled = body.finishing(.chamfer, edges: [tip], size: spec.leadIn) {
+                if beveled.cuts.count > body.cuts.count { beveled.cuts[beveled.cuts.count - 1].peg = id }
                 body = beveled
             }
             next.bodies[index] = body
@@ -136,7 +139,7 @@ enum PegJoint {
         for other in next.bodies.indices where next.bodies[other].id != bodyID && next.bodies[other].id != pegID {
             var target = next.bodies[other]
             guard let before = try? SolidKernel.solid(for: target).volume else { continue }
-            target.cuts.append(ExtrusionCut(profile: socket, depth: spec.socketDepth, operation: .cut))
+            target.cuts.append(tagged(ExtrusionCut(profile: socket, depth: spec.socketDepth, operation: .cut), id))
             guard target.isValid, let after = try? SolidKernel.solid(for: target).volume, after < before - 1e-6 else { continue }
             next.bodies[other] = target
             sockets.append(target.id)
@@ -144,6 +147,12 @@ enum PegJoint {
         let order = next.bodies.map(\.id)
         sockets.sort { order.firstIndex(of: $0)! < order.firstIndex(of: $1)! }
         return Result(workspace: next, sockets: sockets, peg: pegID)
+    }
+
+    private static func tagged(_ cut: ExtrusionCut, _ id: UUID) -> ExtrusionCut {
+        var cut = cut
+        cut.peg = id
+        return cut
     }
 
     static func circle(_ diameter: Double, at center: Point2, on plane: SketchPlane) -> SketchProfile? {

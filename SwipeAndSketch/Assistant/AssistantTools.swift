@@ -333,6 +333,36 @@ struct EditFinishTool: Tool {
     }
 }
 
+struct EditFeatureTool: Tool {
+    let context: AssistantContext
+    let name = "edit_feature"
+    let description = "Changes a hole, thread, text, or peg a body already has, in place; omitted values stay as they are. A peg's sockets follow it."
+    @Generable struct Arguments {
+        var body: String
+        @Guide(.anyOf(["hole", "thread", "text", "peg"])) var feature: String
+        @Guide(description: "Which one: 1 for the first of that kind made, 2 for the next, or last") var which: String
+        @Guide(description: "Hole: simple, counterbore, countersink, or insert") var type: String?
+        @Guide(description: "Hole: M2–M5; thread: M2–M36 (M8x1 for a fine pitch) or inch such as 1/4") var size: String?
+        @Guide(description: "Hole: a plain round hole of this diameter; thread: custom major diameter; peg: diameter (mm)") var diameter: Double?
+        @Guide(description: "Hole: blind depth in mm; text: mm the letters stand out, negative to sink them") var depth: Double?
+        @Guide(description: "Hole: true to make it go through") var through: Bool?
+        @Guide(description: "Text: capital letter height; peg: how far it stands out (mm)") var height: Double?
+        @Guide(description: "Thread: pitch in mm") var pitch: Double?
+        @Guide(description: "Thread: threaded length in mm from its open end") var length: Double?
+        @Guide(description: "Thread or peg: gap in mm") var clearance: Double?
+        @Guide(description: "Thread: 1–4 starts") var starts: Int?
+        @Guide(description: "Text: the new words") var text: String?
+    }
+    func call(arguments: Arguments) async throws -> String {
+        await context.run("Changing a \(arguments.feature) of \(arguments.body)") { bench in
+            try bench.editFeature(body: arguments.body, feature: arguments.feature, which: arguments.which, kind: arguments.type, size: arguments.size,
+                                  diameter: arguments.diameter, depth: arguments.depth, through: arguments.through, height: arguments.height,
+                                  pitch: arguments.pitch, length: arguments.length, clearance: arguments.clearance, starts: arguments.starts,
+                                  text: arguments.text)
+        }
+    }
+}
+
 struct ResizeFaceTool: Tool {
     let context: AssistantContext
     let name = "resize_face"
@@ -835,7 +865,7 @@ extension AssistantContext {
          FilletEdgesTool(context: self), ChamferEdgesTool(context: self), ShellTool(context: self), AddHoleTool(context: self), AddPegTool(context: self), AddThreadTool(context: self), AddMatingPartTool(context: self), AddTextTool(context: self), FitTestTool(context: self),
          MoveItemsTool(context: self), SetDimensionTool(context: self), DeleteItemsTool(context: self), SetVisibilityTool(context: self), CombineTool(context: self),
          MirrorTool(context: self), PatternTool(context: self), AddPlaneTool(context: self), RevolveTool(context: self), RoundSketchCornersTool(context: self), MeasureTool(context: self),
-         ScaleItemsTool(context: self), DeleteFacesTool(context: self), DeleteHoleTool(context: self), EditFinishTool(context: self), ResizeFaceTool(context: self), OffsetSketchTool(context: self), RenameItemTool(context: self), GroupItemsTool(context: self), UngroupTool(context: self),
+         ScaleItemsTool(context: self), DeleteFacesTool(context: self), DeleteHoleTool(context: self), EditFinishTool(context: self), EditFeatureTool(context: self), ResizeFaceTool(context: self), OffsetSketchTool(context: self), RenameItemTool(context: self), GroupItemsTool(context: self), UngroupTool(context: self),
          SetColorTool(context: self)]
     }
     /// The everyday tools, which fit the on-device model's smaller context.
