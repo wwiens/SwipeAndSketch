@@ -74,6 +74,8 @@ extension Workspace {
 /// sketch (October 21, 2026).
 enum TransformTarget: Hashable, Sendable {
     case sketch(UUID), body(UUID), shape(UUID)
+    /// Everything in a Model Tree group, nested groups included (October 24, 2026).
+    case group(UUID)
 }
 
 extension SolidBody {
@@ -133,6 +135,7 @@ extension Workspace {
         case .sketch(let id): transformingSketch(id, by: transform, copy: copy).map { ($0.workspace, .sketch($0.sketchID)) }
         case .body(let id): transformingBody(id, by: transform, copy: copy).map { ($0.workspace, .body($0.bodyID)) }
         case .shape(let id): transformingShape(id, by: transform, copy: copy).map { ($0.workspace, .shape($0.shapeID)) }
+        case .group(let id): transformingGroup(id, by: transform, copy: copy).map { ($0.workspace, .group($0.group)) }
         }
     }
 
@@ -247,5 +250,83 @@ struct TransformPivot: Equatable, Sendable {
             add(TransformPivot(kind: .faceCenter, point: center, direction: plane.normal))
         }
         return (points, lines)
+    }
+}
+
+// MARK: Groups as a unit (October 24, 2026)
+
+extension Workspace {
+    /// The middle of everything in group `id` (its solids' boxes and its sketches' shapes).
+    func center(ofGroup id: UUID) -> SIMD3<Double>? {
+        let contents = contents(of: id)
+        var points = contents.bodies.compactMap { id in bodies.first { $0.id == id } }.compactMap { try? SolidKernel.solid(for: $0).bounds }.flatMap { [$0.min, $0.max] }
+        points += contents.sketches.compactMap(sketch).flatMap { sketch in shapes(in: sketch.id).flatMap(\.outline).map { sketch.plane.point($0) } }
+        guard let first = points.first else { return nil }
+        return (points.reduce(first, simd_min) + points.reduce(first, simd_max)) / 2
+    }
+
+    /// A copy of group `id` with its nested groups and everything in them, next to it in the same
+    /// parent group: new solids, sketches, and planes after the rest. Returns the copy's id.
+    func duplicatingGroup(_ id: UUID) -> (workspace: Workspace, group: UUID)? {
+        guard let original = group(id) else { return nil }
+        let tree = groupAndDescendants(id)
+        var ids: [UUID: UUID] = [:]
+        for member in tree { ids[member] = UUID() }
+        var result = self
+        // Groups keep their order, each copy's parent being the copy of its parent.
+        let copies = groups.filter { tree.contains($0.id) }.map { group -> ItemGroup in
+            var copy = group
+            copy.id = ids[group.id]!
+            copy.parent = group.id == original.id ? original.parent : group.parent.flatMap { ids[$0] }
+            return copy
+        }
+        result.groups += copies
+        for body in bodies where body.group.map(tree.contains) == true {
+            var copy = body
+            copy.id = UUID()
+            copy.group = body.group.flatMap { ids[$0] }
+            result.bodies.append(copy)
+        }
+        for sketch in sketches where sketch.group.map(tree.contains) == true {
+            var copy = sketch
+            copy.id = UUID()
+            copy.group = sketch.group.flatMap { ids[$0] }
+            result.sketches.append(copy)
+            result.shapes += shapes(in: sketch.id).map { var shape = $0; shape.id = UUID(); shape.sketch = copy.id; return shape }
+        }
+        for plane in constructionPlanes where plane.group.map(tree.contains) == true {
+            var copy = plane
+            copy.id = UUID()
+            copy.group = plane.group.flatMap { ids[$0] }
+            result.constructionPlanes.append(copy)
+        }
+        let copy = ids[id]!
+        return result.isValid ? (result, copy) : nil
+    }
+
+    /// Moves or turns everything in group `id` (or, with `copy`, a copy of the group, leaving the
+    /// original in place). Returns the group that moved; nil when a solid no longer builds.
+    func transformingGroup(_ id: UUID, by transform: RigidTransform, copy: Bool) -> (workspace: Workspace, group: UUID)? {
+        var (result, moved) = copy ? (duplicatingGroup(id) ?? (self, id)) : (self, id)
+        guard !copy || moved != id else { return nil }
+        let contents = result.contents(of: moved)
+        for bodyID in contents.bodies {
+            guard let index = result.bodies.firstIndex(where: { $0.id == bodyID }), let body = result.bodies[index].transformed(by: transform) else { return nil }
+            SolidCache.shared.seed(body, from: result.bodies[index], by: transform)
+            result.bodies[index] = body
+        }
+        for sketchID in contents.sketches {
+            guard let index = result.sketches.firstIndex(where: { $0.id == sketchID }),
+                  let plane = result.sketches[index].plane.transformed(by: transform) else { return nil }
+            result.sketches[index].plane = plane
+            for i in result.shapes.indices where result.shapes[i].sketch == sketchID { result.shapes[i].plane = plane }
+        }
+        for planeID in contents.planes {
+            guard let index = result.constructionPlanes.firstIndex(where: { $0.id == planeID }),
+                  let plane = result.constructionPlanes[index].plane.transformed(by: transform) else { return nil }
+            result.constructionPlanes[index].plane = plane
+        }
+        guard result.isValid, contents.bodies.allSatisfy({ id in result.bodies.first { $0.id == id }.map { (try? SolidKernel.solid(for: $0)) != nil } ?? false }) else { return nil }
+        return (result, moved)
     }
 }

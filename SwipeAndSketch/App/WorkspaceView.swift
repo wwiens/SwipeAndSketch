@@ -560,6 +560,7 @@ struct WorkspaceView: View {
         if session.selectedEdge != nil { return AnyView(edgeActions) }
         if let body = session.selectedBody { return AnyView(bodyActions(body)) }
         if let sketch = session.selectedSketch { return AnyView(sketchActions(sketch)) }
+        if let group = session.selectedGroup { return AnyView(groupActions(group)) }
         if session.canExtrude { return AnyView(regionActions) }
         return AnyView(EmptyView())
     }
@@ -704,6 +705,20 @@ struct WorkspaceView: View {
             StripLabel(title: "Transform", icon: .align, showsMenu: true)
         }
         .accessibilityLabel("Transform").accessibilityIdentifier("selection.transform")
+    }
+
+    /// A Model Tree group: everything in it moves with the widget, and transforms, duplicates, and
+    /// exports together.
+    @ViewBuilder private func groupActions(_ id: UUID) -> some View {
+        let contents = session.workspace.contents(of: id)
+        stripLabel(session.workspace.groupNames[id] ?? "Group", id: "selection.groupName")
+        if !(contents.bodies.isEmpty && contents.sketches.isEmpty) {
+            AnyView(transformMenu(solid: false))
+            stripButton("Duplicate", icon: .copy, id: "selection.duplicate") { session.duplicate() }
+        }
+        if !contents.bodies.isEmpty {
+            stripButton("Export", icon: .export, id: "selection.export") { session.printSheet = .export }
+        }
     }
 
     @ViewBuilder private func sketchActions(_ sketch: Sketch) -> some View {

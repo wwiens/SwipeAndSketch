@@ -1720,6 +1720,7 @@ struct DimensionEdit: Identifiable {
         case .face(let face): return ([face.bodyID], [])
         case .sketch(let id): return ([], [id])
         case .shape(let id): return ([], workspace.shapes.first { $0.id == id }?.sketch.map { [$0] } ?? [])
+        case .group(let id): return (workspace.contents(of: id).bodies, workspace.contents(of: id).sketches)
         default: return ([], [])
         }
     }
@@ -1753,6 +1754,17 @@ struct DimensionEdit: Identifiable {
 
     /// A copy of the selected solid or sketch (or an item row's) right where it is, selected.
     func duplicate(_ item: ModelSelection? = nil) {
+        if case .group(let id)? = item ?? selection {
+            // The whole group, nested groups included, as a new group beside it.
+            guard !isEditingBlocked, let result = workspace.duplicatingGroup(id) else { return }
+            cancelTransient()
+            endSketchMode()
+            tool = .select
+            commit(result.workspace)
+            selection = .group(result.group)
+            status = "Duplicated the group"
+            return
+        }
         let targets = copyTargets(item ?? selection)
         guard !isEditingBlocked, !(targets.bodies.isEmpty && targets.sketches.isEmpty),
               let result = workspace.pasting(workspace.copying(bodies: targets.bodies, sketches: targets.sketches)) else { return }
@@ -2628,6 +2640,7 @@ struct DimensionEdit: Identifiable {
         case .face(let face): draft.bodies = [face.bodyID]
         case .sketch(let id): draft.sketches = [id]
         case .shape(let id): if let sketch = workspace.shapes.first(where: { $0.id == id })?.sketch { draft.sketches = [sketch] }
+        case .group(let id): (draft.bodies, draft.sketches) = (workspace.contents(of: id).bodies, workspace.contents(of: id).sketches)
         default: break
         }
         if let plane = selectedConstructionPlane { draft.plane = MirrorPlane(source: .plane(plane.id), plane: plane.plane) }
@@ -2730,6 +2743,7 @@ struct DimensionEdit: Identifiable {
         case .face(let face): draft.bodies = [face.bodyID]
         case .sketch(let id): draft.sketches = [id]
         case .shape(let id): if let sketch = workspace.shapes.first(where: { $0.id == id })?.sketch { draft.sketches = [sketch] }
+        case .group(let id): (draft.bodies, draft.sketches) = (workspace.contents(of: id).bodies, workspace.contents(of: id).sketches)
         default: break
         }
         cancelTransient()
@@ -2926,6 +2940,7 @@ struct DimensionEdit: Identifiable {
         case .face(let face): draft.bodies = [face.bodyID]
         case .sketch(let id): draft.sketches = [id]
         case .shape(let id): if let sketch = workspace.shapes.first(where: { $0.id == id })?.sketch { draft.sketches = [sketch] }
+        case .group(let id): (draft.bodies, draft.sketches) = (workspace.contents(of: id).bodies, workspace.contents(of: id).sketches)
         default: break
         }
         cancelTransient()
@@ -3876,6 +3891,9 @@ struct DimensionEdit: Identifiable {
         case .shape(let id):
             guard let shape = workspace.shapes.first(where: { $0.id == id }) else { return nil }
             plane = shape.plane; center = workspace.center(of: shape)
+        case .group(let id):
+            // Everything in it, about its middle, along the world axes.
+            plane = .top; center = workspace.center(ofGroup: id)
         }
         return center.map { ($0, [plane.xAxis, plane.yAxis, plane.normalAxis]) }
     }
@@ -3946,11 +3964,26 @@ struct DimensionEdit: Identifiable {
         }
         if let sketch = selectedSketch { return .sketch(sketch.id) }
         if let body = selectedBody, tool == .select { return .body(body.id) }
+        if let group = selectedGroup, tool == .select, workspace.center(ofGroup: group) != nil { return .group(group) }
         return nil
     }
 
+    /// The Model Tree group selected (its row), which moves and transforms as a unit.
+    var selectedGroup: UUID? {
+        guard case .group(let id) = selection, workspace.group(id) != nil else { return nil }
+        return id
+    }
+    /// The solids and sketches selected: one, or everything in a selected group (drawn as selected).
+    var selectedMembers: (bodies: Set<UUID>, sketches: Set<UUID>) {
+        if let group = selectedGroup {
+            let contents = workspace.contents(of: group)
+            return (Set(contents.bodies), Set(contents.sketches))
+        }
+        return (Set(selectedBody.map { [$0.id] } ?? []), Set(selectedSketch.map { [$0.id] } ?? []))
+    }
+
     private func selection(for target: TransformTarget) -> ModelSelection {
-        switch target { case .sketch(let id): .sketch(id); case .body(let id): .body(id); case .shape(let id): .shape(id) }
+        switch target { case .sketch(let id): .sketch(id); case .body(let id): .body(id); case .shape(let id): .shape(id); case .group(let id): .group(id) }
     }
 
     @discardableResult func beginTransform(_ handle: TransformHandle) -> Bool {

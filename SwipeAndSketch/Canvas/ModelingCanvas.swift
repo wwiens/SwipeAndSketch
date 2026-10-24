@@ -631,7 +631,7 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             let render = solidRender(body)
             guard render.map({ !$0.silhouettes.isEmpty }) ?? (body.profile.circle != nil && body.revolve == nil),
                   let node = content.childNode(withName: "body|" + body.id.uuidString, recursively: false) else { continue }
-            let color = session.selectedBody?.id == body.id ? blue : edgeGray
+            let color = session.selectedMembers.bodies.contains(body.id) ? blue : edgeGray
             if let render, let edges = node.childNode(withName: "body.edges", recursively: false) {
                 // Only the outline of curved faces follows the view; the borders stay as built.
                 edges.childNode(withName: "body.silhouettes", recursively: false)?.removeFromParentNode()
@@ -849,6 +849,7 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         let pickedProfiles = session.selectedProfiles
         let pickedIDs = Set(pickedProfiles.map(\.id)), pickedShapes = Set(pickedProfiles.flatMap(\.sourceIDs))
         let pickedSketches = Set(session.selectedItems.compactMap { item -> UUID? in if case .sketch(let id) = item { id } else { nil } })
+            .union(session.selectedGroup != nil ? session.selectedMembers.sketches : [])
         for profile in session.visibleWorkspace.profiles {
             let plane = profile.plane
             let selected = pickedIDs.contains(profile.id)
@@ -904,12 +905,12 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             if let ghost = ghosts[body.id], let source = session.workspace.bodies.first(where: { $0.id == ghost.source }) {
                 // A pattern's many copies drop a turned outline; one solid being dragged keeps it.
                 let dragged = session.patternGhosts[body.id] == nil
-                content.addChildNode(ghostNode(of: source, as: body.id, moved: ghost.transform, selected: dragged && session.selectedBody?.id == body.id,
+                content.addChildNode(ghostNode(of: source, as: body.id, moved: ghost.transform, selected: dragged && session.selectedMembers.bodies.contains(body.id),
                                                outline: dragged))
                 if dragged { draggedGhost = (body.id, source) }
                 continue
             }
-            let node = bodyNode(body, selected: session.selectedBody?.id == body.id)
+            let node = bodyNode(body, selected: session.selectedMembers.bodies.contains(body.id))
             if session.isXrayed(body.id) {
                 // X-ray: faces see-through and left out of the depth buffer, so edges and solids
                 // behind them show; drawn after the opaque solids.

@@ -9,6 +9,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
     case extrude, extrudeFace, cut, join, revolve, fillet, chamfer, shell
     case union, subtract, intersect, split, align, mirror, pattern, scale, deleteFace, section, offsetPlane, midplane, project, measure, assistant
     case peg, fitTest, thread, matingPart, text
+    case modelGroup
     case primitives
     case xray
 
@@ -67,6 +68,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .scale: "Scale"
         case .deleteFace: "Delete Face"
         case .section: "Section View"
+        case .modelGroup: "Groups"
         case .primitives: "Primitives"
         case .xray: "X-ray"
         case .offsetPlane: "Offset Plane"
@@ -121,6 +123,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .scale: .scale
         case .deleteFace: .deleteFace
         case .section: .section
+        case .modelGroup: .group
         case .primitives: .primitives
         case .xray: .xray
         case .offsetPlane: .offsetPlane
@@ -353,6 +356,11 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                 summary: "Make a ready-made box, cylinder, sphere, or torus (a ring) in one step, without sketching.",
                 steps: ["Choose Create, then Box, Cylinder, Sphere, or Torus.", "Tap the grid, or a flat face of a solid, where it goes. It stands on what you tapped.", "Tap a size beside it to type a new one. Tap elsewhere to move it.", "Tap Done. It is a solid of its own, ready to move, combine, fillet, or shell."],
                 tips: ["A torus's diameter runs through the middle of its tube.", "A box or cylinder is an ordinary extrusion and a sphere or torus a revolve, so their faces can be resized and pushed like any other.", "The next one starts from the sizes you used last."])
+        case .modelGroup:
+            HelpOverview(
+                summary: "A group in the Model Tree holds solids, sketches, planes, and other groups. Select its row to work on everything in it at once.",
+                steps: ["Tap a group's row in the Model Tree. Everything in it is outlined in blue.", "Drag an arrow of the widget to move it all, or an arc to turn it. Turn on Create Copy to copy the whole group.", "Or choose Transform to scale, mirror, or pattern it all, Duplicate for a copy of the group, or Export for a 3MF of just its solids."],
+                tips: ["The group's eye hides everything inside without changing each item's own eye.", "Long-press the row to rename the group, X-ray it, ungroup it, or delete it with its contents."])
         case .section:
             HelpOverview(
                 summary: "The section view cuts your solids open along a plane, so you can check walls, holes, threads, and sockets inside. It changes nothing.",
@@ -528,6 +536,7 @@ extension ModelingSession {
         if isMultipleSelection { return .pickedSketches }
         if selectedSketch != nil { return .sketchObject }
         if selectedBody != nil, tool == .select { return .solid }
+        if selectedGroup != nil, tool == .select { return .modelGroup }
         if selectedEdge != nil { return .edge }
         if selectedShape != nil { return .editShape }
         if selectedFace != nil {

@@ -4,7 +4,8 @@ import Foundation
 // planes, and other groups, so a model can be organized (a lid and its hardware, reference
 // sketches) and parts of it shown or hidden together. A group's eye hides everything inside it
 // without touching each item's own eye, so showing the group again brings back exactly what was
-// shown before. Groups only organize: they do not move, combine, or export their contents.
+// shown before. Groups do not combine their contents; from October 24, 2026 a selected group moves,
+// turns, scales, mirrors, patterns, duplicates, and exports as a unit (everything inside it at once).
 
 /// A group of items in the Model Tree. Items name their group; a group names its parent group.
 struct ItemGroup: Codable, Equatable, Identifiable, Sendable {

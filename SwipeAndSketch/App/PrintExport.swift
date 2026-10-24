@@ -61,7 +61,7 @@ extension ModelingSession {
         let bodies: [SolidBody]
         switch choice {
         case .visible: bodies = workspace.bodies.filter { !workspace.isHidden($0) }
-        case .selected: bodies = workspace.bodies.filter { $0.id == selectedBody?.id }
+        case .selected: bodies = workspace.bodies.filter { selectedMembers.bodies.contains($0.id) }
         }
         return bodies.map { ModelExport.PrintPart(body: $0, name: names[$0.id] ?? "Solid") }
     }
@@ -151,9 +151,13 @@ struct PrintSheet: View {
                 Section {
                     Picker("Parts", selection: $parts) {
                         Text(count == 1 ? "The visible solid" : "All \(count) visible solids").tag(PrintParts.visible)
-                        if session.selectedBody != nil { Text("The selected solid").tag(PrintParts.selected) }
+                        if session.selectedGroup.map({ !session.workspace.contents(of: $0).bodies.isEmpty }) == true {
+                            Text("The selected group").tag(PrintParts.selected)
+                        } else if session.selectedBody != nil { Text("The selected solid").tag(PrintParts.selected) }
                     }
                     .accessibilityIdentifier("print.parts")
+                    // Export from a selected group starts with just its solids.
+                    .onAppear { if session.selectedGroup != nil, !session.printParts(.selected).isEmpty { parts = .selected } }
                 } footer: { Text("Each part is named as in the Model Tree, so the slicer's object list matches.") }
                 Section {
                     Picker("Placement", selection: $session.printLayout.placement) {

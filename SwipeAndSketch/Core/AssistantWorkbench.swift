@@ -1103,6 +1103,10 @@ struct AssistantWorkbench {
         var next = workspace, moved: [String] = [], checked: [UUID] = [], focus: AssistantItem?
         for name in names {
             let target: TransformTarget
+            // A Model Tree group moves with everything in it.
+            if let group = workspace.groupNames.first(where: { $0.value.lowercased() == name.trimmingCharacters(in: .whitespaces).lowercased() })?.key {
+                target = .group(group)
+            } else {
             switch try item(named: name) {
             case .body(let id): target = .body(id)
             case .sketch(let id): target = .sketch(id)
@@ -1111,6 +1115,7 @@ struct AssistantWorkbench {
                 target = .sketch(sketch)
             case .plane: throw Failure("Construction planes cannot be moved; make a new one.")
             }
+            }
             var current = target, didCopy = false
             if abs(degrees) >= 1e-6 {
                 let center: SIMD3<Double>?
@@ -1118,6 +1123,7 @@ struct AssistantWorkbench {
                 case .body(let id): center = next.bodies.first { $0.id == id }.flatMap(next.center(of:))
                 case .sketch(let id): center = next.sketch(id).flatMap(next.center(of:))
                 case .shape(let id): center = next.shapes.first { $0.id == id }.flatMap(next.center(of:))
+                case .group(let id): center = next.center(ofGroup: id)
                 }
                 guard let result = next.transforming(current, by: .rotate(degrees: degrees, about: axisVector, through: pivot ?? center ?? .zero), copy: copy) else {
                     throw Failure("\(name) cannot be turned that way.")
@@ -1129,6 +1135,7 @@ struct AssistantWorkbench {
                 next = result.workspace; current = result.target
             }
             if case .body(let id) = current { checked.append(id); focus = .body(id) } else if case .sketch(let id) = current { focus = .sketch(id) }
+            else if case .group(let id) = current { checked += next.contents(of: id).bodies }
             moved.append(name)
         }
         var parts: [String] = []
