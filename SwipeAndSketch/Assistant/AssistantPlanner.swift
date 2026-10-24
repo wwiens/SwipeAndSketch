@@ -335,11 +335,18 @@ enum AssistantPlanner {
             try bench.transform(items: [name], move: .zero, rotate: v.degrees, axis: "z", pivot: nil, copy: false)
         case "extrude sketch":
             let v = try await values(ExtrudeSketchValues.self, for: part, bench: bench)
-            // The named sketch, else the newest sketch that has a closed region.
-            let sketch = (try? bench.sketch(named: v.sketch)) ?? bench.workspace.sketches.last { !bench.regions(of: $0).isEmpty }
-            guard let sketch else { throw AssistantWorkbench.Failure("there is no sketch with a closed shape to extrude.") }
-            let regions = bench.regions(of: sketch), name = bench.name(of: .sketch(sketch.id))
-            let distance = try positive(abs(v.distance), "distance"), chosen = regions.count > 1 ? [1] : []
+            // The named sketch, else the selected regions and sketches, else the newest sketch that has a closed region.
+            let named = try? bench.sketch(named: v.sketch)
+            let name: String, chosen: [Int]
+            if named == nil, !bench.selectedRegions().isEmpty {
+                name = "selected"; chosen = []
+            } else {
+                guard let sketch = named ?? bench.workspace.sketches.last(where: { !bench.regions(of: $0).isEmpty }) else {
+                    throw AssistantWorkbench.Failure("there is no sketch with a closed shape to extrude.")
+                }
+                name = bench.name(of: .sketch(sketch.id)); chosen = bench.regions(of: sketch).count > 1 ? [1] : []
+            }
+            let distance = try positive(abs(v.distance), "distance")
             // Extruding adds material unless the words say to remove it.
             let words = part.text.lowercased()
             if ["cut", "remove", "subtract", "hole", "pocket"].contains(where: words.contains) {

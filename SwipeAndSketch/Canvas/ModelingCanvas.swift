@@ -133,6 +133,10 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
     var input: PencilInputView!
     private var lastWorkspace: Workspace?
     private var lastSelection: ModelSelection?
+    private var lastExtraSelection: [ModelSelection] = []
+    /// The last sketch line tap that added a whole sketch to the picked items, so the second tap of
+    /// a double-tap (the usual way to pick a whole sketch) does not take it out again.
+    private var lastPickTap: (sketchID: UUID, time: CFTimeInterval, point: CGPoint)?
     private var lastPlane: SketchPlane?
     private var lastIsExtruding: Bool?
     private var lastFinishDraft: FinishDraft?
@@ -415,9 +419,9 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             }
         }
         // The amber source of a revolve depends on what is revolved, not on the angle being dragged.
-        let revolveKey = (session.revolveDraft.map { "\($0.profile.id)|\($0.face?.face ?? -1)" } ?? "") + session.extraExtrusionProfiles.map(\.id).joined() +
+        let revolveKey = (session.revolveDraft.map { "\($0.profiles.map(\.id).joined())|\($0.face?.face ?? -1)" } ?? "") + session.extraExtrusionProfiles.map(\.id).joined() +
             (session.section.map { "|section \($0.orientation.normalAxis) \($0.flipped) \($0.offset)" } ?? "")
-        let othersChanged = lastSelection != session.selection || lastPlane != session.plane || lastIsExtruding != session.isExtruding ||
+        let othersChanged = lastSelection != session.selection || lastExtraSelection != session.extraSelection || lastPlane != session.plane || lastIsExtruding != session.isExtruding ||
             lastFinishDraft != session.finishDraft || lastSketchMode != session.sketchMode || lastRevolveKey != revolveKey
         if !othersChanged, lastWorkspace != session.visibleWorkspace, moveDraggedGhost() {
             lastWorkspace = session.visibleWorkspace
@@ -435,6 +439,7 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             lastSketchMode = session.sketchMode
             lastWorkspace = session.visibleWorkspace
             lastSelection = session.selection
+            lastExtraSelection = session.extraSelection
             lastPlane = session.plane
             lastIsExtruding = session.isExtruding
             lastRevolveKey = revolveKey
@@ -801,17 +806,20 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
     /// plane's sketches draw over solids so holes and cuts can be drawn and picked inside them.
     private var activeSketchesOnTop: Bool {
         session.sketchMode != nil || session.tool.shapeKind != nil || session.tool == .extrude || session.isExtruding || session.tool == .revolve ||
-            session.selectedShape != nil || session.selectedProfile != nil
+            session.selectedShape != nil || session.selectedProfile != nil || session.isMultipleSelection
     }
+
+    /// The selected shape whose handles and dimensions show: none while several sketch items are picked.
+    private var editableShape: SketchShape? { session.isMultipleSelection ? nil : session.selectedShape }
 
     /// Regions that are exactly a solid's extruded profile. A coincident source sketch must not tint
     /// the cap of a downward extrusion, so it stays hidden (but in the document) unless it is
     /// selected or its plane is being sketched on, where it can be seen, picked, and edited.
     private func isCovered(_ profile: SketchProfile) -> Bool {
-        session.selectedProfile?.id != profile.id && session.sketchMode?.plane != profile.plane &&
+        session.sketchMode?.plane != profile.plane &&
             session.visibleWorkspace.bodies.contains {
                 !$0.isImported && $0.profile.plane == profile.plane && $0.profile.outline == profile.outline && $0.profile.circle == profile.circle
-            }
+            } && !session.selectedProfiles.contains { $0.id == profile.id }
     }
 
     private func coveredSourceIDs() -> Set<UUID> {
@@ -830,14 +838,19 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         content.childNodes.forEach { $0.removeFromParentNode() }
         var coveredSourceIDs = Set<UUID>()
         let sketching = activeSketchesOnTop
+        // Every picked region, and the shapes of picked regions and whole sketches.
+        let pickedProfiles = session.selectedProfiles
+        let pickedIDs = Set(pickedProfiles.map(\.id)), pickedShapes = Set(pickedProfiles.flatMap(\.sourceIDs))
+        let pickedSketches = Set(session.selectedItems.compactMap { item -> UUID? in if case .sketch(let id) = item { id } else { nil } })
         for profile in session.visibleWorkspace.profiles {
             let plane = profile.plane
-            let selected = session.selectedProfile?.id == profile.id
+            let selected = pickedIDs.contains(profile.id)
             if isCovered(profile) {
                 coveredSourceIDs.formUnion(profile.sourceIDs)
                 continue
             }
-            let source = (session.isExtruding && (selected || session.extraExtrusionProfiles.contains { $0.id == profile.id })) || (session.revolveDraft.map { $0.face == nil && $0.profile.id == profile.id } ?? false)
+            let source = (session.isExtruding && (selected || session.extraExtrusionProfiles.contains { $0.id == profile.id })) ||
+                (session.revolveDraft.map { $0.face == nil && $0.profiles.contains { $0.id == profile.id } } ?? false)
             let fillColor = source ? UIColor(red: 0.74, green: 0.58, blue: 0.31, alpha: 0.52) : blue.withAlphaComponent(selected ? 0.08 : 0.035)
             let fill = planarNode(path: path(for: profile), plane: plane, height: 0.01,
                                   color: fillColor, name: "profile|" + profile.id)
@@ -845,8 +858,8 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             content.addChildNode(fill)
         }
         for shape in session.visibleWorkspace.shapes where !coveredSourceIDs.contains(shape.id) {
-            let selected = session.selectedShape?.id == shape.id || (session.selectedProfile?.sourceIDs.contains(shape.id) ?? false) ||
-                (shape.sketch != nil && session.selectedSketch?.id == shape.sketch)
+            let selected = session.selectedShape?.id == shape.id || pickedShapes.contains(shape.id) ||
+                (shape.sketch.map(pickedSketches.contains) ?? false)
             let active = shape.plane == session.plane
             let picked = session.sketchMirrorDraft.map { $0.shapes.contains(shape.id) || $0.line == shape.id } ?? false ||
                 session.offsetDraft?.shapeID == shape.id
@@ -1567,8 +1580,8 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
                 return
             }
             // Another region on the same plane is extruded too (or taken out again).
-            if session.faceExtrusion == nil, let profile = session.selectedProfile, let local = pointOnPlane(point, plane: profile.plane),
-               let other = session.visibleWorkspace.profiles.first(where: { $0.plane == profile.plane && $0.contains(local) }) {
+            if session.faceExtrusion == nil, let profile = session.extrusionProfile, let local = pointOnPlane(point, plane: profile.plane),
+               let other = session.visibleWorkspace.profiles.first(where: { ModelingSession.isSamePlane($0.plane, profile.plane) && $0.contains(local) }) {
                 session.toggleExtrusionProfile(other)
             }
             return
@@ -2097,14 +2110,14 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
 
     /// Whether a handle of the selected shape is under the Pencil (it wins over the Move/Rotate widget).
     private func sketchHandleUnder(_ screen: CGPoint) -> Bool {
-        guard let shape = session.selectedShape, case .shape = session.transformWidgetTarget else { return false }
+        guard let shape = editableShape, case .shape = session.transformWidgetTarget else { return false }
         return sketchHandles(for: shape).contains { distance(screen, project(shape.plane.world($0.1))) < 17 }
     }
 
     private func beginSketchDrag(at screen: CGPoint) -> Bool {
         // A sketch on another plane drags on its own plane, unless it is seen almost edge-on,
         // where the Pencil cannot place points on it reliably.
-        guard let shape = session.selectedShape,
+        guard let shape = editableShape,
               shape.plane == session.plane || abs(simd_dot(viewDirection, shape.plane.normalAxis)) > 0.15,
               let local = pointOnPlane(screen, plane: shape.plane) else { return false }
         var picked: (SketchHandle, Point2)?
@@ -2231,9 +2244,11 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
     }
 
     /// A region made by one closed shape selects that shape; one bounded by several, the region.
+    /// With no tool chosen, a region on the plane of the regions or sketches already picked is
+    /// added to them (or taken out).
     private func selectRegion(_ profile: SketchProfile) {
-        if profile.sourceIDs.count == 1, let id = profile.sourceIDs.first { session.select(.shape(id)) }
-        else { session.select(.profile(profile.id)) }
+        let item: ModelSelection = profile.sourceIDs.count == 1 ? profile.sourceIDs.first.map { .shape($0) } ?? .profile(profile.id) : .profile(profile.id)
+        if session.tool == .select { session.pickSketchItem(item) } else { session.select(item) }
     }
 
     /// The frontmost visible sketch region under the Pencil, on or in front of the solid face hit if any.
@@ -2263,7 +2278,21 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
 
     /// A sketch line tapped with no tool chosen opens its sketch where it is (the camera stays put);
     /// the Extrude tool just picks it to extrude.
+    /// With regions or sketches already picked on its plane, the tap adds the whole sketch instead
+    /// (or takes it out).
     private func tapSketchLine(_ shape: SketchShape) {
+        if session.tool == .select, let id = shape.sketch, session.addsToSelection(.sketch(id)) {
+            // A double-tap picks the whole sketch once: the second tap leaves it picked.
+            pendingSketchTap = nil
+            let now = CACurrentMediaTime(), point = pencilStartScreen
+            if let last = lastPickTap, last.sketchID == id, now - last.time < Self.doubleTapInterval, distance(point, last.point) < Self.doubleTapDistance {
+                lastPickTap = nil
+                return
+            }
+            lastPickTap = (id, now, point)
+            session.pickSketchItem(.sketch(id))
+            return
+        }
         if session.tool == .select { session.enterSketch(of: shape.id) } else { session.select(.shape(shape.id)) }
     }
 
@@ -3184,7 +3213,7 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         if case .shape = session.transformWidgetTarget { widgetAllowsArrow = true }
         guard !session.isExtruding, session.tool == .select, widgetAllowsArrow, !session.isEditingBlocked else { return nil }
         let origin: SIMD3<Double>, normal: SIMD3<Double>
-        if let profile = session.selectedProfile {
+        if let profile = session.extrusionProfile {
             origin = profile.plane.point(profile.anchor); normal = profile.plane.normalAxis
         } else if let face = session.selectedFace, let plane = face.plane {
             origin = face.center; normal = plane.normalAxis
@@ -3731,8 +3760,8 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             return [CanvasDimension(target: .cornerRadius, value: corner.radius, center: CGPoint(x: middle.x + dx / length * 34, y: middle.y + dy / length * 34))]
         }
         let shapes: [SketchShape]
-        if let shape = session.preview ?? session.selectedShape { shapes = [shape] }
-        else if let profile = session.selectedProfile { shapes = session.visibleWorkspace.shapes.filter { profile.sourceIDs.contains($0.id) } }
+        if let shape = session.preview ?? editableShape { shapes = [shape] }
+        else if !session.isMultipleSelection, let profile = session.selectedProfile { shapes = session.visibleWorkspace.shapes.filter { profile.sourceIDs.contains($0.id) } }
         else { shapes = [] }
         var annotations: [CanvasDimension] = []
         for shape in shapes where shape.isValid {
@@ -3878,7 +3907,7 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             }
             guides.stroke()
         }
-        if let shape = session.preview ?? session.selectedShape, !session.isExtruding {
+        if let shape = session.preview ?? editableShape, !session.isExtruding {
             for (handle, point) in sketchHandles(for: shape) {
                 let p = project(shape.plane.world(point, height: 0.05))
                 let side: Bool

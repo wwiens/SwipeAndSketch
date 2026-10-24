@@ -12,6 +12,8 @@ import simd
 enum AssistantSelection: Equatable, Sendable {
     /// An edge is its index on the solid as it is now.
     case body(UUID), face(bodyID: UUID, face: Int), edge(bodyID: UUID, edge: Int), sketch(UUID), shape(UUID), plane(UUID), profile(String)
+    /// Several sketch regions and whole sketches on one plane, picked together on the canvas.
+    case several([AssistantSelection])
 }
 
 /// A document item the assistant can name.
@@ -101,6 +103,11 @@ struct AssistantWorkbench {
                 if let source = workspace.profiles.first(where: { $0.id == id })?.sourceIDs.first,
                    let sketch = workspace.shapes.first(where: { $0.id == source })?.sketch { return .sketch(sketch) }
                 throw Failure("Nothing usable is selected.")
+            case .several(let items):
+                // Items of one sketch stand for it; otherwise only extrude and revolve take them all.
+                let sketches = Set(items.compactMap { sketchID(of: $0) })
+                if sketches.count == 1, let id = sketches.first { return .sketch(id) }
+                throw Failure("\(items.count) sketch items are selected. Name one, or use sketch \"selected\" with extrude or revolve to take them all.")
             case nil: throw Failure("Nothing is selected.")
             }
         }
@@ -312,7 +319,49 @@ struct AssistantWorkbench {
         case .profile(let id):
             guard let profile = workspace.profiles.first(where: { $0.id == id }) else { return "a sketch region" }
             return "a sketch region (\(regionDescription(profile)))"
+        case .several(let items):
+            let names = items.map { item -> String in
+                var single = self
+                single.selection = item
+                return single.selectionDescription()
+            }
+            return "\(items.count) sketch items on one plane: \(names.joined(separator: "; "))"
         }
+    }
+
+    /// The sketch a selected sketch item belongs to.
+    private func sketchID(of item: AssistantSelection) -> UUID? {
+        switch item {
+        case .sketch(let id): return id
+        case .shape(let id): return workspace.shapes.first { $0.id == id }?.sketch
+        case .profile(let id):
+            return workspace.profiles.first { $0.id == id }?.sourceIDs.first.flatMap { source in workspace.shapes.first { $0.id == source }?.sketch }
+        default: return nil
+        }
+    }
+
+    /// The regions the selection stands for when it is sketch items: a region, a closed shape's
+    /// region, every region of a whole sketch, or all of them for several. Empty for anything else.
+    func selectedRegions() -> [SketchProfile] {
+        func itemRegions(_ item: AssistantSelection?) -> [SketchProfile] {
+            switch item {
+            case .sketch(let id): return workspace.sketch(id).map(regions(of:)) ?? []
+            case .profile(let id): return workspace.profiles.first { $0.id == id }.map { [$0] } ?? []
+            case .shape(let id):
+                guard let shape = workspace.shapes.first(where: { $0.id == id }), let sketch = workspace.sketch(shape.sketch) else { return [] }
+                let all = regions(of: sketch)
+                return all.first { $0.id == id.uuidString }.map { [$0] } ?? Array(all.filter { $0.sourceIDs.contains(id) }.prefix(1))
+            case .several(let items): return items.flatMap(itemRegions)
+            default: return []
+            }
+        }
+        var seen = Set<String>()
+        return itemRegions(selection).filter { seen.insert($0.id).inserted }
+    }
+
+    private static func isSelectionWord(_ text: String) -> Bool {
+        ["selected", "selection", "the selection", "selected item", "selected items", "it", "this", "these", "them"]
+            .contains(text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
     }
 
     /// A compact description of the whole document, sent with each request.
@@ -595,12 +644,16 @@ struct AssistantWorkbench {
                                              joining preferred: UUID? = nil, symmetric: Bool = false, taper: Double = 0) throws -> String {
         guard taper.isFinite, abs(taper) < 89 else { throw Failure("A taper must be under 89°.") }
         guard !(throughAll && (symmetric || taper != 0)) else { throw Failure("Through all has no symmetric or tapered option.") }
-        let sketch = try sketch(named: sketchName)
-        let regions = regions(of: sketch)
-        let name = name(of: .sketch(sketch.id))
+        let picked = Self.isSelectionWord(sketchName) && numbers.isEmpty ? selectedRegions() : []
+        let sketch = picked.isEmpty ? try sketch(named: sketchName) : nil
+        let regions = sketch.map(regions(of:)) ?? picked
+        let name = sketch.map { name(of: .sketch($0.id)) } ?? "the \(picked.count) selected region\(picked.count == 1 ? "" : "s")"
         guard !regions.isEmpty else { throw Failure("\(name) has no closed regions to extrude.") }
         let chosen: [SketchProfile]
-        if numbers.isEmpty {
+        if sketch == nil {
+            // The selected regions and sketches, all together.
+            chosen = picked
+        } else if numbers.isEmpty {
             guard regions.count == 1 else {
                 throw Failure("\(name) has \(regions.count) regions; say which: " + regions.enumerated().map { "\($0.offset + 1) \(regionDescription($0.element))" }.joined(separator: "; "))
             }
@@ -1628,21 +1681,29 @@ struct AssistantWorkbench {
         return "Added \(name), \(Self.mm(offset)) mm from \(label), facing \(Self.direction(plane.plane.normalAxis)) through \(Self.point(plane.plane.origin)). Sketch on it with on: \"\(name)\"."
     }
 
-    /// Revolves a sketch region about a world axis or one of the sketch's lines.
+    /// Revolves a sketch region about a world axis or one of the sketch's lines. Sketch "selected"
+    /// with no region revolves every selected region and sketch together.
     @discardableResult mutating func revolve(sketch sketchName: String, region number: Int?, axis axisName: String, angle: Double, mode: ExtrudeMode) throws -> String {
-        let sketch = try sketch(named: sketchName)
-        let regions = regions(of: sketch), name = name(of: .sketch(sketch.id))
-        guard !regions.isEmpty else { throw Failure("\(name) has no closed regions.") }
-        let profile: SketchProfile
-        if let number {
-            guard regions.indices.contains(number - 1) else { throw Failure("\(name) has regions 1…\(regions.count).") }
-            profile = regions[number - 1]
+        let picked = Self.isSelectionWord(sketchName) && number == nil ? selectedRegions() : []
+        let profiles: [SketchProfile], name: String, plane: SketchPlane
+        if let first = picked.first {
+            profiles = picked; plane = first.plane
+            name = "the \(picked.count) selected region\(picked.count == 1 ? "" : "s")"
         } else {
-            guard regions.count == 1 else { throw Failure("\(name) has \(regions.count) regions; say which.") }
-            profile = regions[0]
+            let sketch = try sketch(named: sketchName)
+            let regions = regions(of: sketch)
+            name = self.name(of: .sketch(sketch.id)); plane = sketch.plane
+            guard !regions.isEmpty else { throw Failure("\(name) has no closed regions.") }
+            if let number {
+                guard regions.indices.contains(number - 1) else { throw Failure("\(name) has regions 1…\(regions.count).") }
+                profiles = [regions[number - 1]]
+            } else {
+                guard regions.count == 1 else { throw Failure("\(name) has \(regions.count) regions; say which.") }
+                profiles = regions
+            }
         }
+        let profile = profiles[0]
         guard RevolveSpec.angleRange.contains(abs(angle)) else { throw Failure("Angle must be 0.1–360°.") }
-        let plane = sketch.plane
         let from: Point2, to: Point2
         let worldAxes: [String: SIMD3<Double>] = ["x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]]
         if let direction = worldAxes[axisName.lowercased().replacingOccurrences(of: " axis", with: "").trimmingCharacters(in: CharacterSet(charactersIn: " +"))] {
@@ -1659,22 +1720,26 @@ struct AssistantWorkbench {
             throw Failure("The axis must be x, y, z, or a line of the sketch.")
         }
         let spec = RevolveSpec.oriented(from: from, to: to, angle: angle, for: profile)
-        guard spec.allows(profile) else { throw Failure("The axis crosses that region; it must lie to one side.") }
-        var cut = ExtrusionCut(profile: profile, depth: 1), join = ExtrusionCut(profile: profile, depth: 1, operation: .join)
-        cut.revolve = spec; join.revolve = spec
-        var next = workspace, made: String, checked: [UUID], focus: AssistantItem
-        switch place(cut: cut, join: join, mode: mode, in: next) {
-        case .cut(let ws, let targets): next = ws; checked = targets; made = "cut \(targets.map(bodyName).joined(separator: ", "))"; focus = .body(targets[0])
-        case .join(let ws, let target): next = ws; checked = [target]; made = "joined to \(bodyName(target))"; focus = .body(target)
-        case .newBody:
-            let body = SolidBody(profile: profile, revolve: spec)
-            guard body.isValid else { throw Failure("That region cannot be revolved about that axis.") }
-            next.bodies.append(body); checked = [body.id]; focus = .body(body.id)
-            var preview = self; preview.workspace = next
-            made = "new solid \(preview.bodyName(body.id))"
-        case .failed(let reason): throw Failure(reason)
+        guard profiles.allSatisfy(spec.allows) else {
+            throw Failure(profiles.count == 1 ? "The axis crosses that region; it must lie to one side." : "The axis crosses one of the regions; it must lie beside all of them.")
         }
-        try keep(next, change: "Revolved \(name) \(Self.mm(angle))° about \(axisName): \(made)", checking: checked, focus: focus)
-        return "Revolved \(name) \(Self.mm(angle))°: \(made)."
+        var next = workspace, made: [String] = [], checked: [UUID] = [], focus: AssistantItem?
+        for profile in profiles {
+            var cut = ExtrusionCut(profile: profile, depth: 1), join = ExtrusionCut(profile: profile, depth: 1, operation: .join)
+            cut.revolve = spec; join.revolve = spec
+            switch place(cut: cut, join: join, mode: mode, in: next) {
+            case .cut(let ws, let targets): next = ws; checked += targets; made.append("cut \(targets.map(bodyName).joined(separator: ", "))"); focus = .body(targets[0])
+            case .join(let ws, let target): next = ws; checked.append(target); made.append("joined to \(bodyName(target))"); focus = .body(target)
+            case .newBody:
+                let body = SolidBody(profile: profile, revolve: spec)
+                guard body.isValid else { throw Failure("That region cannot be revolved about that axis.") }
+                next.bodies.append(body); checked.append(body.id); focus = .body(body.id)
+                var preview = self; preview.workspace = next
+                made.append("new solid \(preview.bodyName(body.id))")
+            case .failed(let reason): throw Failure(reason)
+            }
+        }
+        try keep(next, change: "Revolved \(name) \(Self.mm(angle))° about \(axisName): \(made.joined(separator: "; "))", checking: checked, focus: focus)
+        return "Revolved \(name) \(Self.mm(angle))°: \(made.joined(separator: "; "))."
     }
 }

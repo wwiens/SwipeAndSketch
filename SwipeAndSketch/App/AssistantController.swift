@@ -82,6 +82,11 @@ import Combine
             guard let self else { return }
             updateSelectionLabel(ModelingSession.assistantSelection(for: selection), base: session.assistantBase)
         }.store(in: &observers)
+        // Sketch items picked along with the selection (it is already set when they change).
+        session.$extraSelection.removeDuplicates().dropFirst().sink { [weak self] extra in
+            guard let self else { return }
+            updateSelectionLabel(ModelingSession.assistantSelection(for: (session.selection.map { [$0] } ?? []) + extra), base: session.assistantBase)
+        }.store(in: &observers)
         session.$assistantPreview.sink { [weak self] preview in
             guard let self else { return }
             isReviewing = preview != nil

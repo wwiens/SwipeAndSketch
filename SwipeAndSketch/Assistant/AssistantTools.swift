@@ -247,8 +247,8 @@ struct ExtrudeTool: Tool {
     let name = "extrude"
     let description = "Extrudes sketch regions along the sketch normal. auto cuts solids it overlaps, joins solids it touches, else makes a new body. Negative distance goes the other way."
     @Generable struct Arguments {
-        @Guide(description: "Sketch name, e.g. Sketch 01") var sketch: String
-        @Guide(description: "Region numbers from the summary; omit when the sketch has one region") var regions: [Int]?
+        @Guide(description: "Sketch name, e.g. Sketch 01, or selected for every selected region and sketch together") var sketch: String
+        @Guide(description: "Region numbers from the summary; omit when the sketch has one region, or for selected") var regions: [Int]?
         @Guide(description: "Signed distance in mm") var distance: Double
         @Guide(.anyOf(["auto", "new body", "join", "cut"])) var operation: String?
         @Guide(description: "Cut through every solid in both directions") var throughAll: Bool?
@@ -788,7 +788,7 @@ struct RevolveTool: Tool {
     let name = "revolve"
     let description = "Revolves a sketch region about a world axis (x, y, z) lying in the sketch plane, or about a line of the sketch."
     @Generable struct Arguments {
-        var sketch: String
+        @Guide(description: "Sketch name, e.g. Sketch 01, or selected for every selected region and sketch together") var sketch: String
         var region: Int?
         @Guide(description: "x, y, z, or a line name such as Line 01") var axis: String
         @Guide(description: "Degrees, up to 360") var angle: Double

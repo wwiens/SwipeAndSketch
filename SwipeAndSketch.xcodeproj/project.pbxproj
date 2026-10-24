@@ -94,6 +94,7 @@
 		D339E4C574643E9A3EC47319 /* Tests/AppTests/CanvasTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86A881F290F7F31E0ACB27B1 /* Tests/AppTests/CanvasTests.swift */; };
 		D46C077D6021ECC41CAE84EB /* SwipeAndSketch/Core/Projection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C96DF5DA71597424CB15F0B0 /* SwipeAndSketch/Core/Projection.swift */; };
 		E22521F7A1AFE44A545A9416 /* Tests/AppTests/CutToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0FF5FAF995107ED6714C2D1 /* Tests/AppTests/CutToolTests.swift */; };
+		BCBB3024AE8BF150FF4B6976 /* Tests/AppTests/MultiSelectToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC7E921DE81906840AB5A5A3 /* Tests/AppTests/MultiSelectToolTests.swift */; };
 		EDCF250D54664EFE990AADBF /* Tests/AppTests/ImportToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED2E242DCD8B46688AB73B71 /* Tests/AppTests/ImportToolTests.swift */; };
 		EE9F5E2C5571DF89E4D798DB /* SwipeAndSketch/Canvas/KernelSceneGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DD365FAD1FA636267D31D5B /* SwipeAndSketch/Canvas/KernelSceneGeometry.swift */; };
 		F3BB66BA957C4B83A54E1813 /* Tests/AppTests/ProjectDocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7415BFE439F3457F997E9345 /* Tests/AppTests/ProjectDocumentTests.swift */; };
@@ -206,6 +207,7 @@
 		A6E7E8C055A07A444FDA8585 /* SwipeAndSketch/Core/Workspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Workspace.swift; sourceTree = SOURCE_ROOT; };
 		AF4478A9ADDFEB1B8678BACE /* SwipeAndSketch/Core/Split.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Split.swift; sourceTree = SOURCE_ROOT; };
 		B0FF5FAF995107ED6714C2D1 /* Tests/AppTests/CutToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/CutToolTests.swift; sourceTree = SOURCE_ROOT; };
+		AC7E921DE81906840AB5A5A3 /* Tests/AppTests/MultiSelectToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/MultiSelectToolTests.swift; sourceTree = SOURCE_ROOT; };
 		B105C9AC4FBD48D2A4D07365 /* SwipeAndSketch/Canvas/ViewCube.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Canvas/ViewCube.swift; sourceTree = SOURCE_ROOT; };
 		B591D3990DE4944AEEBE5949 /* SwipeAndSketch/Core/ConstructionPlanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/ConstructionPlanes.swift; sourceTree = SOURCE_ROOT; };
 		C96DF5DA71597424CB15F0B0 /* SwipeAndSketch/Core/Projection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Projection.swift; sourceTree = SOURCE_ROOT; };
@@ -417,6 +419,7 @@
 				9B478F678A1C30B4989CFFAE /* Tests/AppTests/BodyTransformToolTests.swift */,
 				2BDF94EC4AAE4DC5771E16D6 /* Tests/AppTests/FaceSketchTests.swift */,
 				B0FF5FAF995107ED6714C2D1 /* Tests/AppTests/CutToolTests.swift */,
+				AC7E921DE81906840AB5A5A3 /* Tests/AppTests/MultiSelectToolTests.swift */,
 				9E65A6987E10939F88B18A9E /* Tests/AppTests/FinishToolTests.swift */,
 				2626DB4D602ECD2EE71B2AFB /* Tests/AppTests/KernelSceneTests.swift */,
 				657DD32164E165828BFDB7B4 /* Tests/UITests/SwipeAndSketchUITests.swift */,
@@ -618,6 +621,7 @@
 				ABC7C2376A69050C716D8BD7 /* Tests/AppTests/BodyTransformToolTests.swift in Sources */,
 				0236E86CE05A9AC7687A13C5 /* Tests/AppTests/FaceSketchTests.swift in Sources */,
 				E22521F7A1AFE44A545A9416 /* Tests/AppTests/CutToolTests.swift in Sources */,
+				BCBB3024AE8BF150FF4B6976 /* Tests/AppTests/MultiSelectToolTests.swift in Sources */,
 				37327D8C0B6CE9CDE0DA3850 /* Tests/AppTests/FinishToolTests.swift in Sources */,
 				86A46A525D4251B7B4140623 /* Tests/AppTests/KernelSceneTests.swift in Sources */,
 				D339E4C574643E9A3EC47319 /* Tests/AppTests/CanvasTests.swift in Sources */,

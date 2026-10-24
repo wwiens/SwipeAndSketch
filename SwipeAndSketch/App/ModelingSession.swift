@@ -496,6 +496,9 @@ struct AlignDraft: Equatable {
 /// turned, the axis it turns about, and how far. New Body, Join, and Cut work as for Extrude.
 struct RevolveDraft: Equatable {
     var profile: SketchProfile
+    /// More picked regions on the same plane, revolved with `profile` about the same axis.
+    var more: [SketchProfile] = []
+    var profiles: [SketchProfile] { [profile] + more }
     /// Revolving a solid's own flat face, which joins or cuts that solid.
     var face: FaceExtrusionSource?
     var axis: RevolveAxis?
@@ -742,8 +745,16 @@ struct DimensionEdit: Identifiable {
     /// The world plane to return to when sketching on a face ends, so the grid goes back to the floor.
     private var lastWorldPlane = SketchPlane.top
     @Published var selection: ModelSelection? {
-        didSet { if let pivot = transformPivot, selection != .body(pivot.bodyID) { transformPivot = nil } }
+        didSet {
+            if let pivot = transformPivot, selection != .body(pivot.bodyID) { transformPivot = nil }
+            if selection != oldValue, !extraSelection.isEmpty { extraSelection = [] }
+        }
     }
+    /// More sketch regions and whole sketches picked along with `selection` (user decision, October
+    /// 23, 2026): outside a sketch, with a region or sketch selected, a Pencil tap on another one on
+    /// the same plane adds it and a tap on a picked one takes it out. Extrude and Revolve take them
+    /// all at once. Any other change of selection ends it.
+    @Published private(set) var extraSelection: [ModelSelection] = []
     @Published var preview: SketchShape?
     @Published var extrusionDepth = 0.0 { didSet { updateCutPreview() } }
     @Published var isExtruding = false {
@@ -1147,11 +1158,13 @@ struct DimensionEdit: Identifiable {
         guard case .body(let id) = selection else { return nil }
         return displayWorkspace.bodies.first { $0.id == id }
     }
-    var selectedProfile: SketchProfile? {
-        if case .profile(let id) = selection {
+    var selectedProfile: SketchProfile? { profile(for: selection) }
+    /// The region a selected region or shape stands for.
+    func profile(for item: ModelSelection?) -> SketchProfile? {
+        if case .profile(let id) = item {
             return displayWorkspace.sketches.lazy.flatMap { self.displayWorkspace.profiles(in: $0) }.first { $0.id == id }
         }
-        if let shape = selectedShape, let sketch = displayWorkspace.sketch(shape.sketch) {
+        if case .shape(let id) = item, let shape = displayWorkspace.shapes.first(where: { $0.id == id }), let sketch = displayWorkspace.sketch(shape.sketch) {
             let regions = displayWorkspace.profiles(in: sketch)
             // A selected closed shape is all of it, as drawn, even where other shapes divide it (a tap
             // inside picks one of the pieces); an open one is the smallest region it bounds.
@@ -1171,7 +1184,108 @@ struct DimensionEdit: Identifiable {
         guard case .sketch(let id) = selection else { return nil }
         return displayWorkspace.sketch(id)
     }
-    var canExtrude: Bool { selectedProfile != nil }
+
+    /// Everything picked: the selection, then the sketch items picked with it.
+    var selectedItems: [ModelSelection] { (selection.map { [$0] } ?? []) + extraSelection }
+    var isMultipleSelection: Bool { !extraSelection.isEmpty }
+
+    /// The regions a picked sketch item stands for: a region or closed shape, or every region of a whole sketch.
+    func profiles(for item: ModelSelection) -> [SketchProfile] {
+        switch item {
+        case .sketch(let id): displayWorkspace.sketch(id).map { displayWorkspace.profiles(in: $0).filter(\.isSolidProfile) } ?? []
+        case .shape, .profile: profile(for: item).map { [$0] } ?? []
+        default: []
+        }
+    }
+
+    /// Every region picked, each once, in the order picked.
+    var selectedProfiles: [SketchProfile] {
+        var seen = Set<String>()
+        return selectedItems.flatMap(profiles(for:)).filter { seen.insert($0.id).inserted }
+    }
+
+    /// The sketch a picked region, shape, or whole sketch belongs to.
+    func sketchID(of item: ModelSelection) -> UUID? {
+        switch item {
+        case .sketch(let id): return id
+        case .shape(let id): return displayWorkspace.shapes.first { $0.id == id }?.sketch
+        case .profile: return profile(for: item)?.sourceIDs.first.flatMap { id in displayWorkspace.shapes.first { $0.id == id }?.sketch }
+        default: return nil
+        }
+    }
+
+    /// The plane of a sketch region or whole sketch; nil for anything else.
+    private func sketchPickPlane(_ item: ModelSelection) -> SketchPlane? {
+        switch item {
+        case .sketch(let id): displayWorkspace.sketch(id)?.plane
+        case .shape, .profile: profile(for: item)?.plane
+        default: nil
+        }
+    }
+
+    /// The same plane, facing the same way, however it was made (two sketches on one face).
+    static func isSamePlane(_ a: SketchPlane, _ b: SketchPlane) -> Bool {
+        a == b || simd_dot(a.normalAxis, b.normalAxis) > 1 - 1e-9 && abs(a.height(of: b.origin)) < 1e-6
+    }
+
+    /// Whether a tap on `item` adds it to the picked sketch items (or takes it out) instead of
+    /// selecting it alone: no tool or sketch is open, a region or whole sketch is selected, and
+    /// `item` is one on the same plane.
+    func addsToSelection(_ item: ModelSelection) -> Bool {
+        guard tool == .select, sketchMode == nil, !hasOperationInProgress, let first = selection,
+              let plane = sketchPickPlane(first), let other = sketchPickPlane(item) else { return false }
+        if !isMultipleSelection {
+            // Alone, the selected item stays picked, and its own sketch's line still opens the sketch.
+            if item == first { return false }
+            if case .sketch(let id) = item, sketchID(of: first) == id { return false }
+        }
+        return Self.isSamePlane(plane, other)
+    }
+
+    /// A Pencil tap on a sketch region, or outside a sketch on a sketch's line (`.sketch`): adds it
+    /// to the picked items or takes it out again when `addsToSelection`, else selects it alone. A
+    /// whole sketch takes the place of its regions already picked.
+    func pickSketchItem(_ item: ModelSelection) {
+        guard addsToSelection(item) else { select(item); return }
+        dimensionEdit = nil
+        var items = selectedItems
+        if let index = items.firstIndex(of: item) {
+            items.remove(at: index)
+        } else if case .sketch(let id) = item {
+            items.removeAll { sketchID(of: $0) == id }
+            items.append(item)
+        } else if let sketch = sketchID(of: item), items.contains(.sketch(sketch)) {
+            status = "\(sketchName(of: sketch) ?? "That sketch") is already picked whole"
+            return
+        } else {
+            items.append(item)
+        }
+        selection = items.first
+        extraSelection = Array(items.dropFirst())
+        UISelectionFeedbackGenerator().selectionChanged()
+    }
+
+    /// "3 regions", "2 sketches", "2 sketches · 1 region": what is picked, for the strip and hint.
+    var pickedSummary: String {
+        let sketches = selectedItems.filter { if case .sketch = $0 { true } else { false } }.count
+        let regions = selectedItems.count - sketches
+        let sketchText = "\(sketches) \(sketches == 1 ? "sketch" : "sketches")", regionText = "\(regions) \(regions == 1 ? "region" : "regions")"
+        if sketches == 0 { return regionText }
+        return regions == 0 ? sketchText : sketchText + " · " + regionText
+    }
+
+    /// Keeps the picked items the canvas still shows (none hidden or deleted); the first left leads.
+    private func keepShownPicks() {
+        let kept = selectedItems.filter { item in
+            if let sketch = sketchID(of: item), workspace.sketch(sketch) == nil || workspace.isHidden(sketch: sketch) { return false }
+            return !profiles(for: item).isEmpty
+        }
+        guard kept != selectedItems else { return }
+        selection = kept.first
+        extraSelection = Array(kept.dropFirst())
+    }
+
+    var canExtrude: Bool { !selectedProfiles.isEmpty }
     var canExtrudeSelectedFace: Bool { selectedFace?.plane != nil && !isEditingBlocked }
     /// What the extrusion handle and preview follow: the face being extruded, or the selected sketch region.
     /// A face being pushed or pulled shows and takes the size the solid ends up across it, not the
@@ -1181,7 +1295,7 @@ struct DimensionEdit: Identifiable {
     var extrusionValue: Double { extrusionDepth + (extrusionSizeBase ?? 0) }
     /// The keypad's caption for `target`.
     func dimensionTitle(_ target: DimensionTarget) -> String { target == .extrusion && extrusionSizeBase != nil ? "Size" : target.title }
-    var extrusionProfile: SketchProfile? { isExtruding ? faceExtrusion?.profile ?? selectedProfile : selectedProfile }
+    var extrusionProfile: SketchProfile? { isExtruding ? faceExtrusion?.profile ?? selectedProfiles.first : selectedProfiles.first }
 
     /// The Model Tree: groups first, each with what is in it (folded away when collapsed), then
     /// the solids, planes, and sketches in no group. A sketch is followed by its shapes.
@@ -1462,6 +1576,7 @@ struct DimensionEdit: Identifiable {
     private func endHiddenSelection() {
         if let sketch = sketchMode?.sketchID, workspace.isHidden(sketch: sketch) { endSketchMode(); tool = .select }
         if let plane = sketchMode?.constructionPlane, workspace.isHidden(plane: plane) { endSketchMode(); tool = .select }
+        if isMultipleSelection { keepShownPicks(); return }
         switch selection {
         case .body(let id), .edge(let id, _): if workspace.isHidden(body: id) { selection = nil }
         case .face(let face): if workspace.isHidden(body: face.bodyID) { selection = nil }
@@ -1476,6 +1591,7 @@ struct DimensionEdit: Identifiable {
 
     /// Ends a selection whose item was deleted.
     private func dropMissingSelection() {
+        if isMultipleSelection { keepShownPicks(); return }
         switch selection {
         case .body(let id), .edge(let id, _): if !workspace.bodies.contains(where: { $0.id == id }) { selection = nil }
         case .face(let face): if !workspace.bodies.contains(where: { $0.id == face.bodyID }) { selection = nil }
@@ -1696,6 +1812,14 @@ struct DimensionEdit: Identifiable {
             case .shape(let id): return sources.contains(.shape(id))
             case .body(let id): return sources.contains(.body(id))
             case .plane(let id): return draft.target?.source == .plane(id)
+            default: return false
+            }
+        }
+        if isMultipleSelection {
+            // Each picked sketch, and each shape of a picked region.
+            switch item.selection {
+            case .sketch(let id): return selectedItems.contains(.sketch(id))
+            case .shape(let id): return selectedItems.contains { profile(for: $0)?.sourceIDs.contains(id) == true }
             default: return false
             }
         }
@@ -1945,14 +2069,19 @@ struct DimensionEdit: Identifiable {
         if selectedConstructionPlane != nil { return "Construction plane selected. Tap Sketch to draw on it, or Offset Plane for a parallel plane." }
         if transformDrag?.copy == true { return "Copying. Lift Pencil to place the copy." }
         if isDraggingPivot { return "Drag the center onto a corner, an edge, or a circle or face center. Lift Pencil to turn about it there." }
+        if isMultipleSelection {
+            return "\(pickedSummary) picked. Tap more regions or sketches on this plane to add them, or a picked one to take it out. Extrude or Revolve takes them all; tap empty space to start over."
+        }
         if selectedSketch != nil {
-            return "Drag an arrow to move the sketch or an arc to turn it. Turn on Create Copy to keep the original. Tap a line to keep drawing in it."
+            return "Drag an arrow to move the sketch or an arc to turn it. Turn on Create Copy to keep the original. Tap a line to keep drawing in it, or another sketch or region on its plane to pick it too."
         }
         if selectedBody != nil, tool == .select {
             return "Solid selected. Drag an arrow to move it or an arc to turn it, or drag the center dot onto a corner or edge to turn about it. Turn on Create Copy to keep the original."
         }
         if selectedEdge != nil { return "Edge selected. Drag the double-arrow to round it, or choose Fillet or Chamfer." }
-        if selectedShape != nil { return "Tap a dimension to edit it. Drag a point or edge with Pencil to resize." }
+        if selectedShape != nil {
+            return "Tap a dimension to edit it. Drag a point or edge with Pencil to resize." + (sketchMode == nil ? " Tap more regions or sketches on its plane to pick them too." : "")
+        }
         if let face = selectedFace {
             if face.plane == nil, selectedThread != nil {
                 return "Thread selected. Choose Matching Part to make the nut, cap, bolt, or plug that screws onto it."
@@ -3323,6 +3452,7 @@ struct DimensionEdit: Identifiable {
         dimensionEdit = nil
         if isExtruding { isExtruding = false }
         selection = value
+        if !extraSelection.isEmpty { extraSelection = [] }
         if tool == .extrude {
             if canExtrude { beginExtrusion() } else if canExtrudeSelectedFace { beginFaceExtrusion() }
         }
@@ -3491,21 +3621,23 @@ struct DimensionEdit: Identifiable {
         guard !isEditingBlocked else { return }
         var face: FaceExtrusionSource?
         let profile: SketchProfile
-        if let selected = selectedProfile {
+        let picked = selectedProfiles
+        if let selected = picked.first {
             profile = selected
         } else if canExtrudeSelectedFace, let picked = selectedFace, let body = workspace.bodies.first(where: { $0.id == picked.bodyID }) {
             guard let source = FaceExtrusionSource(body: body, face: picked.face) else { status = "This face cannot be revolved"; return }
             face = source
             profile = source.profile
         } else { return }
-        let keep = selection
+        let keep = selectedItems
         cancelTransient()
         endSketchMode()
         preview = nil
         tool = .revolve
-        // The region stays selected (amber while revolving), as for an extrusion.
-        selection = keep
-        revolveDraft = RevolveDraft(profile: profile, face: face)
+        // The regions stay selected (amber while revolving), as for an extrusion.
+        selection = keep.first
+        extraSelection = Array(keep.dropFirst())
+        revolveDraft = RevolveDraft(profile: profile, more: face == nil ? Array(picked.dropFirst()) : [], face: face)
     }
 
     /// Picks the axis: two world points on a sketch line, straight solid edge, or world axis. It must
@@ -3524,8 +3656,9 @@ struct DimensionEdit: Identifiable {
             return
         }
         let from = plane.coordinates(of: a), to = plane.coordinates(of: b)
-        guard from.distance(to: to) >= 0.01, RevolveSpec(from: from, to: to, angle: 360).allows(draft.profile) else {
-            revolveError = "That axis crosses the region. Pick one along its edge or beside it."
+        guard from.distance(to: to) >= 0.01, draft.profiles.allSatisfy(RevolveSpec(from: from, to: to, angle: 360).allows) else {
+            revolveError = draft.more.isEmpty ? "That axis crosses the region. Pick one along its edge or beside it." :
+                "That axis crosses one of the regions. Pick one beside all of them."
             return
         }
         let first = draft.axis == nil
@@ -3560,10 +3693,10 @@ struct DimensionEdit: Identifiable {
         let picked: UUID
         switch draft.mode {
         case .newBody:
-            let body = SolidBody(profile: draft.profile, revolve: spec)
-            guard body.isValid else { return }
+            let bodies = Self.unitedTouching(draft.profiles.map { SolidBody(profile: $0, revolve: spec) })
+            guard let body = bodies.first, bodies.allSatisfy(\.isValid) else { return }
             var next = workspace
-            next.bodies.append(body)
+            next.bodies += bodies
             commit(next)
             picked = body.id
         case .cut, .join:
@@ -3622,14 +3755,21 @@ struct DimensionEdit: Identifiable {
                 }
             }
         } else {
-            do { revolveTool = try SolidKernel.revolve(draft.profile, spec) } catch {
+            do {
+                let tools = try draft.profiles.map { try SolidKernel.revolve($0, spec) }
+                revolveTool = try tools.dropFirst().reduce(tools[0]) { try SolidKernel.boolean($0, $1, .union) }
+            } catch {
                 revolveError = (error as? SolidKernel.Failure)?.message.capitalizedFirst ?? "This region cannot be revolved that way."
                 return
             }
             revolveError = nil
-            var join = cut
-            join.join = true
-            let result = cutOrJoin(cut: cut, join: join, automatic: draft.modeIsAutomatic, mode: draft.mode)
+            let cuts = draft.profiles.map { profile -> ExtrusionCut in
+                var cut = ExtrusionCut(profile: profile, depth: 0, operation: .cut)
+                cut.revolve = spec
+                return cut
+            }
+            let joins = cuts.map { cut -> ExtrusionCut in var join = cut; join.join = true; return join }
+            let result = cutOrJoin(cuts: cuts, joins: joins, automatic: draft.modeIsAutomatic, mode: draft.mode)
             draft.mode = result.mode
             revolvePreview = result.preview
             revolveCutTargets = result.cutTargets
@@ -3716,7 +3856,8 @@ struct DimensionEdit: Identifiable {
     /// a drag in progress.
     var transformWidgetTarget: TransformTarget? {
         if let transformDrag { return transformDrag.target }
-        guard !isExtruding, !isEditingBlocked else { return nil }
+        // Several picked sketch items are for Extrude and Revolve; the widget moves one item.
+        guard !isExtruding, !isEditingBlocked, extraSelection.isEmpty else { return nil }
         // Inside a sketch, a selected shape moves and turns within it.
         if sketchMode != nil {
             if tool == .select, let shape = selectedShape { return .shape(shape.id) }
@@ -3794,8 +3935,11 @@ struct DimensionEdit: Identifiable {
         return record
     }
 
-    /// The selected region and any others picked to extrude with it.
-    var extrusionProfiles: [SketchProfile] { (selectedProfile.map { [$0] } ?? []) + extraExtrusionProfiles }
+    /// The picked regions (and every region of a picked sketch), then any others tapped while extruding.
+    var extrusionProfiles: [SketchProfile] {
+        let picked = selectedProfiles
+        return picked + extraExtrusionProfiles.filter { extra in !picked.contains { $0.id == extra.id } }
+    }
 
     /// A region's cut or join with the current Extrude options.
     private func extrusionOperation(_ profile: SketchProfile, join: Bool) -> ExtrusionCut {
@@ -3809,21 +3953,24 @@ struct DimensionEdit: Identifiable {
 
     /// The new solids Done makes: one per region, with those that touch united into the first.
     private func newExtrusionBodies() -> [SolidBody] {
-        var bodies = extrusionProfiles.map { profile -> SolidBody in
+        Self.unitedTouching(extrusionProfiles.map { profile -> SolidBody in
             var body = SolidBody(profile: profile, depth: extrusionDepth)
             if extrusionSymmetric { body.symmetric = true }
             if extrusionTaper != 0 { body.taper = extrusionTaper }
             return body
-        }
-        guard bodies.count > 1 else { return bodies }
-        let (united, untouched) = Unioning.union(bodies[0], with: Array(bodies.dropFirst()))
-        bodies = [united] + bodies.dropFirst().filter { untouched.contains($0.id) }
-        return bodies
+        })
     }
 
-    /// Adds a region to extrude with the selected one, or takes it out again (not the selected one).
+    /// New solids from several regions: those that touch the first are united into it.
+    private static func unitedTouching(_ bodies: [SolidBody]) -> [SolidBody] {
+        guard bodies.count > 1 else { return bodies }
+        let (united, untouched) = Unioning.union(bodies[0], with: Array(bodies.dropFirst()))
+        return [united] + bodies.dropFirst().filter { untouched.contains($0.id) }
+    }
+
+    /// Adds a region to extrude with the picked ones, or takes it out again (not one picked beforehand).
     func toggleExtrusionProfile(_ profile: SketchProfile) {
-        guard isExtruding, faceExtrusion == nil, profile.id != selectedProfile?.id else { return }
+        guard isExtruding, faceExtrusion == nil, !selectedProfiles.contains(where: { $0.id == profile.id }) else { return }
         if let index = extraExtrusionProfiles.firstIndex(where: { $0.id == profile.id }) { extraExtrusionProfiles.remove(at: index) }
         else { extraExtrusionProfiles.append(profile) }
         UISelectionFeedbackGenerator().selectionChanged()
@@ -5645,6 +5792,16 @@ struct DimensionEdit: Identifiable {
     func deleteSelection() {
         guard !isEditingBlocked else { return }
         var next = workspace
+        // Several picked sketch items go together, as one step.
+        for item in extraSelection {
+            switch item {
+            case .sketch(let id): next.shapes.removeAll { $0.sketch == id }
+            case .shape, .profile:
+                let ids = Set(profile(for: item)?.sourceIDs ?? [])
+                next.shapes.removeAll { ids.contains($0.id) }
+            default: break
+            }
+        }
         switch selection {
         case .shape(let id): next.shapes.removeAll { $0.id == id }
         case .profile(let id):
@@ -5680,7 +5837,11 @@ struct DimensionEdit: Identifiable {
     /// What the assistant builds on: its own pending changes, or the document.
     var assistantBase: Workspace { assistantPreview ?? workspace }
     /// The selection, in the assistant's terms ("the selected face").
-    var assistantSelection: AssistantSelection? { Self.assistantSelection(for: selection) }
+    var assistantSelection: AssistantSelection? { Self.assistantSelection(for: selectedItems) }
+    /// Several picked sketch items are `.several`.
+    static func assistantSelection(for items: [ModelSelection]) -> AssistantSelection? {
+        items.count > 1 ? .several(items.compactMap { assistantSelection(for: $0) }) : assistantSelection(for: items.first)
+    }
     static func assistantSelection(for selection: ModelSelection?) -> AssistantSelection? {
         switch selection {
         case .body(let id): .body(id)

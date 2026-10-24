@@ -549,6 +549,7 @@ struct WorkspaceView: View {
     /// What the selection itself offers.
     private var selectionActions: AnyView {
         if sketching { return AnyView(sketchingActions) }
+        if session.isMultipleSelection { return AnyView(pickedActions) }
         if let plane = session.selectedConstructionPlane { return AnyView(planeActions(plane)) }
         if let face = session.selectedFace { return AnyView(faceActions(face)) }
         if session.selectedEdge != nil { return AnyView(edgeActions) }
@@ -687,8 +688,20 @@ struct WorkspaceView: View {
 
     @ViewBuilder private func sketchActions(_ sketch: Sketch) -> some View {
         stripLabel(session.sketchName(of: sketch.id) ?? "Sketch", id: "selection.sketchName")
+        if session.canExtrude {
+            // Every region of the sketch at once.
+            stripButton("Extrude", icon: .extrude, id: "selection.extrude") { session.beginExtrusion() }
+            stripButton("Revolve", icon: .revolve, id: "selection.revolve") { session.beginRevolve() }
+        }
         AnyView(transformMenu(solid: false))
         stripButton("Duplicate", icon: .copy, id: "selection.duplicate") { session.duplicate() }
+    }
+
+    /// Several sketch regions and whole sketches picked together: Extrude and Revolve take them all.
+    @ViewBuilder private var pickedActions: some View {
+        stripLabel(session.pickedSummary, id: "selection.pickedCount")
+        stripButton("Extrude", icon: .extrude, id: "selection.extrude") { session.beginExtrusion() }
+        stripButton("Revolve", icon: .revolve, id: "selection.revolve") { session.beginRevolve() }
     }
 
     @ViewBuilder private var regionActions: some View {
@@ -1089,7 +1102,7 @@ struct WorkspaceView: View {
                         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("workspace")) } action: { taperFrame = $0 }
                         Toggle(isOn: $session.isPickingExtrusionTarget) { optionLabel("Up To", icon: .extrudeTo) }
                             .toggleStyle(.button).accessibilityIdentifier("extrusion.upTo")
-                        if !session.extraExtrusionProfiles.isEmpty {
+                        if session.extrusionProfiles.count > 1 {
                             Text("Regions · \(session.extrusionProfiles.count)").font(.system(size: 15, weight: .medium)).foregroundStyle(ink)
                                 .padding(.horizontal, 6).accessibilityIdentifier("extrusion.regions")
                         }

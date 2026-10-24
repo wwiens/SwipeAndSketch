@@ -5,7 +5,7 @@ import Foundation
 enum HelpTopic: String, CaseIterable, Identifiable {
     case gettingStarted, sketchPlane, sketching, line, rectangle, circle, arc, slot, trim, sketchFillet, dimension, hole
     case ellipse, point, polygon, construction, extend, offset, sketchMirror, moveShape
-    case editShape, keypad, sketchObject, solid, face, edge, constructionPlane
+    case editShape, keypad, sketchObject, pickedSketches, solid, face, edge, constructionPlane
     case extrude, extrudeFace, cut, join, revolve, fillet, chamfer, shell
     case union, subtract, intersect, split, align, mirror, pattern, scale, deleteFace, section, offsetPlane, midplane, project, measure, assistant
     case peg, fitTest, thread, matingPart, text
@@ -37,6 +37,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .editShape: "Editing a Shape"
         case .keypad: "Typing a Value"
         case .sketchObject: "Moving a Sketch"
+        case .pickedSketches: "Picking Several Sketches"
         case .solid: "Moving a Solid"
         case .face: "Working with a Face"
         case .edge: "Working with an Edge"
@@ -75,7 +76,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
     var icon: SSIcon {
         switch self {
         case .gettingStarted: .help
-        case .sketchPlane, .sketching, .sketchObject: .sketch
+        case .sketchPlane, .sketching, .sketchObject, .pickedSketches: .sketch
         case .line: .line
         case .rectangle: .rectangle
         case .circle: .circle
@@ -247,7 +248,15 @@ enum HelpTopic: String, CaseIterable, Identifiable {
             HelpOverview(
                 summary: "The whole sketch is selected. Move it, turn it, or copy it.",
                 steps: ["Drag an arrow to move the sketch along it.", "Drag an arc to turn it.", "Tap a value to type an exact distance or angle."],
-                tips: ["Turn on Create Copy to leave the original where it was.", "Tap one of its lines to go back to drawing in it."])
+                tips: ["Turn on Create Copy to leave the original where it was.", "Tap one of its lines to go back to drawing in it.",
+                       "Extrude above the dock extrudes every region of the sketch. Tap another sketch or region on its plane to pick it too."])
+        case .pickedSketches:
+            HelpOverview(
+                summary: "Several sketch regions or whole sketches are picked, ready to extrude or revolve together, such as holes cut into a face all at once.",
+                steps: ["With a region or sketch selected, tap more regions, or the lines of more sketches, on the same plane.",
+                        "Tap a picked one to take it out again.", "Tap Extrude (or Revolve) above the dock, drag the double-arrow into the solid, and tap Done."],
+                tips: ["The strip above the dock says how many are picked.", "Everything picked is cut, joined, or made in one step you can undo.",
+                       "Tap empty space to start over. Something on another plane, or a solid or face, starts a new selection."])
         case .solid:
             HelpOverview(
                 summary: "The whole solid is selected. Move it, turn it, or copy it.",
@@ -276,7 +285,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                 steps: ["Tap inside a closed sketch shape.", "Drag the blue double-arrow to set the depth, or tap the value to type it.", "Tap Done to make the solid, or Cancel to discard it."],
                 tips: ["Drag back past zero to extrude the other way.", "Dragging into a solid cuts it; touching one joins it.",
                        "Symmetric extrudes half each way; Taper leans the sides in by an angle; Up To sets the depth to reach a face you tap.",
-                       "Tap other regions of the sketch to extrude them at the same time."])
+                       "Tap other regions of the sketch to extrude them at the same time, or pick several regions and sketches before choosing Extrude."])
         case .extrudeFace:
             HelpOverview(
                 summary: "Push or pull a flat face to change the solid it belongs to.",
@@ -495,6 +504,7 @@ extension ModelingSession {
         if splitDraft != nil { return .split }
         if isPickingPlane { return .sketchPlane }
         if selectedConstructionPlane != nil { return .constructionPlane }
+        if isMultipleSelection { return .pickedSketches }
         if selectedSketch != nil { return .sketchObject }
         if selectedBody != nil, tool == .select { return .solid }
         if selectedEdge != nil { return .edge }
