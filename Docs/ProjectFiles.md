@@ -136,7 +136,7 @@ Decision recorded October 19, 2026. Project (sketch projection) casts sketches, 
 | Kind | Fields |
 | --- | --- |
 | `arc` | `start` and `end` on the circle, `arcCenter`; the arc runs counterclockwise (in the plane's own axes) from `start` to `end`, less than a full turn |
-| `curve` | `points` (2 to 4,096, `start` first), and `"closed": true` when the last point joins the first (omitted when open); for circles seen at an angle and outlines of curved faces |
+| `curve` | `points` (2 to 4,096, `start` first), and `"closed": true` when the last point joins the first (omitted when open); for circles seen at an angle and outlines of curved faces. With `"spline": true` (October 24, 2026; at most 256 points) the points are the ones a spline passes through, and the curve is the uniform Catmull-Rom spline through them, 16 straight pieces between each two |
 
 Lines, arcs, and open curves join end to end into closed regions as lines always have. A solid or cut profile built from such a region may carry `arcs`: `[{"start": i, "segments": n, "center": [u, v], "radius": r}]`, meaning outline points `i … i + n` (wrapping) lie on that circle. The outline is still saved in full (arcs every 3° at most); the kernel builds each run as one exact arc, so the extruded side is a single smooth face whose edges can be named and finished like straight ones.
 
@@ -192,3 +192,10 @@ Still format version 1; every new key is optional and omitted when unset, so fil
 - **Groups (Model Tree):** the workspace may carry `"groups": [{"id": UUID, "name"?, "hidden": true?, "parent": UUID?}]`, and solids, sketches, and construction planes an optional `"group": UUID` naming the group they sit in (omitted at the top of the tree). A group's `parent` is the group it sits in. Every referenced group must exist and parents must not loop (at most 32 deep, 1,000 groups); a file that breaks this is refused, not repaired. A hidden group hides everything in it, at any depth, without changing the items' own `hidden`. Groups only organize: they do not move, combine, or export their contents. Whether a group is folded away in the Model Tree is not saved.
 
 Editing after Done (October 24, 2026) adds no data of its own: Edit Hole, Edit Thread, and Edit Text replace their entry in the solid's `cuts` list in place, keeping its `id`, so the entries after it still apply after it. Edit Peg does the same for each solid's peg entries (a separate peg's solid stays where it was in the list).
+
+Tier 2 basics (October 24, 2026):
+
+- Draft: a solid's `cuts` list may carry `"draft": {"points": [[x, y, z], …], "pull": [x, y, z], "origin": [x, y, z], "angle": degrees}`, all in the solid's own frame: the faces through `points` lean `angle` degrees (0.01–60, negative outward) from the unit `pull` direction, pivoting on the plane through `origin` perpendicular to it.
+- Rib: `"rib": {"start", "end", "normal", "thickness", "side"}` in the solid's own frame: a web from the line `start`–`end` on a plane with unit `normal`, `thickness` mm across that plane (0.1–100), reaching on `side` (+1 toward `normal` × the line's direction, or −1) until it meets the solid, which is rebuilt each time.
+- Loft, Sweep, and Import Mesh (STL, 3MF) make solids whose exact shape is stored in `importedShapes`, exactly as STEP import does (named "Loft", "Sweep", or after the file); their sections, paths, or meshes are not kept.
+- Primitives are ordinary extrusions and revolves; construction axes are sketches named "Axis 01", … holding one construction line; Plane at Angle, 3-Point Plane, and Tangent Plane make ordinary construction planes. None adds data.
