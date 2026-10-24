@@ -28,6 +28,10 @@ enum ModelingTool: String, CaseIterable {
     /// Primitives (October 24, 2026): a ready-made solid placed with a tap (Create ▸ Box …).
     case box, cylinder, sphere, torus
     var primitiveKind: PrimitiveKind? { PrimitiveKind(rawValue: rawValue) }
+    /// More construction (October 24, 2026): planes at an angle about a line, through three points,
+    /// and tangent to a round face, and axes (Planes ▸ …).
+    case planeAngle, plane3Point, planeTangent, axis
+    var isConstructionTool: Bool { [.planeAngle, .plane3Point, .planeTangent, .axis].contains(self) }
     var title: String {
         switch self {
         case .offsetPlane: "Offset Plane"
@@ -37,6 +41,9 @@ enum ModelingTool: String, CaseIterable {
         case .fitTest: "Fit Test"
         case .deleteFace: "Delete Face"
         case .sketchMirror: "Mirror"
+        case .planeAngle: "Plane at Angle"
+        case .plane3Point: "3-Point Plane"
+        case .planeTangent: "Tangent Plane"
         default: rawValue.capitalized
         }
     }
@@ -89,6 +96,10 @@ enum ModelingTool: String, CaseIterable {
         case .cylinder: .cylinder
         case .sphere: .sphere
         case .torus: .torus
+        case .planeAngle: .planeAngle
+        case .plane3Point: .plane3Point
+        case .planeTangent: .planeTangent
+        case .axis: .axis
         }
     }
     var shapeKind: ShapeKind? { ShapeKind(rawValue: rawValue) }
@@ -190,12 +201,14 @@ enum DimensionTarget: Hashable {
     case selectedFinish(EdgeFinish.Kind)
     /// A size of the primitive being placed, by its index in `PrimitiveKind.sizes`.
     case primitiveSize(PrimitiveKind, Int)
+    /// Plane at Angle: degrees turned about its line.
+    case constructionAngle
     var unit: String {
         switch self {
         case .scalePercent: "%"
         case .extrusionTaper: "°"
         case .polygonSides: ""
-        case .transformAngle, .alignAngle, .revolveAngle, .bodyAngle, .patternAngle: "°"
+        case .transformAngle, .alignAngle, .revolveAngle, .bodyAngle, .patternAngle, .constructionAngle: "°"
         case .patternCount: ""
         case .relation(_, let angle): angle ? "°" : "mm"
         default: "mm"
@@ -239,6 +252,7 @@ enum DimensionTarget: Hashable {
         case .patternDistance: "Distance"
         case .patternAngle: "Angle"
         case .patternCount: "Quantity"
+        case .constructionAngle: "Angle"
         }
     }
     var accessibilityName: String {
@@ -280,19 +294,20 @@ enum DimensionTarget: Hashable {
         case .patternDistance(let axis): "pattern.distance.\(axis)"
         case .patternAngle: "pattern.angle"
         case .patternCount: "pattern.count"
+        case .constructionAngle: "plane.angle"
         }
     }
     /// Values that may be exactly 0: offsets, turns, and dimensions between sketch items (0 lines them up).
     var allowsZero: Bool {
         switch self {
-        case .planeOffset, .alignOffset, .alignAngle, .relation, .pegEmbed, .extrusionTaper, .sectionOffset: true
+        case .planeOffset, .alignOffset, .alignAngle, .relation, .pegEmbed, .extrusionTaper, .sectionOffset, .constructionAngle: true
         default: false
         }
     }
     var allowsNegative: Bool {
         switch self {
         case .bodyDepth, .extrusion, .transformDistance, .transformAngle, .planeOffset, .alignOffset, .alignAngle, .revolveAngle, .bodyAngle,
-             .patternDistance, .patternAngle, .extrusionTaper, .sectionOffset, .offsetDistance: true
+             .patternDistance, .patternAngle, .extrusionTaper, .sectionOffset, .offsetDistance, .constructionAngle: true
         default: false
         }
     }
@@ -301,7 +316,7 @@ enum DimensionTarget: Hashable {
         switch self {
         case .extrusion, .finishSize, .shellThickness, .holeDiameter, .holeDepth, .pegDiameter, .pegHeight, .pegEmbed, .transformDistance, .transformAngle,
              .planeOffset, .alignOffset, .alignAngle, .revolveAngle, .cornerRadius, .patternDistance, .patternAngle, .threadDiameter, .threadPitch, .threadLength, .textHeight, .textDepth,
-             .scalePercent, .sectionOffset, .polygonSides, .offsetDistance, .primitiveSize: true
+             .scalePercent, .sectionOffset, .polygonSides, .offsetDistance, .primitiveSize, .constructionAngle: true
         case .shape, .bodyDepth, .bodyAngle, .relation, .patternCount, .clearance, .fitClearance, .faceDiameter, .faceDistance, .selectedFinish, .extrusionTaper: false
         }
     }
@@ -355,6 +370,23 @@ struct PlacedPivot: Equatable {
 struct PlaneDraft: Equatable {
     var references: [PlaneReference] = []
     var offset = 0.0
+}
+
+/// Plane at Angle, 3-Point Plane, Tangent Plane, or Axis being set up: what has been picked.
+struct ConstructionDraft: Equatable {
+    /// A straight line: Plane at Angle turns about it; Axis runs along it.
+    var line: AlignFeature?
+    /// Plane at Angle's 0°: the face beside the edge, or the line's sketch plane (its normal).
+    var reference: SIMD3<Double>?
+    /// Points picked: three for a plane, two for an axis.
+    var points: [AlignFeature] = []
+    var angle = 90.0
+    /// A round face: Tangent Plane touches it at `point`; Axis runs along its axis over `extent`.
+    struct Round: Equatable {
+        var axisPoint: SIMD3<Double>, axisDirection: SIMD3<Double>, radius: Double, point: SIMD3<Double>
+        var extent: ClosedRange<Double>
+    }
+    var round: Round?
 }
 
 /// Project in progress (sketch projections): the items picked so
@@ -906,6 +938,10 @@ struct DimensionEdit: Identifiable {
     @Published private(set) var isDraggingPivot = false
     /// Offset Plane / Midplane in progress, and the plane it would make.
     @Published private(set) var planeDraft: PlaneDraft?
+    @Published private(set) var constructionDraft: ConstructionDraft?
+    /// What Done makes: a construction plane, or an axis from one point to another.
+    @Published private(set) var constructionPreview: ConstructionPlane?
+    @Published private(set) var axisPreview: (from: SIMD3<Double>, to: SIMD3<Double>)?
     @Published private(set) var planePreview: ConstructionPlane?
     /// Project in progress, the shapes it would add, and why it cannot (too many shapes).
     @Published private(set) var projectionDraft: ProjectionDraft?
@@ -2280,6 +2316,22 @@ struct DimensionEdit: Identifiable {
         case .thread: return "Tap the inside of a hole, or the side of a round boss, to thread it."
         case .text: return sketchMode?.face != nil ? guidePrefix + "Tap where the text goes on the face." : "Select a flat face first, then choose Text."
         case .offsetPlane: return "Tap a flat face, sketch region, or plane to offset from."
+        case .planeAngle:
+            guard constructionDraft?.line != nil else { return "Tap a straight edge of a solid, or a sketch line, for the plane to turn about." }
+            return constructionPreview == nil ? "That line cannot take a plane. Tap another." :
+                "Tap the angle to change it (0° lies on the face beside the edge, or the line's sketch). Tap another line to start again, or Done."
+        case .plane3Point:
+            let count = constructionDraft?.points.count ?? 0
+            if count == 3 && constructionPreview == nil { return "Those points are in a line. Tap one to take it out, then another." }
+            return count == 3 ? "Done adds the plane through the three points. Tap a point to take it out." :
+                "Tap three points: solid corners, sketch points, or the origin (\(count) of 3)."
+        case .planeTangent:
+            return constructionPreview == nil ? "Tap a round face, such as a cylinder's side, where the plane touches it." :
+                "Done adds the plane. Tap elsewhere on a round face to move it."
+        case .axis:
+            if axisPreview != nil { return "Done adds the axis. Tap something else to start again." }
+            return (constructionDraft?.points.count ?? 0) == 1 ? "Tap a second point for the axis to run to." :
+                "Tap a round face, a circular edge, a straight edge or sketch line, or two points."
         case .midplane: return "Tap two parallel faces, sketch regions, or planes."
         case .project: return "Tap the sketches, edges, faces, or solids to project."
         case .split: return "Tap the solids to split."
@@ -2388,6 +2440,7 @@ struct DimensionEdit: Identifiable {
         if isPickingPlane, value.shapeKind != nil || value.isSketchEditTool { tool = value; return }
         if value == .measure { beginMeasure(); return }
         if value.isPlaneTool { beginPlaneTool(value); return }
+        if value.isConstructionTool { beginConstruction(value); return }
         if value == .project { beginProjection(); return }
         if value == .split { beginSplit(); return }
         if value == .mirror { beginMirror(); return }
@@ -2590,6 +2643,144 @@ struct DimensionEdit: Identifiable {
     }
 
     func cancelPlane() { planeDraft = nil; planePreview = nil; dimensionEdit = nil; tool = .select }
+
+    // MARK: Plane at Angle, 3-Point Plane, Tangent Plane, and Axis (October 24, 2026)
+
+    func beginConstruction(_ value: ModelingTool) {
+        guard value.isConstructionTool, !isEditingBlocked else { return }
+        cancelTransient()
+        endSketchMode()
+        selection = nil
+        tool = value
+        constructionDraft = ConstructionDraft()
+    }
+
+    /// A straight line: Plane at Angle turns about it (from `reference`), and Axis runs along it. A
+    /// circle (an edge or sketch circle) gives Axis its center line.
+    func pickConstructionLine(_ line: AlignFeature, reference: SIMD3<Double>?) {
+        guard var draft = constructionDraft, tool == .planeAngle || tool == .axis else { return }
+        dimensionEdit = nil
+        draft.line = line
+        draft.reference = reference
+        draft.points = []
+        draft.round = nil
+        UISelectionFeedbackGenerator().selectionChanged()
+        updateConstruction(draft)
+    }
+
+    /// A point for 3-Point Plane (three) or Axis (two); a picked one is taken out again.
+    func pickConstructionPoint(_ point: AlignFeature) {
+        guard var draft = constructionDraft, tool == .plane3Point || tool == .axis else { return }
+        dimensionEdit = nil
+        if let index = draft.points.firstIndex(where: { simd_distance($0.point, point.point) < 1e-6 }) {
+            draft.points.remove(at: index)
+        } else {
+            if draft.points.count == (tool == .axis ? 2 : 3) { draft.points.removeLast() }
+            draft.points.append(point)
+        }
+        draft.line = nil
+        draft.round = nil
+        UISelectionFeedbackGenerator().selectionChanged()
+        updateConstruction(draft)
+    }
+
+    /// A round face of a solid tapped at `point`: Tangent Plane touches it there; Axis runs along it.
+    func pickConstructionRound(bodyID: UUID, face: Int, at point: SIMD3<Double>) {
+        guard var draft = constructionDraft, tool == .planeTangent || tool == .axis,
+              let body = workspace.bodies.first(where: { $0.id == bodyID }), let solid = try? SolidKernel.solid(for: body),
+              let cylinder = solid.faceCylinder(face) else {
+            status = "Tap a round face, such as a cylinder's side or a hole's wall"
+            return
+        }
+        dimensionEdit = nil
+        let axis = simd_normalize(cylinder.direction)
+        let heights = solid.faceEdges(face).flatMap { solid.edgeSamples($0, count: 9) }.map { simd_dot($0 - cylinder.point, axis) }
+        draft.round = ConstructionDraft.Round(axisPoint: cylinder.point, axisDirection: axis, radius: cylinder.radius, point: point,
+                                              extent: (heights.min() ?? -10)...(heights.max() ?? 10))
+        draft.line = nil
+        draft.points = []
+        UISelectionFeedbackGenerator().selectionChanged()
+        updateConstruction(draft)
+    }
+
+    private func updateConstruction(_ draft: ConstructionDraft) {
+        constructionDraft = draft
+        constructionPreview = nil
+        axisPreview = nil
+        switch tool {
+        case .planeAngle:
+            guard let line = draft.line, line.kind == .line, let reference = draft.reference, let a = line.outline.first, let b = line.outline.last else { return }
+            constructionPreview = ConstructionPlanes.atAngle(through: line.point, along: line.direction, length: simd_distance(a, b),
+                                                             reference: reference, degrees: draft.angle)
+        case .plane3Point:
+            guard draft.points.count == 3 else { return }
+            constructionPreview = ConstructionPlanes.through(draft.points[0].point, draft.points[1].point, draft.points[2].point)
+        case .planeTangent:
+            guard let round = draft.round else { return }
+            constructionPreview = ConstructionPlanes.tangent(toCylinderAt: round.axisPoint, axisDirection: round.axisDirection, radius: round.radius,
+                                                             through: round.point, height: round.extent.upperBound - round.extent.lowerBound)
+        case .axis:
+            if let round = draft.round {
+                // Along the round face, a little past its ends.
+                let margin = max(2, 0.1 * (round.extent.upperBound - round.extent.lowerBound))
+                axisPreview = (round.axisPoint + round.axisDirection * (round.extent.lowerBound - margin),
+                               round.axisPoint + round.axisDirection * (round.extent.upperBound + margin))
+            } else if let line = draft.line {
+                if line.kind == .line, let a = line.outline.first, let b = line.outline.last {
+                    axisPreview = (a, b)
+                } else {
+                    // A circle's center line, as long as the circle is across.
+                    let reach = line.outline.first.map { simd_distance($0, line.point) } ?? 10
+                    axisPreview = (line.point - line.direction * reach, line.point + line.direction * reach)
+                }
+            } else if draft.points.count == 2, simd_distance(draft.points[0].point, draft.points[1].point) > 0.01 {
+                axisPreview = (draft.points[0].point, draft.points[1].point)
+            }
+        default: break
+        }
+    }
+
+    func setConstructionAngle(_ degrees: Double) {
+        guard var draft = constructionDraft, tool == .planeAngle, degrees.isFinite else { return }
+        draft.angle = max(-360, min(360, degrees))
+        updateConstruction(draft)
+    }
+
+    var canConfirmConstruction: Bool { constructionPreview != nil || axisPreview != nil }
+
+    /// One undo step; the new plane, or the new axis's sketch, is selected.
+    func confirmConstruction() {
+        guard !isEditingBlocked else { return }
+        if let plane = constructionPreview {
+            var next = workspace
+            next.constructionPlanes.append(plane)
+            clearConstruction()
+            commit(next)
+            selection = .plane(plane.id)
+            status = "Added a construction plane"
+        } else if let axis = axisPreview, let result = ConstructionAxes.adding(from: axis.from, to: axis.to, in: workspace) {
+            clearConstruction()
+            commit(result.workspace)
+            selection = .sketch(result.sketch)
+            status = "Added \(sketchName(of: result.sketch) ?? "an axis")"
+        } else { return }
+        tool = .select
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    func cancelConstruction() { clearConstruction(); dimensionEdit = nil; tool = .select }
+
+    private func clearConstruction() {
+        if constructionDraft != nil { constructionDraft = nil }
+        if constructionPreview != nil { constructionPreview = nil }
+        if axisPreview != nil { axisPreview = nil }
+    }
+
+    /// The normal of a flat face of `bodyID` along edge `edge`, for Plane at Angle's 0°.
+    func flatFaceNormal(bodyID: UUID, beside edge: Int) -> SIMD3<Double>? {
+        guard let body = workspace.bodies.first(where: { $0.id == bodyID }), let solid = try? SolidKernel.solid(for: body) else { return nil }
+        return (0..<solid.faceCount).lazy.compactMap { face in solid.faceEdges(face).contains(edge) ? solid.facePlane(face)?.normal : nil }.first
+    }
 
     // MARK: Split Body
 
@@ -3405,6 +3596,7 @@ struct DimensionEdit: Identifiable {
         clearShellDraft()
         clearHoleDraft()
         clearPrimitive()
+        clearConstruction()
         clearPegDraft()
         clearThread()
         clearTextDraft()
@@ -5852,6 +6044,7 @@ struct DimensionEdit: Identifiable {
             guard let record = transformDrag ?? editableTransform, record.dimensionTarget == target else { return nil }
             return record.amount
         case .planeOffset: return tool == .offsetPlane && planePreview != nil ? planeDraft?.offset : nil
+        case .constructionAngle: return tool == .planeAngle && constructionDraft?.line != nil ? constructionDraft?.angle : nil
         case .alignOffset: return alignPreview != nil ? alignDraft?.offset : nil
         case .alignAngle: return alignPreview != nil ? alignDraft?.angle : nil
         case .revolveAngle: return revolveDraft?.axis != nil ? revolveDraft?.angle : nil
@@ -6028,6 +6221,12 @@ struct DimensionEdit: Identifiable {
         case .planeOffset:
             guard tool == .offsetPlane, planeDraft?.references.isEmpty == false else { return false }
             setPlaneOffset(value)
+        case .constructionAngle:
+            guard tool == .planeAngle, var draft = constructionDraft, draft.line != nil else { return false }
+            guard abs(value) <= 360 else { dimensionError = "Enter an angle from −360° to 360°."; return false }
+            draft.angle = value
+            updateConstruction(draft)
+            guard constructionPreview != nil else { dimensionError = "That plane cannot be made."; return false }
         case .alignOffset, .alignAngle:
             guard alignPreview != nil, let previous = alignDraft else { return false }
             if target == .alignOffset { setAlignOffset(value) } else { setAlignAngle(value) }

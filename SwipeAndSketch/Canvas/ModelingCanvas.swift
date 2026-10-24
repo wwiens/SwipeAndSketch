@@ -1343,6 +1343,31 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
                 previewNode.addChildNode(drawOnTop(outlineNode(preview.outline, plane: preview.plane, color: blue, closed: true), order: 9))
             }
         }
+        if let draft = session.constructionDraft {
+            // What is picked in blue, and the plane or axis Done adds.
+            if let line = draft.line {
+                previewNode.addChildNode(drawOnTop(strokeNode(zip(line.outline, line.outline.dropFirst()).map { (SIMD3<Float>($0), SIMD3<Float>($1)) },
+                                                              color: blue, weight: 2), order: 9))
+            }
+            for picked in draft.points {
+                let dot = SCNNode(geometry: SCNSphere(radius: CGFloat(unitsPerPoint * 4)))
+                dot.geometry?.materials = [material(blue, constant: true)]
+                dot.simdPosition = SIMD3<Float>(picked.point)
+                previewNode.addChildNode(drawOnTop(dot, order: 9))
+            }
+            if let preview = session.constructionPreview {
+                let fill = planarNode(path: path(for: preview.outline, circle: nil), plane: preview.plane, height: 0,
+                                      color: blue.withAlphaComponent(0.16), name: "plane.preview")
+                fill.renderingOrder = 7
+                previewNode.addChildNode(fill)
+                previewNode.addChildNode(drawOnTop(outlineNode(preview.outline, plane: preview.plane, color: blue, closed: true), order: 9))
+            }
+            if let axis = session.axisPreview {
+                let axisNode = drawOnTop(strokeNode([(SIMD3<Float>(axis.from), SIMD3<Float>(axis.to))], color: blue, weight: 1.6), order: 9)
+                axisNode.name = "axis.preview"
+                previewNode.addChildNode(axisNode)
+            }
+        }
         if let draft = session.projectionDraft { rebuildProjectionPreview(draft) }
         if let draft = session.splitDraft { rebuildSplitPreview(draft) }
         if let draft = session.mirrorDraft { rebuildMirrorPreview(draft) }
@@ -1637,6 +1662,10 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
                 let angle = atan2(point.y - widget.center.y, point.x - widget.center.x)
                 transformGesture = (handle, .zero, 1, widget.center, angle, 0, widget.toward[axis])
             }
+            return
+        }
+        if session.tool.isConstructionTool {
+            constructionTap(at: point)
             return
         }
         if session.tool.isPlaneTool {
@@ -2458,6 +2487,32 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
                 if case .face(let bodyID, _) = reference.source, moving.contains(bodyID) { return }
                 session.setAlignTo(.plane(reference))
             }
+        }
+    }
+
+    /// Plane at Angle, 3-Point Plane, Tangent Plane, and Axis picks.
+    private func constructionTap(at point: CGPoint) {
+        let tool = session.tool
+        // Points first (corners, sketch points, the origin), for 3-Point Plane and Axis.
+        if tool == .plane3Point || tool == .axis, let corner = alignPoint(at: point, moving: [], from: false) {
+            session.pickConstructionPoint(corner)
+            return
+        }
+        guard tool != .plane3Point else { return }
+        if tool == .planeAngle || tool == .axis {
+            let surface = frontSurface(at: point, committed: true)
+            if let line = nearestSketch(at: point, over: surface), let feature = AlignFeature.shape(line), tool == .axis || feature.kind == .line {
+                session.pickConstructionLine(feature, reference: line.plane.normalAxis)
+                return
+            }
+            if let (bodyID, edge) = solidEdge(at: point, tolerance: 8), let body = session.workspace.bodies.first(where: { $0.id == bodyID }),
+               let feature = AlignFeature.edge(edge, of: body), tool == .axis || feature.kind == .line {
+                session.pickConstructionLine(feature, reference: session.flatFaceNormal(bodyID: bodyID, beside: edge))
+                return
+            }
+        }
+        if tool == .planeTangent || tool == .axis, let hit = frontSurface(at: point, committed: true), hit.plane == nil {
+            session.pickConstructionRound(bodyID: hit.bodyID, face: hit.face, at: hit.point)
         }
     }
 
@@ -3626,6 +3681,12 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         if let section = session.section {
             guard let handle = sectionHandle() else { return [] }
             return [operationLabel(.sectionOffset, value: section.offset, beyond: handle)]
+        }
+        if session.tool == .planeAngle {
+            // The angle beside the middle of the line it turns about.
+            guard let draft = session.constructionDraft, let line = draft.line, session.constructionPreview != nil else { return [] }
+            let middle = project(SIMD3<Float>(line.point))
+            return [CanvasDimension(target: .constructionAngle, value: draft.angle, center: CGPoint(x: middle.x + 60, y: middle.y - 40))]
         }
         if session.tool.isPlaneTool {
             guard let handle = planeHandle(), let draft = session.planeDraft else { return [] }

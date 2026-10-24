@@ -58,7 +58,7 @@ struct WorkspaceView: View {
     private var sketching: Bool { (session.sketchMode != nil || session.isPickingPlane) && !session.isExtruding && !session.isRevolving && !session.isFinishing }
     /// An operation is being set up: its own controls replace the dock until Done or Cancel.
     private var operationActive: Bool {
-        session.isExtruding || session.isRevolving || session.isFinishing || session.isShelling || session.holeDraft != nil || session.primitiveDraft != nil || session.pegDraft != nil || session.threadDraft != nil || session.textDraft != nil || session.tool.isPlaneTool ||
+        session.isExtruding || session.isRevolving || session.isFinishing || session.isShelling || session.holeDraft != nil || session.primitiveDraft != nil || session.pegDraft != nil || session.threadDraft != nil || session.textDraft != nil || session.tool.isPlaneTool || session.tool.isConstructionTool ||
             session.projectionDraft != nil || session.splitDraft != nil || session.mirrorDraft != nil || session.patternDraft != nil || session.unionDraft != nil || session.subtractDraft != nil ||
             session.alignDraft != nil || session.isMeasuring || session.scaleDraft != nil || session.deleteFaceDraft != nil || session.section != nil ||
             session.offsetDraft != nil || session.sketchMirrorDraft != nil
@@ -1413,6 +1413,12 @@ struct WorkspaceView: View {
                         .disabled(session.projectionPreview.isEmpty)
                 }
             }
+        } else if session.tool.isConstructionTool {
+            HStack(spacing: 8) {
+                actionButton("Cancel", icon: .exit, id: "construction.cancel") { session.cancelConstruction() }
+                actionButton("Done", icon: .done, id: "construction.confirm") { session.confirmConstruction() }
+                    .disabled(!session.canConfirmConstruction)
+            }
         } else if session.tool.isPlaneTool {
             HStack(spacing: 8) {
                 actionButton("Cancel", icon: .exit, id: "plane.cancel") { session.cancelPlane() }
@@ -2084,7 +2090,7 @@ enum ToolGroup: String, CaseIterable {
         case .fit: [.peg, .thread, .fitTest]
         case .faceFeatures: [.hole, .peg, .text]
         case .transform: [.align, .scale, .mirror, .pattern]
-        case .planes: [.offsetPlane, .midplane]
+        case .planes: [.offsetPlane, .midplane, .planeAngle, .plane3Point, .planeTangent, .axis]
         }
     }
     var title: String {

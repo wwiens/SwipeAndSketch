@@ -88,6 +88,48 @@ enum ConstructionPlanes {
         simd_length(simd_cross(a.normal, b.normal)) < 1e-9
     }
 
+    // MARK: More construction planes (October 24, 2026)
+
+    /// The plane through a line (`point`, `direction`) turned `degrees` about it from the plane
+    /// through it with `reference` as its normal (a face beside an edge, a line's sketch plane).
+    /// Nil when the reference runs along the line.
+    static func atAngle(through point: SIMD3<Double>, along direction: SIMD3<Double>, length: Double,
+                        reference: SIMD3<Double>, degrees: Double) -> ConstructionPlane? {
+        guard simd_length(direction) > 1e-9, degrees.isFinite, length.isFinite else { return nil }
+        let axis = simd_normalize(direction)
+        let flat = reference - axis * simd_dot(reference, axis)
+        guard simd_length(flat) > 1e-9 else { return nil }
+        let normal = RigidTransform.rotate(degrees: degrees, about: axis, through: .zero).apply(vector: simd_normalize(flat))
+        // As long as the line, and as wide as it is long (at least 20 mm), away from the line on its far side.
+        let half = max(length, 20) / 2, across = simd_cross(normal, axis)
+        let corners = [point - axis * half, point + axis * half, point - axis * half + across * 2 * half, point + axis * half + across * 2 * half]
+        return plane(normal: normal, through: point, covering: corners)
+    }
+
+    /// The plane through three points; nil when they are (nearly) in a line.
+    static func through(_ a: SIMD3<Double>, _ b: SIMD3<Double>, _ c: SIMD3<Double>) -> ConstructionPlane? {
+        let normal = simd_cross(b - a, c - a)
+        let scale = max(simd_length(b - a) * simd_length(c - a), 1e-12)
+        guard simd_length(normal) > 1e-9 * scale else { return nil }
+        // Facing up (or toward +Y, +X) when it can, as the world planes do.
+        var n = simd_normalize(normal)
+        if n.z < -1e-9 || abs(n.z) <= 1e-9 && (n.y < -1e-9 || abs(n.y) <= 1e-9 && n.x < 0) { n = -n }
+        return plane(normal: n, through: (a + b + c) / 3, covering: [a, b, c])
+    }
+
+    /// The plane touching a round face (a cylinder about `axisPoint`, `axisDirection`, of `radius`)
+    /// along the line through `point` (on or near the face), facing out of it, as tall as `height`.
+    static func tangent(toCylinderAt axisPoint: SIMD3<Double>, axisDirection: SIMD3<Double>, radius: Double,
+                        through point: SIMD3<Double>, height: Double) -> ConstructionPlane? {
+        guard simd_length(axisDirection) > 1e-9, radius > 0 else { return nil }
+        let axis = simd_normalize(axisDirection), d = point - axisPoint, along = simd_dot(d, axis)
+        let radial = d - axis * along
+        guard simd_length(radial) > 1e-9 else { return nil }
+        let normal = simd_normalize(radial), touch = axisPoint + axis * along + normal * radius
+        let across = simd_cross(normal, axis), half = max(height, 2 * radius, 20) / 2
+        return plane(normal: normal, through: touch, covering: [touch - axis * half - across * half, touch + axis * half + across * half])
+    }
+
     /// The plane through `point` with `normal`, axes as for sketch planes (following world up), drawn
     /// as a rectangle covering `points` (projected onto it) with a margin.
     private static func plane(normal: SIMD3<Double>, through point: SIMD3<Double>, covering points: [SIMD3<Double>]) -> ConstructionPlane? {
@@ -103,5 +145,32 @@ enum ConstructionPlanes {
         let frame = SketchPlane(origin: canonical.point(center).roundedOff(), xAxis: canonical.xAxis, yAxis: canonical.yAxis)
         let result = ConstructionPlane(plane: frame, width: max(10, high.x - low.x + 2 * margin), height: max(10, high.y - low.y + 2 * margin))
         return result.isValid ? result : nil
+    }
+}
+
+/// Construction axes (October 24, 2026): a straight reference line in space, kept as a sketch of its
+/// own named "Axis 01", "Axis 02", … holding one construction line, on a plane through the line.
+/// Like any construction line, it is a revolve axis, a mirror line, and an Align target, and it
+/// shows, hides, groups, and deletes in the Model Tree like a sketch.
+enum ConstructionAxes {
+    /// A new axis from `a` to `b` in `workspace`, named after the axes already there. Nil when the
+    /// points are (nearly) the same.
+    static func adding(from a: SIMD3<Double>, to b: SIMD3<Double>, in workspace: Workspace) -> (workspace: Workspace, sketch: UUID)? {
+        guard simd_distance(a, b) > 0.01 else { return nil }
+        let direction = simd_normalize(b - a)
+        // A plane containing the line: its normal across the line, toward world up when it can be.
+        let up: SIMD3<Double> = abs(direction.z) < 0.9 ? SIMD3(0, 0, 1) : SIMD3(0, 1, 0)
+        let normal = simd_normalize(simd_cross(direction, simd_cross(up, direction)))
+        guard let plane = SketchPlane.through(a, normal: normal) else { return nil }
+        var line = SketchShape(kind: .line, plane: plane, start: plane.coordinates(of: a), end: plane.coordinates(of: b))
+        line.construction = true
+        let existing = Set(workspace.sketches.compactMap(\.name))
+        let number = (1...999).first { !existing.contains(String(format: "Axis %02d", $0)) } ?? 1
+        var result = workspace
+        let sketch = Sketch(id: line.id, plane: plane, name: String(format: "Axis %02d", number))
+        line.sketch = sketch.id
+        result.sketches.append(sketch)
+        result.shapes.append(line)
+        return result.isValid ? (result, sketch.id) : nil
     }
 }

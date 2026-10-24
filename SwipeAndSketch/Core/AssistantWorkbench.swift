@@ -1819,6 +1819,31 @@ struct AssistantWorkbench {
     }
 
     /// Adds a construction plane parallel to a world plane, construction plane, or flat face.
+    /// A construction plane through three world points, or a construction axis from one point to
+    /// another (a sketch named Axis 01 … holding one construction line).
+    @discardableResult mutating func addConstruction(kind: String, points: [SIMD3<Double>]) throws -> String {
+        switch kind.trimmingCharacters(in: .whitespaces).lowercased() {
+        case "plane", "three points", "3 points":
+            guard points.count == 3 else { throw Failure("A plane through points takes three points.") }
+            guard let plane = ConstructionPlanes.through(points[0], points[1], points[2]) else { throw Failure("Those points are in a line.") }
+            var next = workspace
+            next.constructionPlanes.append(plane)
+            let name = next.planeNames[plane.id] ?? "a plane"
+            let change = "Added \(name) through \(points.map(Self.point).joined(separator: ", "))"
+            try keep(next, change: change, focus: .plane(plane.id))
+            return change + "."
+        case "axis":
+            guard points.count == 2 else { throw Failure("An axis takes two points.") }
+            guard let result = ConstructionAxes.adding(from: points[0], to: points[1], in: workspace) else { throw Failure("The two points are the same.") }
+            let name = result.workspace.sketchNames[result.sketch] ?? "an axis"
+            let change = "Added \(name), a construction axis from \(Self.point(points[0])) to \(Self.point(points[1]))"
+            try keep(result.workspace, change: change, focus: .sketch(result.sketch))
+            return change + "."
+        default:
+            throw Failure("Choose plane (three points) or axis (two points).")
+        }
+    }
+
     @discardableResult mutating func addPlane(from planeName: String, face: String?, offset: Double) throws -> String {
         let (_, reference, label) = try plane(planeName, face: face)
         guard offset.isFinite, abs(offset) <= 10_000 else { throw Failure("Offset must be within ±10000 mm.") }

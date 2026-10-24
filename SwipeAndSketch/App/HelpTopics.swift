@@ -9,6 +9,10 @@ enum HelpTopic: String, CaseIterable, Identifiable {
     case extrude, extrudeFace, cut, join, revolve, fillet, chamfer, shell
     case union, subtract, intersect, split, align, mirror, pattern, scale, deleteFace, section, offsetPlane, midplane, project, measure, assistant
     case peg, fitTest, thread, matingPart, text
+    case axis
+    case planeTangent
+    case plane3Point
+    case planeAngle
     case modelGroup
     case primitives
     case xray
@@ -68,6 +72,10 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .scale: "Scale"
         case .deleteFace: "Delete Face"
         case .section: "Section View"
+        case .axis: "Axis"
+        case .planeTangent: "Tangent Plane"
+        case .plane3Point: "3-Point Plane"
+        case .planeAngle: "Plane at Angle"
         case .modelGroup: "Groups"
         case .primitives: "Primitives"
         case .xray: "X-ray"
@@ -123,6 +131,10 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .scale: .scale
         case .deleteFace: .deleteFace
         case .section: .section
+        case .axis: .axis
+        case .planeTangent: .planeTangent
+        case .plane3Point: .plane3Point
+        case .planeAngle: .planeAngle
         case .modelGroup: .group
         case .primitives: .primitives
         case .xray: .xray
@@ -361,6 +373,26 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                 summary: "A group in the Model Tree holds solids, sketches, planes, and other groups. Select its row to work on everything in it at once.",
                 steps: ["Tap a group's row in the Model Tree. Everything in it is outlined in blue.", "Drag an arrow of the widget to move it all, or an arc to turn it. Turn on Create Copy to copy the whole group.", "Or choose Transform to scale, mirror, or pattern it all, Duplicate for a copy of the group, or Export for a 3MF of just its solids."],
                 tips: ["The group's eye hides everything inside without changing each item's own eye.", "Long-press the row to rename the group, X-ray it, ungroup it, or delete it with its contents."])
+        case .planeAngle:
+            HelpOverview(
+                summary: "A construction plane through a straight edge or sketch line, turned about it by an angle: for sketching on a slant, such as a bevel or a ramp.",
+                steps: ["Choose Planes, then Plane at Angle.", "Tap a straight edge of a solid, or a sketch line.", "Tap the angle and type it. 0° lies on the face beside the edge (or the line's sketch); 90° stands straight up from it.", "Tap Done, then Sketch on the plane."],
+                tips: ["Like every construction plane, it is a fixed frame: it does not follow the edge if the solid changes."])
+        case .plane3Point:
+            HelpOverview(
+                summary: "A construction plane through three points: corners of solids, points of sketches, or the origin.",
+                steps: ["Choose Planes, then 3-Point Plane.", "Tap three points. A picked point taps off again.", "Tap Done."],
+                tips: ["Three points in a line make no plane: take one out and pick another."])
+        case .planeTangent:
+            HelpOverview(
+                summary: "A construction plane touching a round face, such as a cylinder's side, along a line: for text or a flat on a round part.",
+                steps: ["Choose Planes, then Tangent Plane.", "Tap the round face where the plane should touch it.", "Tap Done, then Sketch on the plane."],
+                tips: ["Tap elsewhere on the face to move the plane round it."])
+        case .axis:
+            HelpOverview(
+                summary: "A construction axis: a straight reference line in space, to revolve about, mirror across, or align to.",
+                steps: ["Choose Planes, then Axis.", "Tap a round face or circular edge for its center line, a straight edge or sketch line to run along it, or two points.", "Tap Done. The axis is a sketch named Axis 01 holding one construction line."],
+                tips: ["Revolve, Mirror, and Align pick it like any sketch line.", "Hide, rename, group, or delete it in the Model Tree like a sketch."])
         case .section:
             HelpOverview(
                 summary: "The section view cuts your solids open along a plane, so you can check walls, holes, threads, and sockets inside. It changes nothing.",
@@ -589,6 +621,10 @@ extension ModelingSession {
         case .thread: return .thread
         case .text: return .text
         case .box, .cylinder, .sphere, .torus: return .primitives
+        case .planeAngle: return .planeAngle
+        case .plane3Point: return .plane3Point
+        case .planeTangent: return .planeTangent
+        case .axis: return .axis
         }
     }
 }
