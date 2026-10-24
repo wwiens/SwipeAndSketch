@@ -108,6 +108,9 @@
 		D29F30C494B34804A94B5075 /* SwipeAndSketch/Core/Measuring.swift in Sources */ = {isa = PBXBuildFile; fileRef = 221851B73AAC4432BE5787BA /* SwipeAndSketch/Core/Measuring.swift */; };
 		01FD45B97FC94BB9B65F50A1 /* Tests/AppTests/SketchToolsToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43691DD3546F4AC69431AACC /* Tests/AppTests/SketchToolsToolTests.swift */; };
 		9CCA122BC4CC42B0975EC4B6 /* Tests/AppTests/CanvasTestCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70D89F7260FC43398FA92293 /* Tests/AppTests/CanvasTestCase.swift */; };
+		886E8B14A9238E74A629C0E5 /* SwipeAndSketch/App/Walkthroughs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35F733218BA4E121BC4FC3BF /* SwipeAndSketch/App/Walkthroughs.swift */; };
+		F033E0B1988BCFAEB29B1EC0 /* SwipeAndSketch/App/WalkthroughPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A7F25CF72B36E52BC89C86D /* SwipeAndSketch/App/WalkthroughPlayer.swift */; };
+		772601604690433944532B41 /* Tests/AppTests/WalkthroughTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FBE1BA66883038B9F09AD8B /* Tests/AppTests/WalkthroughTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -249,6 +252,9 @@
 		221851B73AAC4432BE5787BA /* SwipeAndSketch/Core/Measuring.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Measuring.swift; sourceTree = SOURCE_ROOT; };
 		43691DD3546F4AC69431AACC /* Tests/AppTests/SketchToolsToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/SketchToolsToolTests.swift; sourceTree = SOURCE_ROOT; };
 		70D89F7260FC43398FA92293 /* Tests/AppTests/CanvasTestCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/CanvasTestCase.swift; sourceTree = SOURCE_ROOT; };
+		35F733218BA4E121BC4FC3BF /* SwipeAndSketch/App/Walkthroughs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/Walkthroughs.swift; sourceTree = SOURCE_ROOT; };
+		2A7F25CF72B36E52BC89C86D /* SwipeAndSketch/App/WalkthroughPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/WalkthroughPlayer.swift; sourceTree = SOURCE_ROOT; };
+		6FBE1BA66883038B9F09AD8B /* Tests/AppTests/WalkthroughTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/WalkthroughTests.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -307,6 +313,8 @@
 		8309DD304D804F9D7F6302F5 /* SwipeAndSketch */ = {
 			isa = PBXGroup;
 			children = (
+				2A7F25CF72B36E52BC89C86D /* SwipeAndSketch/App/WalkthroughPlayer.swift */,
+				35F733218BA4E121BC4FC3BF /* SwipeAndSketch/App/Walkthroughs.swift */,
 				221851B73AAC4432BE5787BA /* SwipeAndSketch/Core/Measuring.swift */,
 				D2FA6DACD3D041B784B19F62 /* SwipeAndSketch/Core/SketchDimensions.swift */,
 				D6C35E1B90B34884BC6F583A /* SwipeAndSketch/Core/SketchModify.swift */,
@@ -395,6 +403,7 @@
 		A619C04D8A87AB070162A099 /* Tests */ = {
 			isa = PBXGroup;
 			children = (
+				6FBE1BA66883038B9F09AD8B /* Tests/AppTests/WalkthroughTests.swift */,
 				43691DD3546F4AC69431AACC /* Tests/AppTests/SketchToolsToolTests.swift */,
 				778D5A7845409F9408EF15EF /* Tests/AppTests/BasicsToolTests.swift */,
 				CE2DD378C81274D75D8D5F00 /* Tests/AppTests/TemplatePictureTests.swift */,
@@ -597,6 +606,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				772601604690433944532B41 /* Tests/AppTests/WalkthroughTests.swift in Sources */,
 				01FD45B97FC94BB9B65F50A1 /* Tests/AppTests/SketchToolsToolTests.swift in Sources */,
 				08EF15EF7721371D635FCCE4 /* Tests/AppTests/BasicsToolTests.swift in Sources */,
 				7E86E8EC7064EFDE32531491 /* Tests/AppTests/TemplatePictureTests.swift in Sources */,
@@ -641,6 +651,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F033E0B1988BCFAEB29B1EC0 /* SwipeAndSketch/App/WalkthroughPlayer.swift in Sources */,
+				886E8B14A9238E74A629C0E5 /* SwipeAndSketch/App/Walkthroughs.swift in Sources */,
 				D29F30C494B34804A94B5075 /* SwipeAndSketch/Core/Measuring.swift in Sources */,
 				DFC026CA1AD8488BA84A3BCB /* SwipeAndSketch/Core/SketchDimensions.swift in Sources */,
 				208F1D3C6A4A44469CAE996B /* SwipeAndSketch/Core/SketchModify.swift in Sources */,

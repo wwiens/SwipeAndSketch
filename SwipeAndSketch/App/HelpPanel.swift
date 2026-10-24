@@ -8,9 +8,11 @@ private let hairline = Color("ss-border")
 private let white = Color("ss-white")
 
 /// The floating help card opened from the hint: a plain-language overview of what the user is
-/// doing. Drag its top bar to move it.
+/// doing, and, where the website has one, a mini walkthrough playing it out on a canvas. Drag its
+/// top bar to move it.
 struct HelpPanel: View {
     @ObservedObject var session: ModelingSession
+    @ObservedObject var library = WalkthroughLibrary.shared
     /// The topic shown; it stays put while the user works, with a button to follow the current one.
     let topic: HelpTopic
     /// Moves the card by a drag of its top bar; `ended` is true at lift.
@@ -19,21 +21,49 @@ struct HelpPanel: View {
     var onAllControls: () -> Void
     var onClose: () -> Void
 
+    enum Mode: Hashable { case text, walkthrough }
+
+    @State private var mode = Mode.text
+    /// The lesson picked under the player; nil plays the topic's first.
+    @State private var lessonID: String?
+    @StateObject private var playback = WalkthroughPlayback()
+
     static let width: CGFloat = 380
+    /// The card widens while it plays a walkthrough so the canvas has room.
+    static let walkthroughWidth: CGFloat = 560
+    static let playerHeight: CGFloat = 400
 
     var body: some View {
+        let lessons = library.lessons(for: topic)
+        let playing = mode == .walkthrough && !lessons.isEmpty
         VStack(alignment: .leading, spacing: 12) {
             header
-            overview
+            if !lessons.isEmpty {
+                Picker("Help", selection: $mode.animation(.easeOut(duration: 0.2))) {
+                    Text("Text").tag(Mode.text)
+                    Text("Walkthrough").tag(Mode.walkthrough)
+                }
+                .pickerStyle(.segmented).accessibilityIdentifier("help.mode")
+            }
+            if playing, let release = library.catalog?.release {
+                walkthrough(lessons, release: release)
+            } else {
+                overview
+            }
             footer
         }
         .padding(.horizontal, 16).padding(.bottom, 14)
-        .frame(width: Self.width, alignment: .leading)
+        .frame(width: playing ? Self.walkthroughWidth : Self.width, alignment: .leading)
         .background(white, in: RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(hairline, lineWidth: 1))
         .shadow(color: .black.opacity(0.16), radius: 18, y: 6)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("help.panel")
+        .onAppear { library.refresh() }
+        .onChange(of: topic) {
+            lessonID = nil
+            if library.lessons(for: topic).isEmpty { mode = .text }
+        }
     }
 
     /// The grab bar, the topic, and close. Dragging anywhere on it moves the card.
@@ -107,6 +137,73 @@ struct HelpPanel: View {
         .scrollBounceBehavior(.basedOnSize)
         .frame(maxHeight: 380)
         .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// The compact website player, a failure note with Retry in its place when it can't load, and the
+    /// topic's other walkthroughs by name.
+    private func walkthrough(_ lessons: [WalkthroughLesson], release: String) -> some View {
+        let lesson = lessons.first { $0.id == lessonID } ?? lessons[0]
+        return VStack(alignment: .leading, spacing: 10) {
+            ZStack {
+                WalkthroughPlayer(lesson: lesson, release: release, playback: playback)
+                    .opacity(playback.phase == .ready ? 1 : 0)
+                switch playback.phase {
+                case .loading: ProgressView().tint(violet).accessibilityLabel("Loading walkthrough")
+                case .failed: walkthroughFailure
+                case .ready: EmptyView()
+                }
+            }
+            .frame(height: Self.playerHeight)
+            .background(paper)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(hairline, lineWidth: 1))
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("help.walkthrough")
+            if lessons.count > 1 {
+                Text("More walkthroughs").font(.system(size: 12, weight: .semibold)).foregroundStyle(muted).textCase(.uppercase)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(lessons) { item in
+                            let chosen = item.id == lesson.id
+                            Button { lessonID = item.id } label: {
+                                Text(item.shortTitle).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                                    .foregroundStyle(chosen ? paper : violet)
+                                    .padding(.horizontal, 12).frame(height: 30)
+                                    .background(chosen ? violet : violet.opacity(0.1), in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHint(item.summary)
+                            .accessibilityAddTraits(chosen ? .isSelected : [])
+                            .accessibilityIdentifier("help.lesson.\(item.id)")
+                        }
+                    }
+                }
+                .scrollBounceBehavior(.basedOnSize)
+            }
+        }
+    }
+
+    /// The walkthrough needs the network; without it the text is still here.
+    private var walkthroughFailure: some View {
+        VStack(spacing: 12) {
+            Text("This walkthrough didn't load. Check your internet connection and try again.")
+                .font(.system(size: 15)).foregroundStyle(ink).multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 10) {
+                Button { playback.retry() } label: {
+                    Text("Try Again").font(.system(size: 14, weight: .semibold)).foregroundStyle(paper)
+                        .padding(.horizontal, 16).frame(height: 34).background(violet, in: Capsule())
+                }
+                .buttonStyle(.plain).accessibilityIdentifier("help.walkthrough.retry")
+                Button { withAnimation(.easeOut(duration: 0.2)) { mode = .text } } label: {
+                    Text("Show Text").font(.system(size: 14, weight: .semibold)).foregroundStyle(violet)
+                        .padding(.horizontal, 16).frame(height: 34).background(violet.opacity(0.1), in: Capsule())
+                }
+                .buttonStyle(.plain).accessibilityIdentifier("help.walkthrough.text")
+            }
+        }
+        .padding(24)
+        .accessibilityIdentifier("help.walkthrough.failed")
     }
 
     /// The user has moved on to something else: offer its help without jumping there on its own.
