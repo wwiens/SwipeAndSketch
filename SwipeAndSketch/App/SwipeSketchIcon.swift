@@ -89,6 +89,22 @@ enum SSIcon: String, CaseIterable {
     case symmetric = "symmetric"
     case taper = "taper"
     case extrudeTo = "extrude-to"
+    case xray = "xray"
+    case primitives = "primitives"
+    case box = "box"
+    case cylinder = "cylinder"
+    case sphere = "sphere"
+    case torus = "torus"
+    case planeAngle = "plane-angle"
+    case plane3Point = "plane-3point"
+    case planeTangent = "plane-tangent"
+    case axis = "axis"
+    case spline = "spline"
+    case draft = "draft"
+    case rib = "rib"
+    case loft = "loft"
+    case sweep = "sweep"
+    case mesh = "mesh"
     var assetName: String { "ss-icon-" + rawValue }
     var title: String {
         switch self {
@@ -179,16 +195,32 @@ enum SSIcon: String, CaseIterable {
         case .symmetric: "Symmetric"
         case .taper: "Taper"
         case .extrudeTo: "Up To"
+        case .xray: "X-ray"
+        case .primitives: "Primitives"
+        case .box: "Box"
+        case .cylinder: "Cylinder"
+        case .sphere: "Sphere"
+        case .torus: "Torus"
+        case .planeAngle: "Plane at Angle"
+        case .plane3Point: "Plane Through 3 Points"
+        case .planeTangent: "Tangent Plane"
+        case .axis: "Axis"
+        case .spline: "Spline"
+        case .draft: "Draft"
+        case .rib: "Rib"
+        case .loft: "Loft"
+        case .sweep: "Sweep"
+        case .mesh: "Mesh"
         }
     }
     var original: Bool { self == .brand }
     var tileColor: Color {
         switch self {
         case .brand: Color("ss-violet")
-        case .select, .line, .rectangle, .circle, .sketch, .rectangleCorners, .rectangleCenter, .project, .arc, .slot, .trim, .sketchFillet, .dimension, .offset, .polygon, .ellipse, .point, .construction, .extend: Color("ss-lavender")
-        case .extrude, .fillet, .chamfer, .shell, .hole, .merge, .cut, .newBody, .throughAll, .holeSimple, .holeCounterbore, .holeCountersink, .holeInsert, .solid, .plane, .offsetPlane, .midplane, .split, .subtract, .align, .revolve, .mirror, .pattern, .fit, .peg, .thread, .text, .fitTest, .intersect, .scale, .deleteFace, .symmetric, .taper, .extrudeTo: Color("ss-coralSoft")
-        case .items, .snapOn, .done, .visible, .hidden, .assistant, .measure, .section, .send, .color, .rename, .group, .groupAdd, .ungroup: Color("ss-limeSoft")
-        case .home, .more, .snapOff, .undo, .redo, .help, .exit, .save, .saveAs, .newProject, .open, .export, .resetView, .backspace, .stop, .copy, .paste, .disclosure: Color("ss-neutral")
+        case .select, .line, .rectangle, .circle, .sketch, .rectangleCorners, .rectangleCenter, .project, .arc, .slot, .trim, .sketchFillet, .dimension, .offset, .polygon, .ellipse, .point, .construction, .extend, .spline: Color("ss-lavender")
+        case .extrude, .fillet, .chamfer, .shell, .hole, .merge, .cut, .newBody, .throughAll, .holeSimple, .holeCounterbore, .holeCountersink, .holeInsert, .solid, .plane, .offsetPlane, .midplane, .split, .subtract, .align, .revolve, .mirror, .pattern, .fit, .peg, .thread, .text, .fitTest, .intersect, .scale, .deleteFace, .symmetric, .taper, .extrudeTo, .primitives, .box, .cylinder, .sphere, .torus, .planeAngle, .plane3Point, .planeTangent, .axis, .draft, .rib, .loft, .sweep: Color("ss-coralSoft")
+        case .items, .snapOn, .done, .visible, .hidden, .assistant, .measure, .section, .send, .color, .rename, .group, .groupAdd, .ungroup, .xray: Color("ss-limeSoft")
+        case .home, .more, .snapOff, .undo, .redo, .help, .exit, .save, .saveAs, .newProject, .open, .export, .resetView, .backspace, .stop, .copy, .paste, .disclosure, .mesh: Color("ss-neutral")
         case .delete: Color("ss-coralSoft")
         }
     }

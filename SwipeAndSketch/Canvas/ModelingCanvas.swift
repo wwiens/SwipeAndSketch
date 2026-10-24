@@ -420,7 +420,8 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         }
         // The amber source of a revolve depends on what is revolved, not on the angle being dragged.
         let revolveKey = (session.revolveDraft.map { "\($0.profiles.map(\.id).joined())|\($0.face?.face ?? -1)" } ?? "") + session.extraExtrusionProfiles.map(\.id).joined() +
-            (session.section.map { "|section \($0.orientation.normalAxis) \($0.flipped) \($0.offset)" } ?? "")
+            (session.section.map { "|section \($0.orientation.normalAxis) \($0.flipped) \($0.offset)" } ?? "") +
+            (session.xrayAll ? "|xray" : session.xrayBodies.isEmpty ? "" : "|xray " + session.xrayBodies.map(\.uuidString).sorted().joined())
         let othersChanged = lastSelection != session.selection || lastExtraSelection != session.extraSelection || lastPlane != session.plane || lastIsExtruding != session.isExtruding ||
             lastFinishDraft != session.finishDraft || lastSketchMode != session.sketchMode || lastRevolveKey != revolveKey
         if !othersChanged, lastWorkspace != session.visibleWorkspace, moveDraggedGhost() {
@@ -903,6 +904,13 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
                 continue
             }
             let node = bodyNode(body, selected: session.selectedBody?.id == body.id)
+            if session.isXrayed(body.id) {
+                // X-ray: faces see-through and left out of the depth buffer, so edges and solids
+                // behind them show; drawn after the opaque solids.
+                node.geometry = node.geometry?.copy() as? SCNGeometry
+                node.geometry?.materials = (node.geometry?.materials ?? []).map(xrayMaterial)
+                node.renderingOrder = 3
+            }
             if session.finishDraft?.bodyID == body.id {
                 // Translucent like the extrusion preview, so the picked edges stay visible.
                 node.geometry = node.geometry?.copy() as? SCNGeometry
@@ -1112,6 +1120,16 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         }
         solidCache[body.id] = [(body, render)] + (solidCache[body.id] ?? []).prefix(1)
         return render
+    }
+
+    /// A solid's material, see-through for X-ray.
+    private func xrayMaterial(_ base: SCNMaterial) -> SCNMaterial {
+        let copy = base.copy() as! SCNMaterial
+        copy.transparency = 0.22
+        copy.writesToDepthBuffer = false
+        copy.isDoubleSided = true
+        copy.blendMode = .alpha
+        return copy
     }
 
     /// Neutral gray, or the color the solid was given.
@@ -2969,9 +2987,11 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
     /// canvas camera math rather than SCNView hit tests, which miss nodes not yet rendered.
     private func frontSurface(at screen: CGPoint, committed: Bool = false) -> SurfaceHit? {
         let origin = viewPlanePoint(screen), direction = screenCamera.direction
-        var nearest: SurfaceHit?
+        // A tap goes through X-rayed solids to a solid inside them, when there is one.
+        var nearest: SurfaceHit?, nearestXrayed: SurfaceHit?
         for body in committed ? session.workspace.visible.bodies : session.visibleWorkspace.bodies {
             guard let render = solidRender(body) else { continue }
+            let xrayed = session.isXrayed(body.id) && !session.xrayAll
             let triangles = render.triangles
             for span in render.faceSpans where Self.line(through: origin, along: direction, meets: span.low, span.high) {
             for t in stride(from: span.range.lowerBound, to: span.range.upperBound - 2, by: 3) {
@@ -2985,13 +3005,14 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
                 guard v >= 0, u + v <= 1 else { continue }
                 let point = origin + direction * (simd_dot(e2, q) / det)
                 let depth = simd_dot(point, viewDirection)
-                if depth > nearest?.depth ?? -.infinity {
-                    nearest = SurfaceHit(point: point, depth: depth, plane: render.trianglePlanes[t / 3], bodyID: body.id, face: render.triangleFaces[t / 3])
+                if depth > (xrayed ? nearestXrayed : nearest)?.depth ?? -.infinity {
+                    let hit = SurfaceHit(point: point, depth: depth, plane: render.trianglePlanes[t / 3], bodyID: body.id, face: render.triangleFaces[t / 3])
+                    if xrayed { nearestXrayed = hit } else { nearest = hit }
                 }
             }
             }
         }
-        return nearest
+        return nearest ?? nearestXrayed
     }
 
     /// Whether the infinite line through `origin` along `direction` passes through a box (slightly

@@ -909,6 +909,31 @@ struct DimensionEdit: Identifiable {
     @Published private(set) var scaleError: String?
     /// The section view, while it is on.
     @Published private(set) var section: SectionView?
+    /// X-ray (October 24, 2026): every solid drawn see-through, or only these, so the inside of an
+    /// enclosure shows. A view only, like Section: not saved and not an undo step.
+    @Published var xrayAll = false
+    @Published private(set) var xrayBodies: Set<UUID> = []
+    func isXrayed(_ id: UUID) -> Bool { xrayAll || xrayBodies.contains(id) }
+    /// Turns X-ray on or off for one solid, or every solid in a group.
+    func toggleXray(_ item: ModelSelection) {
+        let ids: [UUID]
+        switch item {
+        case .body(let id): ids = [id]
+        case .group(let group): ids = workspace.contents(of: group).bodies
+        default: return
+        }
+        guard !ids.isEmpty else { return }
+        if ids.allSatisfy(xrayBodies.contains) { xrayBodies.subtract(ids) } else { xrayBodies.formUnion(ids) }
+    }
+    func isXrayed(_ item: ModelSelection) -> Bool {
+        switch item {
+        case .body(let id): return xrayBodies.contains(id)
+        case .group(let group):
+            let ids = workspace.contents(of: group).bodies
+            return !ids.isEmpty && ids.allSatisfy(xrayBodies.contains)
+        default: return false
+        }
+    }
     /// How many sides Polygon draws (the last number typed), and the polygon just drawn.
     @Published var polygonSides = 6
     @Published private(set) var lastPolygon: PolygonRecord?

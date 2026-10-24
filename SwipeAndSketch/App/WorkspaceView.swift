@@ -385,6 +385,11 @@ struct WorkspaceView: View {
                 session.toggleSection()
             }
             .disabled(session.isViewingBlocked || session.workspace.bodies.isEmpty && session.section == nil)
+            dockTile("X-ray", icon: .xray, selected: session.xrayAll, id: "xray.toggle") {
+                openGroup = nil
+                session.xrayAll.toggle()
+            }
+            .disabled(session.workspace.bodies.isEmpty && !session.xrayAll)
             dockTile("Snap", icon: session.snapEnabled ? .snapOn : .snapOff, selected: false, id: "snap.toggle",
                      subtitle: session.snapEnabled ? "On" : "Off") { session.snapEnabled.toggle() }
         }
@@ -1015,6 +1020,12 @@ struct WorkspaceView: View {
     @ViewBuilder private func groupMenu(_ item: ModelItem, id: UUID) -> some View {
         Button { beginRename(item.selection) } label: { Label { Text("Rename…") } icon: { SSIconGlyph(icon: .rename, size: 20, color: ink) } }
             .accessibilityIdentifier("group.rename")
+        if !session.workspace.contents(of: id).bodies.isEmpty {
+            Button { session.toggleXray(item.selection) } label: {
+                Label { Text(session.isXrayed(item.selection) ? "Turn Off X-ray" : "X-ray") } icon: { SSIconGlyph(icon: .xray, size: 20, color: ink) }
+            }
+            .accessibilityIdentifier("item.xray")
+        }
         Button {
             if let child = session.newGroup(in: id) { beginRename(.group(child)) }
         } label: { Label { Text("New Group Inside") } icon: { SSIconGlyph(icon: .groupAdd, size: 20, color: ink) } }
@@ -1040,6 +1051,15 @@ struct WorkspaceView: View {
         }
         if case .body(let id) = item.selection, let body = session.workspace.bodies.first(where: { $0.id == id }) {
             Menu { colorMenu(id, current: body.color ?? .gray) } label: { Label { Text("Color") } icon: { SSIconGlyph(icon: .color, size: 20, color: ink) } }
+        }
+        switch item.selection {
+        case .body, .group:
+            // See this solid (or a group's solids) through, to look inside.
+            Button { session.toggleXray(item.selection) } label: {
+                Label { Text(session.isXrayed(item.selection) ? "Turn Off X-ray" : "X-ray") } icon: { SSIconGlyph(icon: .xray, size: 20, color: ink) }
+            }
+            .accessibilityIdentifier("item.xray")
+        default: EmptyView()
         }
         switch item.selection {
         case .body, .sketch, .plane: moveToGroupMenu(item.selection)
