@@ -64,7 +64,7 @@ struct PurchasesView: View {
             .tint(violet)
             .navigationTitle("Purchases").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done", action: onDone).accessibilityIdentifier("purchases.done") } }
-            .offerCodeRedemption(isPresented: $redeeming) { license.codeRedemptionFinished($0) }
+            .offerCodeRedemption(options: [], isPresented: $redeeming) { license.codeRedemptionFinished($0) }
             .task { if license.products.isEmpty { await license.loadProducts() } }
         }
     }

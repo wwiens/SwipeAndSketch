@@ -883,7 +883,8 @@ struct WorkspaceView: View {
                             .padding(.leading, 12).padding(.top, 12).padding(.bottom, 2)
                             // A row dropped on Bodies, Planes, or Sketches leaves its group.
                             .dropDestination(for: String.self) { rows, _ in
-                                group.title != "Groups" && rows.contains { session.moveDropped($0, toGroup: nil) }
+                                guard group.title != "Groups" else { return }
+                                for row in rows { session.moveDropped(row, toGroup: nil) }
                             }
                         ForEach(group.items) { itemRow($0) }
                     }
@@ -990,7 +991,7 @@ struct WorkspaceView: View {
         }
         .draggable(item.id)
         .dropDestination(for: String.self) { rows, _ in
-            rows.contains { $0 != item.id && session.moveDropped($0, toGroup: id) }
+            for row in rows where row != item.id { session.moveDropped(row, toGroup: id) }
         })
     }
 

@@ -1711,7 +1711,7 @@ struct DimensionEdit: Identifiable {
 
     /// A row dragged onto a group row (or a section title, `nil`). While rows are picked, dragging
     /// one of them moves them all.
-    func moveDropped(_ rowID: String, toGroup target: UUID?) -> Bool {
+    @discardableResult func moveDropped(_ rowID: String, toGroup target: UUID?) -> Bool {
         let parts = rowID.split(separator: ".", maxSplits: 1).map(String.init)
         guard parts.count == 2, let id = UUID(uuidString: parts[1]) else { return false }
         let item: ModelSelection

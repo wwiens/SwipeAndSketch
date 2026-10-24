@@ -190,10 +190,17 @@ struct LicenseAccess: Equatable, Sendable {
         }
     }
 
-    /// After the offer code sheet closes: a redeemed code arrives as a transaction.
-    func codeRedemptionFinished(_ result: Result<Void, Error>) {
-        if case .failure(let error) = result { message = error.localizedDescription }
-        Task { await refreshEntitlements() }
+    /// After the offer code sheet closes: a redeemed code arrives as a transaction, finished like a purchase.
+    func codeRedemptionFinished(_ result: Result<VerificationResult<StoreKit.Transaction>, Error>) {
+        Task {
+            switch result {
+            case .success(.verified(let transaction)): await transaction.finish()
+            case .success(.unverified): message = "The App Store could not confirm that code. Try Restore Purchases."
+            case .failure(StoreKitError.userCancelled): break
+            case .failure(let error): message = error.localizedDescription
+            }
+            await refreshEntitlements()
+        }
     }
 
     private func recompute() {
