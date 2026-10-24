@@ -1305,6 +1305,41 @@ struct AssistantWorkbench {
         return change + "."
     }
 
+    /// Changes the size of one of a body's fillets or chamfers, or with `size` nil takes it out so
+    /// its edges are sharp again. `which` is its number in the order they were made (1 for the
+    /// first) or "last".
+    @discardableResult mutating func editFinish(body bodyName: String, which: String, size: Double?) throws -> String {
+        let body = try body(named: bodyName)
+        _ = try buildable(body)
+        let name = self.bodyName(body.id)
+        let sources = body.finishes.indices.map(FinishSource.named) + body.cuts.indices.filter { body.cuts[$0].finish != nil }.map(FinishSource.step)
+        guard !sources.isEmpty else { throw Failure("\(name) has no fillets or chamfers.") }
+        let text = which.trimmingCharacters(in: .whitespaces).lowercased()
+        let number = text == "last" ? sources.count : Int(text.trimmingCharacters(in: CharacterSet(charactersIn: "#"))) ?? 0
+        guard sources.indices.contains(number - 1), let finish = body.finishKind(sources[number - 1]) else {
+            throw Failure("\(name) has \(sources.count) fillet\(sources.count == 1 ? "" : "s") or chamfer\(sources.count == 1 ? "" : "s"); give 1…\(sources.count) or last.")
+        }
+        let source = sources[number - 1]
+        let next: SolidBody, change: String
+        if let size {
+            guard EdgeFinish.sizeRange.contains(size) else { throw Failure("Size must be 0.01–1000 mm.") }
+            guard let resized = body.resizingFinish(source, to: size) else {
+                throw Failure("A \(Self.mm(size)) mm \(finish.kind.rawValue) does not fit those edges of \(name); try a smaller size.")
+            }
+            next = resized
+            change = "Changed a \(finish.kind.rawValue) of \(name) from \(Self.mm(finish.size)) to \(Self.mm(size)) mm"
+        } else {
+            guard let removed = body.removingFinish(source) else { throw Failure("That \(finish.kind.rawValue) of \(name) could not be taken out.") }
+            next = removed
+            change = "Deleted a \(Self.mm(finish.size)) mm \(finish.kind.rawValue) from \(name)"
+        }
+        guard let bodyIndex = workspace.bodies.firstIndex(where: { $0.id == body.id }) else { throw Failure("That body no longer exists.") }
+        var updated = workspace
+        updated.bodies[bodyIndex] = next
+        try keep(updated, change: change, checking: [body.id], focus: .body(body.id))
+        return change + "."
+    }
+
     /// Sets a round face's diameter, or a flat face's distance to the parallel face behind it.
     @discardableResult mutating func resizeFace(body bodyName: String, face spec: String, value: Double) throws -> String {
         let body = try body(named: bodyName), solid = try buildable(body), index = try face(spec, of: body)

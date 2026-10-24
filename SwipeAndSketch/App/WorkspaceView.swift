@@ -582,6 +582,19 @@ struct WorkspaceView: View {
     }
 
     @ViewBuilder private func faceActions(_ face: FaceSelection) -> some View {
+        if let finish = session.selectedFinish {
+            // A fillet's or chamfer's face: its size is on the canvas, and it comes off whole.
+            stripLabel(finish.kind.title)
+            selectionMeasureLabel
+            stripButton("Delete \(finish.kind.title)", icon: .deleteFace, id: "selection.deleteFinish") { session.deleteSelectedFinish() }
+                .disabled(!session.canDeleteSelectedFinish)
+            stripButton("Shell", icon: .shell, id: "selection.shell") { session.shellSelection() }
+        } else {
+            AnyView(plainFaceActions(face))
+        }
+    }
+
+    @ViewBuilder private func plainFaceActions(_ face: FaceSelection) -> some View {
         stripLabel(face.plane != nil ? "Flat face" : "Curved face")
         selectionMeasureLabel
         if face.plane != nil {

@@ -179,6 +179,8 @@ enum DimensionTarget: Hashable {
     case polygonSides
     /// Offset: how far the new outline lies from the picked one.
     case offsetDistance
+    /// The radius or distance of the fillet or chamfer whose face is selected.
+    case selectedFinish(EdgeFinish.Kind)
     var unit: String {
         switch self {
         case .scalePercent: "%"
@@ -217,6 +219,7 @@ enum DimensionTarget: Hashable {
         case .scalePercent(let axis): axis == 3 ? "Scale" : "Scale " + ["X", "Y", "Z"][axis]
         case .faceDiameter: "Diameter"
         case .faceDistance: "Distance"
+        case .selectedFinish(let kind): kind.sizeTitle
         case .extrusionTaper: "Taper"
         case .sectionOffset: "Offset"
         case .polygonSides: "Sides"
@@ -249,6 +252,7 @@ enum DimensionTarget: Hashable {
         case .scalePercent(let axis): "scale.\(axis)"
         case .faceDiameter: "face.diameter"
         case .faceDistance: "face.distance"
+        case .selectedFinish(let kind): kind == .fillet ? "finish.radius" : "finish.distance"
         case .extrusionTaper: "extrusion.taper"
         case .sectionOffset: "section.offset"
         case .polygonSides: "polygon.sides"
@@ -287,7 +291,7 @@ enum DimensionTarget: Hashable {
         case .extrusion, .finishSize, .shellThickness, .holeDiameter, .holeDepth, .pegDiameter, .pegHeight, .pegEmbed, .transformDistance, .transformAngle,
              .planeOffset, .alignOffset, .alignAngle, .revolveAngle, .cornerRadius, .patternDistance, .patternAngle, .threadDiameter, .threadPitch, .threadLength, .textHeight, .textDepth,
              .scalePercent, .sectionOffset, .polygonSides, .offsetDistance: true
-        case .shape, .bodyDepth, .bodyAngle, .relation, .patternCount, .clearance, .fitClearance, .faceDiameter, .faceDistance, .extrusionTaper: false
+        case .shape, .bodyDepth, .bodyAngle, .relation, .patternCount, .clearance, .fitClearance, .faceDiameter, .faceDistance, .selectedFinish, .extrusionTaper: false
         }
     }
 }
@@ -1052,13 +1056,29 @@ struct DimensionEdit: Identifiable {
     /// The selected face's size: a round face's diameter, or a flat face's distance to the face
     /// behind it, as built now. Typing a new one changes the solid (see FaceEditing).
     var selectedFaceSize: FaceEditing.Size? {
-        guard let face = selectedFace, let body = workspace.bodies.first(where: { $0.id == face.bodyID }) else { return nil }
+        // A fillet's or chamfer's face shows the finish's own size instead (selectedFinish).
+        guard let face = selectedFace, let body = workspace.bodies.first(where: { $0.id == face.bodyID }), selectedFinish == nil else { return nil }
         if let cache = faceSizeCache, cache.body == body, cache.face == face.face { return cache.size }
         let size = (try? SolidKernel.solid(for: body)).flatMap { FaceEditing.size(of: face.face, on: $0) }
         faceSizeCache = (body, face.face, size)
         return size
     }
     private var faceSizeCache: (body: SolidBody, face: Int, size: FaceEditing.Size?)?
+
+    /// The fillet or chamfer that made the selected face, with its kind and size.
+    var selectedFinish: (bodyID: UUID, source: FinishSource, kind: EdgeFinish.Kind, size: Double)? {
+        guard let face = selectedFace, let body = workspace.bodies.first(where: { $0.id == face.bodyID }),
+              !body.finishes.isEmpty || body.cuts.contains(where: { $0.finish != nil }) else { return nil }
+        let point = face.point ?? face.center
+        let source: FinishSource?
+        if let cache = finishCache, cache.body == body, cache.point == point { source = cache.source } else {
+            source = body.finishSource(atFace: point)
+            finishCache = (body, point, source)
+        }
+        guard let source, let finish = body.finishKind(source) else { return nil }
+        return (body.id, source, finish.kind, finish.size)
+    }
+    private var finishCache: (body: SolidBody, point: SIMD3<Double>, source: FinishSource?)?
 
     /// The face of a solid through `point`, as a selection.
     func faceSelection(bodyID: UUID, near point: SIMD3<Double>) -> FaceSelection? {
@@ -1936,6 +1956,9 @@ struct DimensionEdit: Identifiable {
         if let face = selectedFace {
             if face.plane == nil, selectedThread != nil {
                 return "Thread selected. Choose Matching Part to make the nut, cap, bolt, or plug that screws onto it."
+            }
+            if let finish = selectedFinish {
+                return "\(finish.kind.title) selected. Tap its \(finish.kind.sizeTitle.lowercased()) to change it, or choose Delete \(finish.kind.title) to make its edges sharp again; double-tap for the whole solid."
             }
             let size = selectedFaceSize.map { if case .diameter = $0 { "Tap its diameter to change it. " } else { "Tap its distance to change it. " } } ?? ""
             return face.plane != nil ? size + "Extrude pushes or pulls it, Sketch draws on it, Delete Face takes it off; double-tap for the whole solid." :
@@ -4951,6 +4974,50 @@ struct DimensionEdit: Identifiable {
         while isDeletingHole { try? await Task.sleep(for: .milliseconds(20)) }
     }
 
+    // MARK: Fillets and chamfers from their faces
+
+    var canDeleteSelectedFinish: Bool { !isEditingBlocked && selectedFinish != nil }
+
+    /// Takes the selected face's fillet or chamfer out of its solid (one undo step): its edges are
+    /// sharp again, every edge it rounded or beveled included.
+    func deleteSelectedFinish() {
+        guard canDeleteSelectedFinish, let finish = selectedFinish, let index = workspace.bodies.firstIndex(where: { $0.id == finish.bodyID }) else { return }
+        cancelTransient()
+        guard let removed = workspace.bodies[index].removingFinish(finish.source) else {
+            status = "This \(finish.kind.rawValue) could not be deleted. Try Delete Face on it."
+            return
+        }
+        var next = workspace
+        next.bodies[index] = removed
+        commit(next)
+        selection = .body(finish.bodyID)
+        status = "Deleted the \(finish.kind.rawValue)"
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    /// A face of `body` (as built) that the finish at `source` makes, nearest `point`: the tapped
+    /// point carried onto the resized round or bevel. Nil for faces other than cylinders and planes.
+    private func finishFaceSelection(of body: SolidBody, source: FinishSource, near point: SIMD3<Double>) -> FaceSelection? {
+        guard let solid = try? SolidKernel.solid(for: body), let without = body.removingFinish(source),
+              let plain = try? SolidKernel.solid(for: without) else { return nil }
+        var best: (distance: Double, point: SIMD3<Double>)?
+        for face in 0..<solid.faceCount {
+            let moved: SIMD3<Double>
+            if let cylinder = solid.faceCylinder(face) {
+                let axis = simd_normalize(cylinder.direction), d = point - cylinder.point
+                let radial = d - axis * simd_dot(d, axis)
+                guard simd_length(radial) > 1e-9 else { continue }
+                moved = cylinder.point + axis * simd_dot(d, axis) + simd_normalize(radial) * cylinder.radius
+            } else if let plane = solid.facePlane(face) {
+                moved = point - plane.normal * simd_dot(point - plane.origin, plane.normal)
+            } else { continue }
+            guard solid.face(near: moved, tolerance: 1e-4) == face, plain.face(near: moved, tolerance: 1e-3) == nil else { continue }
+            let distance = simd_distance(moved, point)
+            if distance < (best?.distance ?? .infinity) { best = (distance, moved) }
+        }
+        return best.flatMap { faceSelection(bodyID: body.id, near: $0.point) }
+    }
+
     /// Waits for a matching part being built (tests).
     func matingPartSettled() async {
         while isMakingMatingPart { try? await Task.sleep(for: .milliseconds(20)) }
@@ -5280,6 +5347,7 @@ struct DimensionEdit: Identifiable {
         case .offsetDistance: return offsetDraft?.distance
         case .faceDiameter: if case .diameter(let value, _) = selectedFaceSize { return value } else { return nil }
         case .faceDistance: if case .distance(let value, _) = selectedFaceSize { return value } else { return nil }
+        case .selectedFinish(let kind): return selectedFinish.flatMap { $0.kind == kind ? $0.size : nil }
         case .relation(let index, _):
             let dimensions = sketchDimensions
             return dimensions.indices.contains(index) ? dimensions[index].value : nil
@@ -5509,6 +5577,20 @@ struct DimensionEdit: Identifiable {
             commit(next)
             selection = faceSelection(bodyID: face.bodyID, near: moved).map { .face($0) } ?? .body(face.bodyID)
             status = "Resized"
+        case .selectedFinish(let kind):
+            guard let finish = selectedFinish, let face = selectedFace, let index = workspace.bodies.firstIndex(where: { $0.id == finish.bodyID }) else { return false }
+            guard EdgeFinish.sizeRange.contains(value) else { dimensionError = "Enter a size from 0.01 to 1000 mm."; return false }
+            let body = workspace.bodies[index]
+            guard let resized = body.resizingFinish(finish.source, to: value) else {
+                dimensionError = "A \(lengthText(value)) \(kind.rawValue) does not fit these edges. Try a smaller size."
+                return false
+            }
+            var next = workspace
+            next.bodies[index] = resized
+            commit(next)
+            // The rounded face moves with its size: keep it selected where it went.
+            selection = finishFaceSelection(of: resized, source: finish.source, near: face.point ?? face.center).map { .face($0) } ?? .body(body.id)
+            status = "\(kind.title) changed to \(lengthText(value))"
         case .scalePercent(let axis):
             guard scaleDraft != nil else { return false }
             guard (0.1...10_000).contains(value) else { dimensionError = "Enter a percentage from 0.1 to 10000."; return false }

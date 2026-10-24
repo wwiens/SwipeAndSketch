@@ -258,7 +258,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                 summary: "A face is selected. You can change its size, push or pull it, sketch on it, or take it off.",
                 steps: ["Tap the size beside it (a round face's diameter, a flat face's distance to the face behind it) and type a new one.",
                         "Or tap Extrude to pull the face out or push it in, or Sketch to draw on it.", "Double-tap the face to select the whole solid."],
-                tips: ["Delete Face takes it off and closes the gap: a fillet, a hole, or a boss disappears.",
+                tips: ["Delete Face takes it off and closes the gap: a hole or a boss disappears. For a fillet or chamfer, tap its face and choose Delete Fillet or Delete Chamfer.",
                        "Curved faces can be used for Shell and Delete Face, but not for sketching or Extrude."])
         case .edge:
             HelpOverview(
@@ -303,12 +303,14 @@ enum HelpTopic: String, CaseIterable, Identifiable {
             HelpOverview(
                 summary: "Fillet rounds sharp edges of a solid.",
                 steps: ["Tap the edges to round. Tap again to unpick one.", "Drag the double-arrow or tap the radius.", "Tap Done."],
-                tips: ["A red value is too large for those edges.", "Shell before rounding every edge: a fully rounded box cannot be hollowed."])
+                tips: ["A red value is too large for those edges.", "Shell before rounding every edge: a fully rounded box cannot be hollowed.",
+                       "To change a fillet later, tap its rounded face and tap the radius. Delete Fillet makes its edges sharp again."])
         case .chamfer:
             HelpOverview(
                 summary: "Chamfer cuts a flat bevel along sharp edges of a solid.",
                 steps: ["Tap the edges to bevel. Tap again to unpick one.", "Drag the double-arrow or tap the distance.", "Tap Done."],
-                tips: ["A red value is too large for those edges."])
+                tips: ["A red value is too large for those edges.",
+                       "To change a chamfer later, tap its beveled face and tap the distance. Delete Chamfer makes its edges sharp again."])
         case .shell:
             HelpOverview(
                 summary: "Shell hollows out a solid, leaving walls of the thickness you choose.",
@@ -497,7 +499,10 @@ extension ModelingSession {
         if selectedBody != nil, tool == .select { return .solid }
         if selectedEdge != nil { return .edge }
         if selectedShape != nil { return .editShape }
-        if selectedFace != nil { return selectedThread != nil ? .matingPart : .face }
+        if selectedFace != nil {
+            if let finish = selectedFinish { return finish.kind == .fillet ? .fillet : .chamfer }
+            return selectedThread != nil ? .matingPart : .face
+        }
         switch tool {
         case .select: return sketchMode != nil ? .sketching : .gettingStarted
         case .line: return .line

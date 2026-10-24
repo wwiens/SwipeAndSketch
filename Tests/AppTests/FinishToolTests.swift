@@ -120,4 +120,50 @@ import simd
         XCTAssertNotNil(session.dimensionError)
         XCTAssertEqual(session.workspace.bodies.first?.depth, 30)
     }
+
+    /// A committed fillet is changed and taken out from its own face (user report, October 23, 2026:
+    /// its face offered a diameter no value could change).
+    func testTappingAFilletFaceEditsItsRadiusAndDeletesIt() throws {
+        let (session, controller, body) = try boxScene()
+        session.chooseTool(.fillet)
+        tap(controller, SIMD3(30, -20, 10))
+        XCTAssertTrue(session.applyDimension(3, target: .finishSize(.fillet)))
+        session.confirmFinish()
+        session.chooseTool(.select)
+        session.select(nil)
+        controller.refresh()
+
+        // Halfway around the round on the front-right corner.
+        let h = Float(3 * 0.5.squareRoot())
+        tap(controller, SIMD3(27 + h, -17 - h, 10))
+        XCTAssertEqual(session.selectedFace?.bodyID, body.id)
+        let finish = try XCTUnwrap(session.selectedFinish)
+        XCTAssertEqual(finish.kind, .fillet)
+        XCTAssertEqual(finish.size, 3)
+        XCTAssertNil(session.selectedFaceSize, "No diameter for a fillet's face")
+        XCTAssertEqual(controller.dimensionAnnotations().map(\.target), [.selectedFinish(.fillet)])
+        XCTAssertEqual(controller.dimensionAnnotations().first?.text, "R 3 mm")
+        XCTAssertEqual(session.helpTopic, .fillet)
+
+        XCTAssertFalse(session.applyDimension(45, target: .selectedFinish(.fillet)), "Wider than the faces beside it")
+        XCTAssertNotNil(session.dimensionError)
+        XCTAssertEqual(session.workspace.bodies[0].finishes.first?.size, 3)
+        XCTAssertTrue(session.applyDimension(5, target: .selectedFinish(.fillet)))
+        XCTAssertEqual(session.workspace.bodies[0].finishes.first?.size, 5)
+        XCTAssertEqual(session.selectedFinish?.size, 5, "The moved round stays selected")
+        session.undo()
+        XCTAssertEqual(session.workspace.bodies[0].finishes.first?.size, 3, "One undo step")
+        session.redo()
+
+        session.select(nil)
+        controller.refresh()
+        let r = Float(5 * 0.5.squareRoot())
+        tap(controller, SIMD3(25 + r, -15 - r, 10))
+        XCTAssertTrue(session.canDeleteSelectedFinish)
+        session.deleteSelectedFinish()
+        XCTAssertEqual(session.workspace.bodies[0].finishes, [])
+        XCTAssertEqual(session.selection, .body(body.id))
+        session.undo()
+        XCTAssertEqual(session.workspace.bodies[0].finishes.first?.size, 5)
+    }
 }

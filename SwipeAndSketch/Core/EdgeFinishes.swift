@@ -274,3 +274,66 @@ extension SolidKernel {
         }
     }
 }
+
+// MARK: Editing a finish from its face (October 23, 2026)
+
+/// A fillet or chamfer of a solid, found from a face it made: an entry of `finishes` (original
+/// edges by name) or a finish step in `cuts`. Its size changes, or it comes out, as one step, so
+/// the edges are as sharp as before it.
+enum FinishSource: Hashable, Sendable {
+    case named(Int), step(Int)
+}
+
+extension SolidBody {
+    func finishKind(_ source: FinishSource) -> (kind: EdgeFinish.Kind, size: Double)? {
+        switch source {
+        case .named(let index): finishes.indices.contains(index) ? (finishes[index].kind, finishes[index].size) : nil
+        case .step(let index): cuts.indices.contains(index) ? cuts[index].finish.map { ($0.kind, $0.size) } : nil
+        }
+    }
+
+    /// The fillet or chamfer whose rounded or beveled face passes through `point` (a world point on
+    /// this solid as built), newest first: without it, no face of the solid lies there any more.
+    func finishSource(atFace point: SIMD3<Double>) -> FinishSource? {
+        guard let solid = try? SolidKernel.solid(for: self), solid.face(near: point, tolerance: 1e-3) != nil else { return nil }
+        let sources = cuts.indices.reversed().filter { cuts[$0].finish != nil }.map(FinishSource.step) +
+            finishes.indices.reversed().map(FinishSource.named)
+        for source in sources {
+            guard let without = removingFinish(source), let built = try? SolidKernel.solid(for: without) else { continue }
+            if built.face(near: point, tolerance: 1e-3) == nil { return source }
+        }
+        return nil
+    }
+
+    /// This solid with the finish at `source` taken out; a later finish on an edge only it made
+    /// keeps the edges that are left (or goes, with none). Nil when it cannot be built.
+    func removingFinish(_ source: FinishSource) -> SolidBody? {
+        var result = self
+        switch source {
+        case .named(let index):
+            guard finishes.indices.contains(index) else { return nil }
+            result.finishes.remove(at: index)
+        case .step(let index):
+            guard cuts.indices.contains(index), cuts[index].finish != nil else { return nil }
+            result.cuts.remove(at: index)
+        }
+        guard result.isValid, let cleaned = Self.droppingMissingFinishEdges(result) else { return nil }
+        return cleaned.body
+    }
+
+    /// This solid with the finish at `source` set to `size`; nil when it does not fit.
+    func resizingFinish(_ source: FinishSource, to size: Double) -> SolidBody? {
+        guard size.isFinite, EdgeFinish.sizeRange.contains(size) else { return nil }
+        var result = self
+        switch source {
+        case .named(let index):
+            guard finishes.indices.contains(index) else { return nil }
+            result.finishes[index].size = size
+        case .step(let index):
+            guard cuts.indices.contains(index), cuts[index].finish != nil else { return nil }
+            result.cuts[index].finish?.size = size
+        }
+        guard result.isValid, (try? SolidKernel.solid(for: result)) != nil else { return nil }
+        return result
+    }
+}

@@ -100,7 +100,7 @@ extension SolidBody {
 
     /// The solid with fillet and chamfer steps kept to the edges it still has where they come (a
     /// step left with none is dropped), and how many edges were left off; nil when it still fails.
-    private static func droppingMissingFinishEdges(_ body: SolidBody) -> (body: SolidBody, dropped: Int)? {
+    static func droppingMissingFinishEdges(_ body: SolidBody) -> (body: SolidBody, dropped: Int)? {
         if (try? SolidKernel.solid(for: body)) != nil { return (body, 0) }
         var result = body, dropped = 0, index = 0
         while index < result.cuts.count {

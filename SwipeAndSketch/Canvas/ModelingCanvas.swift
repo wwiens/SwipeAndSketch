@@ -57,7 +57,7 @@ struct CanvasDimension {
     var unit = LengthUnit.millimeters
     var text: String {
         let prefix = target.accessibilityName.hasSuffix("diameter") && target.accessibilityName != "hole.diameter" && target.accessibilityName != "peg.diameter" &&
-            target.accessibilityName != "thread.diameter" ? "Ø " : target.accessibilityName == "radius" ? "R " : ""
+            target.accessibilityName != "thread.diameter" ? "Ø " : ["radius", "finish.radius"].contains(target.accessibilityName) ? "R " : ""
         if target.unit == "%" { return formatted(value) + " %" }
         if target == .polygonSides { return "\(Int(value.rounded())) sides" }
         return target.isLength ? prefix + formatted(length: value, unit: unit) + " " + unit.symbol : prefix + formatted(value) + "°"
@@ -3674,6 +3674,15 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             let anchor = (0...16).map { project(SIMD3<Float>(spec.rotation(on: plane, degrees: spec.angle * Double($0) / 16).apply(point: start))) }
                 .min { distance($0, middle) < distance($1, middle) } ?? middle
             return [CanvasDimension(target: .bodyAngle(body.id), value: spec.angle, center: CGPoint(x: anchor.x + 56, y: anchor.y))]
+        }
+        if let face = session.selectedFace, session.tool == .select, let finish = session.selectedFinish {
+            // A fillet's radius or a chamfer's distance, beside where its face was tapped, off the solid.
+            let point = face.point ?? face.center
+            let a = project(SIMD3<Float>(point))
+            let middle = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
+            let dx = a.x - middle.x, dy = a.y - middle.y, length = max(1, hypot(dx, dy))
+            let center = CGPoint(x: a.x + dx / length * 60, y: a.y + dy / length * 60)
+            return [CanvasDimension(target: .selectedFinish(finish.kind), value: finish.size, center: center, extensions: [(a, center)])]
         }
         if let face = session.selectedFace, session.tool == .select, let size = session.selectedFaceSize,
            let body = session.workspace.bodies.first(where: { $0.id == face.bodyID }), let solid = try? SolidKernel.solid(for: body) {
