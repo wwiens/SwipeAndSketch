@@ -180,13 +180,15 @@ enum HelpTopic: String, CaseIterable, Identifiable {
             HelpOverview(
                 summary: "You are in a sketch. Everything you draw now belongs to it and stays on its plane.",
                 steps: ["Pick a drawing tool in the dock: Line, Rectangle, or one under Shapes (Circle, Arc, Slot, and more).", "Draw with Pencil.", "Tap Finish Sketch when you are finished."],
-                tips: ["Purple dots are snap points. Line up with one and a dashed guide appears.", "Tap a shape with no tool chosen to see and change its sizes.",
+                tips: ["Purple dots are snap points. Line up with one and a dashed guide appears.",
+                       "Strokes catch the ends, middles, and crossings of your lines, and anywhere along a line or circle; a purple ring shows the catch. Snap Off turns off only the grid and the guides.",
+                       "Tap a shape with no tool chosen to see and change its sizes.",
                        "Tap the active tool again to put it down."])
         case .line:
             HelpOverview(
                 summary: "Draw straight lines. Lines joined end to end can close an outline you can extrude.",
                 steps: ["Touch Pencil where the line starts.", "Drag to where it ends and lift.", "Start the next line on the last end to keep the outline connected, and finish on the first point to close it."],
-                tips: ["Tap a line afterwards to type its exact length."])
+                tips: ["Start or end on another line (its end, middle, or anywhere along it) and the line joins it there.", "Tap a line afterwards to type its exact length."])
         case .rectangle:
             HelpOverview(
                 summary: "Draw a rectangle from one corner to the other, or outward from its center.",

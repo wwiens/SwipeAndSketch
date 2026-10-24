@@ -725,20 +725,69 @@ struct SnapResult: Equatable, Sendable {
     var label: String
     /// Points the result is aligned with horizontally or vertically (drawn as dashed guides).
     var alignedTo: [Point2] = []
+    /// Snapped onto the sketch or a guide point, not just to the grid or an alignment.
+    var isOnGeometry: Bool { !["", "Grid", "Vertical", "Horizontal", "Aligned"].contains(label) }
 }
 
 enum SketchSnap {
+    /// How near the Pencil must come, in points on screen, to snap to a sketch's points and lines.
+    static let reach = 14.0
+
+    /// Where a point being drawn goes. In order: the nearest end, corner, or center of a sketch
+    /// shape, solid guide point, or the origin, or the middle of a line or where two lines cross
+    /// (ends and corners win over a middle or crossing about as near); else the nearest point on a
+    /// line, arc, or circle; else, with `gridSnapping` (the Snap setting), the grid and alignment.
+    /// Shapes with a point in `excluding` (joined to an end being dragged, so moving with it) are
+    /// no lines or crossings to snap to.
     static func snap(_ point: Point2, start: Point2? = nil, shapes: [SketchShape],
                      plane: SketchPlane, grid: Double, tolerance: Double, align: Bool = true,
-                     excluding: [Point2] = [], guides: [SketchGuide] = [], origin: Point2? = .zero) -> SnapResult {
-        // Sketch endpoints and solid guide points (corners, midpoints, centers) compete by distance.
-        let endpoints = shapes.filter { $0.plane == plane }.flatMap(\.snapPoints).map { SnapResult(point: $0, label: "Endpoint") } +
-            guides.map { SnapResult(point: $0.point, label: $0.kind.label) }
-        let candidates = endpoints.filter { candidate in !excluding.contains { $0.distance(to: candidate.point) < 1e-5 } }
-        if let nearest = candidates.min(by: { $0.point.distance(to: point) < $1.point.distance(to: point) }),
-           nearest.point.distance(to: point) <= tolerance { return nearest }
+                     excluding: [Point2] = [], guides: [SketchGuide] = [], origin: Point2? = .zero,
+                     gridSnapping: Bool = true) -> SnapResult {
+        let shapes = shapes.filter { $0.plane == plane }
+        func excluded(_ p: Point2) -> Bool { excluding.contains { $0.distance(to: p) < 1e-5 } }
+        let fixed = shapes.filter { !$0.snapPoints.contains(where: excluded) }
+        // Only the curves near the Pencil are tried for crossings and nearest points.
+        let curves = fixed.flatMap { shape in shape.regionCurves.map { (shape: shape, curve: $0) } }.filter { item in
+            let box = item.curve.bounds
+            return point.x >= box.low.x - tolerance && point.x <= box.high.x + tolerance &&
+                point.y >= box.low.y - tolerance && point.y <= box.high.y + tolerance
+        }
+        var points: [(result: SnapResult, weight: Double)] =
+            shapes.flatMap(\.snapPoints).map { (SnapResult(point: $0, label: "Endpoint"), 1) } +
+            guides.map { (SnapResult(point: $0.point, label: $0.kind.label), 1) }
         // The world origin, where the plane passes through it.
-        if let origin, point.distance(to: origin) <= tolerance { return .init(point: origin, label: "Origin") }
+        if let origin { points.append((SnapResult(point: origin, label: "Origin"), 1)) }
+        for shape in fixed {
+            let sides: [(Point2, Point2)]
+            switch shape.kind {
+            case .line: sides = [(shape.start, shape.end)]
+            case .rectangle: let p = shape.outline; sides = (0..<4).map { (p[$0], p[($0 + 1) % 4]) }
+            default: sides = []
+            }
+            points += sides.map { (SnapResult(point: ($0.0 + $0.1) * 0.5, label: "Midpoint"), 1.5) }
+        }
+        for i in curves.indices {
+            for j in curves.indices where j > i && curves[j].shape.id != curves[i].shape.id {
+                points += curves[i].curve.meetings(with: curves[j].curve).map { (SnapResult(point: curves[i].curve.point($0.0), label: "Intersection"), 1.5) }
+            }
+        }
+        if let nearest = points.filter({ !excluded($0.result.point) && $0.result.point.distance(to: point) <= tolerance })
+            .min(by: { $0.result.point.distance(to: point) * $0.weight < $1.result.point.distance(to: point) * $1.weight }) {
+            return nearest.result
+        }
+        // On a line, arc, or circle.
+        if let on = curves.map({ item in (item, item.curve.nearestPoint(to: point)) })
+            .filter({ $0.1.distance(to: point) <= tolerance }).min(by: { $0.1.distance(to: point) < $1.1.distance(to: point) }) {
+            let label: String
+            switch (on.0.shape.kind, on.0.curve.kind) {
+            case (.line, _), (.rectangle, _), (.slot, .polyline): label = "On line"
+            case (.circle, _): label = "On circle"
+            case (.arc, _), (.slot, .arc): label = "On arc"
+            default: label = "On curve"
+            }
+            return .init(point: on.1, label: label)
+        }
+        guard gridSnapping else { return .init(point: point, label: "") }
         var p = Point2(x: (point.x / grid).rounded() * grid, y: (point.y / grid).rounded() * grid)
         var label = "Grid"
         // Alignment: line up vertically and/or horizontally with a guide point (or the stroke's

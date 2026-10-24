@@ -96,6 +96,23 @@ struct SketchCurve: Sendable {
         }
     }
 
+    /// The point of the curve nearest `p`.
+    func nearestPoint(to p: Point2) -> Point2 {
+        switch kind {
+        case .polyline(let points):
+            return zip(points, points.dropFirst()).map { a, b -> Point2 in
+                let d = b - a, length2 = Geometry.dot(d, d)
+                return length2 > 1e-18 ? a + d * max(0, min(1, Geometry.dot(p - a, d) / length2)) : a
+            }.min { $0.distance(to: p) < $1.distance(to: p) } ?? points[0]
+        case .arc(let center, let radius, let from, let sweep):
+            var t = atan2(p.y - center.y, p.x - center.x) - from
+            t -= 2 * .pi * (t / (2 * .pi)).rounded(.down)
+            // Off the arc: whichever end is nearer.
+            if t > sweep { return [point(0), point(sweep)].min { $0.distance(to: p) < $1.distance(to: p) }! }
+            return point(t)
+        }
+    }
+
     var bounds: (low: Point2, high: Point2) {
         switch kind {
         case .polyline(let points):

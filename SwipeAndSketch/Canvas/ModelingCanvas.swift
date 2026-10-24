@@ -1784,7 +1784,7 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
                 case .text: session.placeText(at: result.point)
                 default: session.placePeg(at: result.point)
                 }
-                session.snapLabel = session.snapEnabled ? result.label : ""
+                session.snapLabel = result.label
             }
             return
         }
@@ -1886,7 +1886,7 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             let result = snapped(local)
             liveSnap = (result, session.plane)
             polygonStroke = (result.point, session.plane)
-            session.snapLabel = session.snapEnabled ? result.label : ""
+            session.snapLabel = result.label
             return
         }
         guard let kind = session.tool.shapeKind else { select(at: point, bodies: session.tool != .extrude && session.tool != .revolve); return }
@@ -1906,7 +1906,7 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
                           width: kind == .ellipse ? 0 : nil)
         strokePlane = session.plane
         session.preview = activeShape
-        session.snapLabel = session.snapEnabled ? result.label : ""
+        session.snapLabel = result.label
     }
 
     func pencilMoved(to point: CGPoint) {
@@ -1955,21 +1955,17 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             guard dragMoved || distance(point, pencilStartScreen) > Self.sketchDragSlop,
                   let local = pointOnPlane(point, plane: drag.shape.plane) else { return }
             dragMoved = true
-            var endpoint = local + drag.offset
-            if session.snapEnabled {
-                let fixed = drag.handle == .start ? drag.shape.end : drag.shape.start
-                let result = SketchSnap.snap(endpoint, start: fixed,
-                                             shapes: session.workspace.visible.shapes.filter { $0.id != drag.shape.id },
-                                             plane: drag.shape.plane, grid: session.snapGrid, tolerance: unitsPerPoint * 8,
-                                             align: drag.shape.kind == .line,
-                                             excluding: [SketchEditing.handlePoint(drag.handle, on: drag.shape)],
-                                             guides: session.sketchMode?.plane == drag.shape.plane ? session.sketchGuides : [],
-                                             origin: worldOrigin(on: drag.shape.plane))
-                endpoint = result.point
-                session.snapLabel = result.label
-                liveSnap = (result, drag.shape.plane)
-            }
-            _ = session.updateSketchDrag(to: endpoint)
+            let fixed = drag.handle == .start ? drag.shape.end : drag.shape.start
+            let result = SketchSnap.snap(local + drag.offset, start: fixed,
+                                         shapes: session.workspace.visible.shapes.filter { $0.id != drag.shape.id },
+                                         plane: drag.shape.plane, grid: session.snapGrid, tolerance: unitsPerPoint * SketchSnap.reach,
+                                         align: drag.shape.kind == .line,
+                                         excluding: [SketchEditing.handlePoint(drag.handle, on: drag.shape)],
+                                         guides: session.sketchMode?.plane == drag.shape.plane ? session.sketchGuides : [],
+                                         origin: worldOrigin(on: drag.shape.plane), gridSnapping: session.snapEnabled)
+            session.snapLabel = result.label
+            liveSnap = (result, drag.shape.plane)
+            _ = session.updateSketchDrag(to: result.point)
             return
         }
         if draggingExtrusion && session.isExtruding {
@@ -2058,7 +2054,7 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             liveSnap = (result, stroke.plane)
             let lines = SketchTools.polygon(center: stroke.center, vertex: result.point, sides: session.polygonSides, plane: stroke.plane)
             session.preview = lines.isEmpty ? nil : SketchShape.curve(lines.map(\.start), closed: true, plane: stroke.plane)
-            session.snapLabel = session.snapEnabled ? result.label : ""
+            session.snapLabel = result.label
             return
         }
         guard var shape = activeShape, let plane = strokePlane, let local = pointOnPlane(point, plane: plane) else { return }
@@ -2068,7 +2064,7 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             shape.start = result.point; shape.end = result.point
             activeShape = shape
             session.preview = shape
-            session.snapLabel = session.snapEnabled ? result.label : ""
+            session.snapLabel = result.label
             return
         }
         if shape.kind == .ellipse, let start = strokeStart {
@@ -2080,7 +2076,7 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             else { shape.end = start + Point2(x: 0, y: d.y); shape.width = 2 * abs(d.x) }
             activeShape = shape
             session.preview = shape
-            session.snapLabel = session.snapEnabled ? result.label : ""
+            session.snapLabel = result.label
             return
         }
         let result = snapped(local, start: strokeStart ?? shape.start, align: shape.kind == .line)
@@ -2099,7 +2095,7 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             else { shape.end = result.point }
             activeShape = shape
             session.preview = shape
-            session.snapLabel = session.snapEnabled ? result.label : ""
+            session.snapLabel = result.label
             return
         }
         if shape.kind == .arc, let start = strokeStart {
@@ -2113,7 +2109,7 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             else { shape = SketchShape(kind: .arc, plane: plane, start: start, end: result.point) }
             activeShape = shape
             session.preview = shape
-            session.snapLabel = session.snapEnabled ? result.label : ""
+            session.snapLabel = result.label
             return
         }
         shape.end = result.point
@@ -2121,7 +2117,7 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         if let center = strokeCenter { shape.start = center * 2 - result.point }
         activeShape = shape
         session.preview = shape
-        session.snapLabel = session.snapEnabled ? result.label : ""
+        session.snapLabel = result.label
     }
 
     func pencilEnded(at point: CGPoint, cancelled: Bool) {
@@ -2274,12 +2270,12 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         abs(plane.height(of: .zero)) < 1e-9 ? plane.coordinates(of: .zero) : nil
     }
 
+    /// Sketch points and lines snap whether Snap is on or not; Snap adds the grid and alignment.
     private func snapped(_ point: Point2, start: Point2? = nil, align: Bool = false) -> SnapResult {
-        guard session.snapEnabled else { return SnapResult(point: point, label: "") }
-        return SketchSnap.snap(point, start: start, shapes: session.workspace.visible.shapes, plane: session.plane,
-                               grid: session.snapGrid, tolerance: unitsPerPoint * 10, align: align,
-                               guides: session.sketchMode?.plane == session.plane ? session.sketchGuides : [],
-                               origin: worldOrigin(on: session.plane))
+        SketchSnap.snap(point, start: start, shapes: session.workspace.visible.shapes, plane: session.plane,
+                        grid: session.snapGrid, tolerance: unitsPerPoint * SketchSnap.reach, align: align,
+                        guides: session.sketchMode?.plane == session.plane ? session.sketchGuides : [],
+                        origin: worldOrigin(on: session.plane), gridSnapping: session.snapEnabled)
     }
 
     /// `bodies: false` (the Extrude tool) picks sketches and regions even where a solid is in front.
@@ -4272,6 +4268,14 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             guide.lineWidth = 1.2
             UIColor(red: 0.58, green: 0.36, blue: 0.96, alpha: 0.9).setStroke()
             guide.stroke()
+        }
+        if let snap = liveSnap, strokeStarted, snap.result.isOnGeometry {
+            // A ring where the Pencil snapped onto the sketch: an end, middle, crossing, or line.
+            let p = project(snap.plane.world(snap.result.point))
+            let ring = UIBezierPath(ovalIn: CGRect(x: p.x - 6, y: p.y - 6, width: 12, height: 12))
+            ring.lineWidth = 2
+            UIColor(red: 0.58, green: 0.36, blue: 0.96, alpha: 0.9).setStroke()
+            ring.stroke()
         }
         if let sketchMode = session.sketchMode {
             // Guide points: purple anchors on solid corners, edge midpoints, and centers.

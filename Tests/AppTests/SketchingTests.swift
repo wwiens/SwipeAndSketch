@@ -90,6 +90,31 @@ import simd
         XCTAssertEqual(session.workspace.sketches.count, 3)
     }
 
+    func testStrokesSnapOntoSketchLinesTheirMiddlesAndCornersEvenWithSnapOff() throws {
+        let session = ModelingSession(inMemory: true)
+        _ = squareOnTop(session)
+        let controller = canvas(session, camera: .reset)
+        session.snapEnabled = false
+        session.chooseTool(.line)
+        let nudge = CGPoint(x: 4, y: -3)
+        func near(_ x: Float, _ y: Float) -> CGPoint {
+            let p = controller.project(SIMD3(x, y, 0))
+            return CGPoint(x: p.x + nudge.x, y: p.y + nudge.y)
+        }
+        // From a few points off the square's right side, out into open space.
+        drag(controller, from: near(10, 3.7), to: controller.project(SIMD3(31.37, 8.21, 0)))
+        var line = try XCTUnwrap(session.workspace.shapes.last)
+        XCTAssertEqual(line.kind, .line)
+        XCTAssertEqual(line.start.x, 10, accuracy: 1e-9, "Starts on the side")
+        XCTAssertEqual(line.start.y, 3.7, accuracy: 0.6)
+        XCTAssertNotEqual(line.end.x, line.end.x.rounded(), "No grid with Snap off")
+        // From near the side's middle to near the top right corner.
+        drag(controller, from: near(-10, 0), to: near(10, 10))
+        line = try XCTUnwrap(session.workspace.shapes.last)
+        XCTAssertEqual(line.start, Point2(x: -10, y: 0))
+        XCTAssertEqual(line.end, Point2(x: 10, y: 10))
+    }
+
     // MARK: Hide and show
 
     func testHiddenSketchesAndSolidsLeaveTheCanvas() throws {

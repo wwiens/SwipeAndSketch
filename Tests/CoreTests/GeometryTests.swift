@@ -62,6 +62,39 @@ final class GeometryTests: XCTestCase {
         XCTAssertEqual(aligned.point, .init(x: 35, y: 6.25))
         XCTAssertEqual(aligned.label, "Horizontal")
     }
+    func testSnappingOntoLinesMiddlesAndCrossings() {
+        let across = line(.init(x: 0, y: 0), .init(x: 40, y: 0)), up = line(.init(x: 10, y: -10), .init(x: 10, y: 20))
+        let circle = SketchShape(kind: .circle, plane: .top, start: .init(x: 0, y: 30), end: .init(x: 10, y: 30))
+        func snap(_ x: Double, _ y: Double, _ shapes: [SketchShape] = [], gridSnapping: Bool = true) -> SnapResult {
+            SketchSnap.snap(.init(x: x, y: y), shapes: shapes, plane: .top, grid: 1, tolerance: 1, origin: nil, gridSnapping: gridSnapping)
+        }
+        let on = snap(27.3, 0.6, [across])
+        XCTAssertEqual(on.label, "On line")
+        XCTAssertEqual(on.point.x, 27.3, accuracy: 1e-9)
+        XCTAssertEqual(on.point.y, 0, accuracy: 1e-9)
+        XCTAssertEqual(snap(20.4, 0.3, [across]), SnapResult(point: .init(x: 20, y: 0), label: "Midpoint"))
+        XCTAssertEqual(snap(10.5, 0.4, [across, up]), SnapResult(point: .init(x: 10, y: 0), label: "Intersection"))
+        // An end beats a middle about as near.
+        XCTAssertEqual(snap(0.4, 0.1, [line(.init(x: 0, y: 0), .init(x: 2, y: 0))]).label, "Endpoint")
+        let round = snap(0.3, 40.4, [circle])
+        XCTAssertEqual(round.label, "On circle")
+        XCTAssertEqual(round.point.distance(to: .init(x: 0, y: 30)), 10, accuracy: 1e-9)
+        // With Snap off, the sketch still catches the Pencil, but nothing else moves it.
+        XCTAssertEqual(snap(27.3, 0.6, [across], gridSnapping: false).label, "On line")
+        XCTAssertEqual(snap(25.3, 5.6, [across], gridSnapping: false), SnapResult(point: .init(x: 25.3, y: 5.6), label: ""))
+        XCTAssertEqual(snap(25.3, 5.6, [across]).label, "Grid")
+    }
+
+    func testADraggedEndIgnoresTheLinesJoinedToIt() {
+        // Dragging the corner where `up` starts: `up` moves along, so it is no line to snap onto.
+        let up = line(.init(x: 10, y: 0), .init(x: 10, y: 10))
+        let free = SketchSnap.snap(.init(x: 10.3, y: 7.2), shapes: [up], plane: .top, grid: 1, tolerance: 1,
+                                   excluding: [.init(x: 10, y: 0)], origin: nil, gridSnapping: false)
+        XCTAssertEqual(free, SnapResult(point: .init(x: 10.3, y: 7.2), label: ""))
+        let onto = SketchSnap.snap(.init(x: 10.3, y: 7.2), shapes: [up], plane: .top, grid: 1, tolerance: 1, origin: nil, gridSnapping: false)
+        XCTAssertEqual(onto.label, "On line")
+    }
+
     func testInvalidGeometryRejected() {
         XCTAssertFalse(SketchShape(kind: .line, plane: .top, start: .zero, end: .zero).isValid)
         XCTAssertFalse(SketchShape(kind: .circle, plane: .top, start: .zero, end: .init(x: .nan, y: 2)).isValid)
