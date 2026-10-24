@@ -1343,6 +1343,30 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
                 previewNode.addChildNode(drawOnTop(outlineNode(preview.outline, plane: preview.plane, color: blue, closed: true), order: 9))
             }
         }
+        if let draft = session.shapeToolDraft {
+            // What is picked, in blue.
+            var segments: [(SIMD3<Float>, SIMD3<Float>)] = []
+            for region in draft.regions {
+                let points = region.outline.map { SIMD3<Float>(region.plane.point($0)) }
+                segments += zip(points, points.dropFirst() + points.prefix(1)).map { ($0, $1) }
+            }
+            for id in [draft.line, draft.path].compactMap({ $0 }) {
+                if let shape = session.workspace.shapes.first(where: { $0.id == id }) {
+                    let points = shape.outline.map { SIMD3<Float>(shape.plane.point($0)) }
+                    segments += zip(points, points.dropFirst()).map { ($0, $1) }
+                }
+            }
+            if !segments.isEmpty { previewNode.addChildNode(drawOnTop(strokeNode(segments, color: blue, weight: 2), order: 9)) }
+            if let id = draft.bodyID, let body = session.workspace.bodies.first(where: { $0.id == id }), let render = solidRender(body),
+               let solid = try? SolidKernel.solid(for: body) {
+                if let neutral = draft.neutral, let face = solid.face(near: neutral, tolerance: 1e-3) {
+                    previewNode.addChildNode(faceTint(render, face: face, color: UIColor(red: 0.58, green: 0.36, blue: 0.96, alpha: 0.35), name: "draft.neutral"))
+                }
+                for point in draft.faces {
+                    if let face = solid.face(near: point, tolerance: 1e-3) { previewNode.addChildNode(faceTint(render, face: face, color: blue.withAlphaComponent(0.3), name: "draft.face")) }
+                }
+            }
+        }
         if let draft = session.constructionDraft {
             // What is picked in blue, and the plane or axis Done adds.
             if let line = draft.line {
@@ -1666,6 +1690,10 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         }
         if session.tool.isConstructionTool {
             constructionTap(at: point)
+            return
+        }
+        if session.tool.isShapeTool {
+            shapeToolTap(at: point)
             return
         }
         if session.tool.isPlaneTool {
@@ -2505,6 +2533,32 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
                 if case .face(let bodyID, _) = reference.source, moving.contains(bodyID) { return }
                 session.setAlignTo(.plane(reference))
             }
+        }
+    }
+
+    /// Draft, Loft, Sweep, and Rib picks.
+    private func shapeToolTap(at point: CGPoint) {
+        let surface = frontSurface(at: point, committed: true)
+        switch session.tool {
+        case .draft:
+            guard let hit = surface else { return }
+            if session.shapeToolDraft?.neutral == nil || session.shapeToolDraft?.bodyID != hit.bodyID {
+                if let plane = hit.plane { session.pickDraftNeutral(bodyID: hit.bodyID, point: hit.point, outward: plane.normalAxis) }
+            } else {
+                session.toggleDraftFace(bodyID: hit.bodyID, point: hit.point)
+            }
+        case .rib:
+            if let line = nearestSketch(at: point, over: surface) { session.pickRibLine(line) }
+        case .loft:
+            if let profile = region(at: point, over: nil) { session.pickShapeRegion(profile) }
+        case .sweep:
+            // A line, arc, or spline is the path; inside a closed region, the region.
+            if session.shapeToolDraft?.regions.isEmpty == false, let line = nearestSketch(at: point, over: surface), !line.isClosed {
+                session.pickSweepPath(line)
+            } else if let profile = region(at: point, over: nil) {
+                session.pickShapeRegion(profile)
+            }
+        default: break
         }
     }
 
@@ -3699,6 +3753,16 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         if let section = session.section {
             guard let handle = sectionHandle() else { return [] }
             return [operationLabel(.sectionOffset, value: section.offset, beyond: handle)]
+        }
+        if session.tool == .draft {
+            guard let draft = session.shapeToolDraft, let face = draft.faces.first else { return [] }
+            let anchor = project(SIMD3<Float>(face))
+            return [CanvasDimension(target: .draftAngle, value: draft.angle, center: CGPoint(x: anchor.x + 60, y: anchor.y - 40))]
+        }
+        if session.tool == .rib {
+            guard let draft = session.shapeToolDraft, let id = draft.line, let line = session.workspace.shapes.first(where: { $0.id == id }) else { return [] }
+            let anchor = project(SIMD3<Float>(line.plane.point((line.start + line.end) * 0.5)))
+            return [CanvasDimension(target: .ribThickness, value: draft.thickness, center: CGPoint(x: anchor.x + 60, y: anchor.y - 40))]
         }
         if session.tool == .planeAngle {
             // The angle beside the middle of the line it turns about.

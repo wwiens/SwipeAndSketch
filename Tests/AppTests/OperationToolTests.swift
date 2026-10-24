@@ -495,7 +495,7 @@ import simd
         XCTAssertEqual(modeling.map(\.title), ["Planes", "Create", "Modify", "Combine", "Transform", "Joints"])
         XCTAssertEqual(sketching.map(\.title), ["Shapes", "Features", "Modify"])
         XCTAssertEqual(ToolGroup.combine.tools, [.union, .subtract, .intersect], "Combine is only the ways of putting solids together")
-        XCTAssertEqual(ToolGroup.edges.tools, [.fillet, .chamfer, .shell, .deleteFace, .split], "Modify changes one solid")
+        XCTAssertEqual(ToolGroup.edges.tools, [.fillet, .chamfer, .shell, .draft, .deleteFace, .split], "Modify changes one solid")
         XCTAssertEqual(ToolGroup.fit.tools, [.peg, .thread, .fitTest])
         XCTAssertEqual(ToolGroup.curves.tools.first, .circle)
         for group in ToolGroup.allCases {

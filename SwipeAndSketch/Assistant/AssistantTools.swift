@@ -835,6 +835,33 @@ struct AddPlaneTool: Tool {
     }
 }
 
+struct ShapeOperationTool: Tool {
+    let context: AssistantContext
+    let name = "shape_operation"
+    let description = "draft: leans a body's faces by an angle from one of its flat faces (molds). rib: a stiffening web from a sketch line to the solid it meets. loft: a new solid blending through the first region of each named sketch, in order. sweep: a new solid carrying a sketch's region along a sketch line, arc, or spline."
+    @Generable struct Arguments {
+        @Guide(.anyOf(["draft", "rib", "loft", "sweep"])) var operation: String
+        @Guide(description: "draft: the body") var body: String?
+        @Guide(description: "draft: the faces to lean (top, front, … or numbers)") var faces: [String]?
+        @Guide(description: "draft: the flat face they lean from, which stays put (often bottom)") var from: String?
+        @Guide(description: "draft: degrees, negative to lean outward; rib: thickness in mm") var amount: Double?
+        @Guide(description: "rib: the sketch line (Line 01); sweep: the path (a line, arc, or spline)") var line: String?
+        @Guide(description: "loft: the sketches in order; sweep: the sketch whose region is swept (first)") var sketches: [String]?
+        @Guide(description: "loft: flat sides between the regions") var ruled: Bool?
+    }
+    func call(arguments: Arguments) async throws -> String {
+        await context.run("Working on the model") { bench in
+            switch arguments.operation {
+            case "draft":
+                return try bench.draft(body: arguments.body ?? "", faces: arguments.faces ?? [], from: arguments.from ?? "bottom", angle: arguments.amount ?? 3)
+            case "rib": return try bench.rib(line: arguments.line ?? "", thickness: arguments.amount ?? 3)
+            case "loft": return try bench.loft(sketches: arguments.sketches ?? [], ruled: arguments.ruled ?? false)
+            default: return try bench.sweep(sketch: arguments.sketches?.first ?? "", path: arguments.line ?? "")
+            }
+        }
+    }
+}
+
 struct AddConstructionTool: Tool {
     let context: AssistantContext
     let name = "add_construction"
@@ -904,7 +931,7 @@ extension AssistantContext {
          FilletEdgesTool(context: self), ChamferEdgesTool(context: self), ShellTool(context: self), AddHoleTool(context: self), AddPegTool(context: self), AddThreadTool(context: self), AddMatingPartTool(context: self), AddTextTool(context: self), FitTestTool(context: self),
          MoveItemsTool(context: self), SetDimensionTool(context: self), DeleteItemsTool(context: self), SetVisibilityTool(context: self), CombineTool(context: self),
          MirrorTool(context: self), PatternTool(context: self), AddPlaneTool(context: self), RevolveTool(context: self), RoundSketchCornersTool(context: self), MeasureTool(context: self),
-         ScaleItemsTool(context: self), DeleteFacesTool(context: self), DeleteHoleTool(context: self), EditFinishTool(context: self), EditFeatureTool(context: self), AddPrimitiveTool(context: self), AddConstructionTool(context: self), ResizeFaceTool(context: self), OffsetSketchTool(context: self), RenameItemTool(context: self), GroupItemsTool(context: self), UngroupTool(context: self),
+         ScaleItemsTool(context: self), DeleteFacesTool(context: self), DeleteHoleTool(context: self), EditFinishTool(context: self), EditFeatureTool(context: self), AddPrimitiveTool(context: self), AddConstructionTool(context: self), ShapeOperationTool(context: self), ResizeFaceTool(context: self), OffsetSketchTool(context: self), RenameItemTool(context: self), GroupItemsTool(context: self), UngroupTool(context: self),
          SetColorTool(context: self)]
     }
     /// The everyday tools, which fit the on-device model's smaller context.

@@ -6,7 +6,7 @@ import simd
 /// sketches and of each other. A solid's `cuts` list holds both kinds, in the order they were made.
 struct ExtrusionCut: Codable, Equatable, Identifiable, Sendable {
     /// cut and join extrude `profile`; merge, shell, and hole carry their own payload (schema 6).
-    enum Operation: String, Codable, Sendable { case cut, join, merge, shell, hole, split, subtract, finish, thread, text, intersect, scale, deleteFace, offsetFace }
+    enum Operation: String, Codable, Sendable { case cut, join, merge, shell, hole, split, subtract, finish, thread, text, intersect, scale, deleteFace, offsetFace, draft, rib }
 
     var id = UUID()
     var profile: SketchProfile
@@ -43,6 +43,10 @@ struct ExtrusionCut: Codable, Equatable, Identifiable, Sendable {
     var thread: ThreadSpec?
     /// Text: letters raised from (positive `depth`) or sunk into (negative) the face on `profile.plane` (Text.swift).
     var text: TextSpec?
+    /// Draft (October 24, 2026): faces leaned for a mold (ShapeOperations.swift).
+    var draft: DraftSpec?
+    /// Rib (October 24, 2026): a stiffening web from a sketch line to the solid (ShapeOperations.swift).
+    var rib: RibSpec?
     /// The peg this join, tip bevel, or socket belongs to (October 24, 2026; FeatureEditing.swift), so the
     /// peg can be edited with its sockets. Omitted otherwise, and on pegs made before then.
     var peg: UUID?
@@ -73,6 +77,8 @@ struct ExtrusionCut: Codable, Equatable, Identifiable, Sendable {
         if scale != nil { return .scale }
         if removedFaces != nil { return .deleteFace }
         if movedFaces != nil { return .offsetFace }
+        if draft != nil { return .draft }
+        if rib != nil { return .rib }
         if shell != nil { return .shell }
         if hole != nil { return .hole }
         if finish != nil { return .finish }
@@ -85,7 +91,7 @@ struct ExtrusionCut: Codable, Equatable, Identifiable, Sendable {
     var isValid: Bool {
         let depthIsValid = depth.isFinite && abs(depth) >= 0.01 && abs(depth) <= 10_000
         if let clearance, subtracted == nil || !Fit.clearanceRange.contains(clearance) { return false }
-        guard profile.isSolidProfile, [merged != nil, subtracted != nil, intersected != nil, scale != nil, removedFaces != nil, movedFaces != nil, shell != nil, hole != nil, join == true, split != nil, finish != nil, thread != nil, text != nil].filter({ $0 }).count <= 1 else { return false }
+        guard profile.isSolidProfile, [merged != nil, subtracted != nil, intersected != nil, scale != nil, removedFaces != nil, movedFaces != nil, shell != nil, hole != nil, join == true, split != nil, finish != nil, thread != nil, text != nil, draft != nil, rib != nil].filter({ $0 }).count <= 1 else { return false }
         if symmetric != nil || taper != nil {
             guard [.cut, .join].contains(operation), symmetric != false, facePoint == nil, revolve == nil, !throughAll,
                   Self.taperRange.contains(taper ?? 0) else { return false }
@@ -106,6 +112,8 @@ struct ExtrusionCut: Codable, Equatable, Identifiable, Sendable {
         case .scale: return scale?.isValid ?? false
         case .deleteFace: return removedFaces?.isValid ?? false
         case .offsetFace: return movedFaces?.isValid ?? false
+        case .draft: return draft?.isValid ?? false
+        case .rib: return rib?.isValid ?? false
         case .shell: return shell?.isValid ?? false
         case .hole: return (hole?.isValid ?? false) && profile.circle != nil && (throughAll || depthIsValid)
         case .split: return split?.keep == .inside ? throughAll : !throughAll && depthIsValid
@@ -150,6 +158,8 @@ extension SolidKernel {
         case .scale: return try applyScale(cut, to: solid, of: body)
         case .deleteFace: return try applyFaceRemoval(cut, to: solid, of: body)
         case .offsetFace: return try applyFaceOffset(cut, to: solid, of: body)
+        case .draft: return try applyDraft(cut, to: solid, of: body)
+        case .rib: return try applyRib(cut, to: solid, of: body)
         case .finish: return try applyFinish(cut, to: solid, of: body)
         case .thread: return try applyThread(cut, to: solid, of: body)
         case .text: return try applyText(cut, to: solid)

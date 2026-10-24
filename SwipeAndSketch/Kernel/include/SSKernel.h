@@ -243,6 +243,25 @@ const int32_t *ssk_mesh_edge_starts(const SSKMesh *mesh);
 const float *ssk_mesh_edge_points(const SSKMesh *mesh);
 const uint8_t *ssk_mesh_edge_flags(const SSKMesh *mesh);
 
+/// Draft (October 24, 2026): `faces` leaned by `degrees` from `direction` (the pull direction),
+/// pivoting where they cross the neutral plane through `planeOrigin` with normal `planeNormal`.
+SSKShape *ssk_draft_faces(const SSKShape *shape, const int32_t *faces, int32_t faceCount, SSKVec3 direction,
+                          SSKVec3 planeOrigin, SSKVec3 planeNormal, double degrees);
+
+/// Loft (October 24, 2026): a solid through closed sections in order. Section i is a closed
+/// polygon of `counts[i]` points (xyz each) from `xyz`, or with `counts[i]` == 0 a circle given by
+/// seven numbers: center xyz, normal xyz, radius. `ruled` joins them with flat pieces.
+SSKShape *ssk_loft(const double *xyz, const int32_t *counts, int32_t sectionCount, bool ruled);
+
+/// Sweep (October 24, 2026): the closed section (as for ssk_loft: `sectionCount` points, or 0 for
+/// a circle's seven numbers) carried along a path through `pathCount` points: a smooth curve
+/// through them when `smooth`, else straight pieces meeting at corners.
+SSKShape *ssk_sweep(const double *section, int32_t sectionCount, const double *path, int32_t pathCount, bool smooth);
+
+/// Mesh import (October 24, 2026): a solid sewn from `triangleCount` triangles (nine numbers each),
+/// with coplanar neighbors merged into single faces; NULL when they do not close up.
+SSKShape *ssk_solid_from_triangles(const double *xyz, int32_t triangleCount, double tolerance);
+
 #ifdef __cplusplus
 }
 #endif

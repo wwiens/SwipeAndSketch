@@ -9,6 +9,10 @@ enum HelpTopic: String, CaseIterable, Identifiable {
     case extrude, extrudeFace, cut, join, revolve, fillet, chamfer, shell
     case union, subtract, intersect, split, align, mirror, pattern, scale, deleteFace, section, offsetPlane, midplane, project, measure, assistant
     case peg, fitTest, thread, matingPart, text
+    case sweep
+    case loft
+    case rib
+    case draft
     case spline
     case axis
     case planeTangent
@@ -73,6 +77,10 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .scale: "Scale"
         case .deleteFace: "Delete Face"
         case .section: "Section View"
+        case .sweep: "Sweep"
+        case .loft: "Loft"
+        case .rib: "Rib"
+        case .draft: "Draft"
         case .spline: "Spline"
         case .axis: "Axis"
         case .planeTangent: "Tangent Plane"
@@ -133,6 +141,10 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .scale: .scale
         case .deleteFace: .deleteFace
         case .section: .section
+        case .sweep: .sweep
+        case .loft: .loft
+        case .rib: .rib
+        case .draft: .draft
         case .spline: .spline
         case .axis: .axis
         case .planeTangent: .planeTangent
@@ -401,6 +413,26 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                 summary: "A smooth curve: draw it freehand with Pencil, and it becomes a spline through a few points that you can drag to reshape it.",
                 steps: ["Choose Shapes, then Spline.", "Draw the curve with Pencil. End where you began to close it into a region.", "Tap the spline and drag any of its points: the curve still passes through every point."],
                 tips: ["A closed spline bounds a region that extrudes, revolves, and cuts like any other.", "Its sides are made of many short flat pieces, fine enough for printing."])
+        case .draft:
+            HelpOverview(
+                summary: "Draft leans faces a few degrees, so a printed mold releases its casting (or a part slides out of a mold).",
+                steps: ["Choose Modify, then Draft.", "Tap the flat face the draft leans from, such as the base: it stays put.", "Tap the faces to lean, such as the sides.", "Tap the angle to change it (3° is common; negative leans outward), then Done."],
+                tips: ["A face square to the pull direction (like the top) cannot be drafted.", "Draft is saved with the solid and follows it when it moves or is mirrored."])
+        case .rib:
+            HelpOverview(
+                summary: "A rib is a thin stiffening web that grows from a sketch line until it meets the solid, such as a gusset in the corner of a bracket.",
+                steps: ["Sketch a line across the corner, on a plane through the solid (such as Front through the middle of a bracket).", "Choose Create, then Rib, and tap the line.", "Tap the thickness to change it, or Flip for the other side of the line. Tap Done."],
+                tips: ["The rib is part of the solid and is saved with it."])
+        case .loft:
+            HelpOverview(
+                summary: "Loft blends between two or more sketch regions on different planes, such as a square base into a round top.",
+                steps: ["Sketch the regions on planes one above another (an offset construction plane helps).", "Choose Create, then Loft, and tap the regions in order.", "Turn on Ruled for flat sides between them. Tap Done."],
+                tips: ["The loft is a new solid of its own, saved with its exact shape; its regions can be changed afterwards without changing it."])
+        case .sweep:
+            HelpOverview(
+                summary: "Sweep carries a sketch region along a path: a line, an arc, a spline, or joined lines, such as a tube or a handle.",
+                steps: ["Sketch the region (such as a circle), and the path starting at it, across it, on another plane.", "Choose Create, then Sweep. Tap the region, then the path.", "Tap Done."],
+                tips: ["Keep bends wider than the region, or it folds into itself.", "The sweep is a new solid of its own, saved with its exact shape."])
         case .section:
             HelpOverview(
                 summary: "The section view cuts your solids open along a plane, so you can check walls, holes, threads, and sockets inside. It changes nothing.",
@@ -634,6 +666,10 @@ extension ModelingSession {
         case .planeTangent: return .planeTangent
         case .axis: return .axis
         case .spline: return .spline
+        case .draft: return .draft
+        case .rib: return .rib
+        case .loft: return .loft
+        case .sweep: return .sweep
         }
     }
 }

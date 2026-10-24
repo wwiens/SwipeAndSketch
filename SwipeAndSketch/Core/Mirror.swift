@@ -176,6 +176,18 @@ extension SolidBody {
             copy.scale = cut.scale?.mirrored
             // Points are in the solid's own frame, whose y axis the reflection flips.
             if var removed = cut.removedFaces { removed.points = removed.points.map { SIMD3($0.x, -$0.y, $0.z) }; copy.removedFaces = removed }
+            if var draft = cut.draft {
+                draft.points = draft.points.map { SIMD3($0.x, -$0.y, $0.z) }
+                draft.origin = SIMD3(draft.origin.x, -draft.origin.y, draft.origin.z); draft.pull = SIMD3(draft.pull.x, -draft.pull.y, draft.pull.z)
+                copy.draft = draft
+            }
+            if var rib = cut.rib {
+                rib.start = SIMD3(rib.start.x, -rib.start.y, rib.start.z); rib.end = SIMD3(rib.end.x, -rib.end.y, rib.end.z)
+                rib.normal = SIMD3(rib.normal.x, -rib.normal.y, rib.normal.z)
+                // Reflected, the side of the line the web runs to turns over.
+                rib.side = -rib.side
+                copy.rib = rib
+            }
             if var moved = cut.movedFaces { moved.points = moved.points.map { SIMD3($0.x, -$0.y, $0.z) }; copy.movedFaces = moved }
             copy.thread = cut.thread?.mirrored
             copy.text = cut.text?.mirrored

@@ -12,6 +12,10 @@
 #include <BRepOffsetAPI_ThruSections.hxx>
 #include <BRepOffset_MakeOffset.hxx>
 #include <BRepOffsetAPI_DraftAngle.hxx>
+#include <GeomAPI_PointsToBSpline.hxx>
+#include <Geom_BSplineCurve.hxx>
+#include <TColgp_Array1OfPnt.hxx>
+#include <BRepBuilderAPI_MakePolygon.hxx>
 #include <gp_Elips.hxx>
 #include <gp_GTrsf.hxx>
 #include <gp_Mat.hxx>
@@ -1842,3 +1846,132 @@ const float *ssk_mesh_edge_points(const SSKMesh *mesh) { return mesh ? mesh->edg
 const uint8_t *ssk_mesh_edge_flags(const SSKMesh *mesh) { return mesh ? mesh->edgeFlags.data() : nullptr; }
 
 } // extern "C"
+
+// MARK: Tier 2 basics (October 24, 2026): draft, loft, sweep, and solids sewn from meshes.
+
+namespace {
+/// A closed section: `count` points, or with `count` 0 a circle (center, normal, radius).
+TopoDS_Wire sectionWire(const double *data, int32_t count) {
+    if (count == 0) {
+        const gp_Pnt center(data[0], data[1], data[2]);
+        const gp_Vec n(data[3], data[4], data[5]);
+        if (n.Magnitude() < 1e-12 || !(data[6] > 0)) throw Standard_Failure("a circle section needs a normal and a radius");
+        const gp_Circ circle(gp_Ax2(center, gp_Dir(n)), data[6]);
+        return BRepBuilderAPI_MakeWire(BRepBuilderAPI_MakeEdge(circle).Edge()).Wire();
+    }
+    if (count < 3) throw Standard_Failure("a section needs at least three points");
+    BRepBuilderAPI_MakePolygon polygon;
+    for (int32_t i = 0; i < count; ++i) polygon.Add(gp_Pnt(data[3 * i], data[3 * i + 1], data[3 * i + 2]));
+    polygon.Close();
+    if (!polygon.IsDone()) throw Standard_Failure("a section is degenerate");
+    return polygon.Wire();
+}
+
+int32_t sectionLength(int32_t count) { return count == 0 ? 7 : 3 * count; }
+
+TopoDS_Shape onlySolid(const TopoDS_Shape &shape, const char *kind) {
+    for (TopExp_Explorer it(shape, TopAbs_SOLID); it.More(); it.Next()) {
+        TopoDS_Solid solid = TopoDS::Solid(it.Current());
+        BRepLib::OrientClosedSolid(solid);
+        if (!BRepCheck_Analyzer(solid).IsValid() || !(volume(solid) > 1e-9)) break;
+        return solid;
+    }
+    throw Standard_Failure((std::string(kind) + " is not a solid").c_str());
+}
+}
+
+SSKShape *ssk_draft_faces(const SSKShape *shape, const int32_t *faces, int32_t faceCount, SSKVec3 direction,
+                          SSKVec3 planeOrigin, SSKVec3 planeNormal, double degrees) {
+    return guarded("Draft", [&]() -> TopoDS_Shape {
+        if (!shape) throw Standard_Failure("missing shape");
+        if (!std::isfinite(degrees) || std::fabs(degrees) < 0.01 || std::fabs(degrees) > 60) throw Standard_Failure("the angle must be 0.01° to 60°");
+        const gp_Vec pull(direction.x, direction.y, direction.z), n(planeNormal.x, planeNormal.y, planeNormal.z);
+        if (pull.Magnitude() < 1e-12 || n.Magnitude() < 1e-12) throw Standard_Failure("missing pull direction");
+        const NCollection_List<TopoDS_Shape> chosen = select(shape->faces, faces, faceCount, "face");
+        const gp_Pln neutral(gp_Pnt(planeOrigin.x, planeOrigin.y, planeOrigin.z), gp_Dir(n));
+        BRepOffsetAPI_DraftAngle draft(shape->shape);
+        for (const TopoDS_Shape &face : chosen) {
+            draft.Add(TopoDS::Face(face), gp_Dir(pull), degrees * M_PI / 180, neutral);
+            if (!draft.AddDone()) throw Standard_Failure("a face cannot lean that way (it is parallel to the pull, or its neighbors cannot follow)");
+        }
+        draft.Build();
+        if (!draft.IsDone()) throw Standard_Failure("the faces around them cannot follow");
+        return onlySolid(draft.Shape(), "the draft");
+    });
+}
+
+SSKShape *ssk_loft(const double *xyz, const int32_t *counts, int32_t sectionCount, bool ruled) {
+    return guarded("Loft", [&]() -> TopoDS_Shape {
+        if (sectionCount < 2 || !xyz || !counts) throw Standard_Failure("a loft needs at least two sections");
+        BRepOffsetAPI_ThruSections loft(true, ruled, 1e-6);
+        const double *data = xyz;
+        for (int32_t i = 0; i < sectionCount; ++i) {
+            loft.AddWire(sectionWire(data, counts[i]));
+            data += sectionLength(counts[i]);
+        }
+        loft.CheckCompatibility(true);
+        loft.Build();
+        if (!loft.IsDone()) throw Standard_Failure("those sections cannot be joined (try sections that face the same way)");
+        return onlySolid(loft.Shape(), "the loft");
+    });
+}
+
+SSKShape *ssk_sweep(const double *section, int32_t sectionCount, const double *path, int32_t pathCount, bool smooth) {
+    return guarded("Sweep", [&]() -> TopoDS_Shape {
+        if (!section || !path || pathCount < 2) throw Standard_Failure("a sweep needs a section and a path of two points or more");
+        TopoDS_Wire spine;
+        if (smooth && pathCount > 2) {
+            TColgp_Array1OfPnt points(1, pathCount);
+            for (int32_t i = 0; i < pathCount; ++i) points.SetValue(i + 1, gp_Pnt(path[3 * i], path[3 * i + 1], path[3 * i + 2]));
+            GeomAPI_PointsToBSpline fit(points, 3, 8, GeomAbs_C2, 1e-4);
+            if (!fit.IsDone()) throw Standard_Failure("the path cannot be smoothed");
+            spine = BRepBuilderAPI_MakeWire(BRepBuilderAPI_MakeEdge(fit.Curve()).Edge()).Wire();
+        } else {
+            BRepBuilderAPI_MakePolygon polygon;
+            for (int32_t i = 0; i < pathCount; ++i) polygon.Add(gp_Pnt(path[3 * i], path[3 * i + 1], path[3 * i + 2]));
+            if (!polygon.IsDone()) throw Standard_Failure("the path is degenerate");
+            spine = polygon.Wire();
+        }
+        BRepOffsetAPI_MakePipeShell pipe(spine);
+        pipe.SetMode(false);   // corrected Frenet: the section keeps its turn along the path
+        pipe.SetTransitionMode(BRepBuilderAPI_RightCorner);
+        pipe.Add(sectionWire(section, sectionCount), false, false);
+        pipe.Build();
+        if (!pipe.IsDone() || !pipe.MakeSolid()) throw Standard_Failure("the section cannot follow that path (a bend may be tighter than the section)");
+        return onlySolid(pipe.Shape(), "the sweep");
+    });
+}
+
+SSKShape *ssk_solid_from_triangles(const double *xyz, int32_t triangleCount, double tolerance) {
+    return guarded("Mesh", [&]() -> TopoDS_Shape {
+        if (!xyz || triangleCount < 4) throw Standard_Failure("a mesh needs at least four triangles");
+        if (triangleCount > 200000) throw Standard_Failure("the mesh has too many triangles (at most 200,000)");
+        BRepBuilderAPI_Sewing sewing(std::max(1e-6, tolerance));
+        int32_t faces = 0;
+        for (int32_t t = 0; t < triangleCount; ++t) {
+            const double *p = xyz + 9 * t;
+            const gp_Pnt a(p[0], p[1], p[2]), b(p[3], p[4], p[5]), c(p[6], p[7], p[8]);
+            // Skip slivers with no area.
+            if (gp_Vec(a, b).Crossed(gp_Vec(a, c)).Magnitude() < 1e-12) continue;
+            BRepBuilderAPI_MakePolygon polygon(a, b, c, true);
+            if (!polygon.IsDone()) continue;
+            BRepBuilderAPI_MakeFace face(polygon.Wire(), true);
+            if (!face.IsDone()) continue;
+            sewing.Add(face.Face());
+            ++faces;
+        }
+        if (faces < 4) throw Standard_Failure("the mesh has no closed surface");
+        sewing.Perform();
+        const TopoDS_Shape sewn = sewing.SewedShape();
+        TopExp_Explorer shells(sewn, TopAbs_SHELL);
+        if (!shells.More()) throw Standard_Failure("the mesh does not close up (it has holes or loose edges)");
+        BRepBuilderAPI_MakeSolid maker(TopoDS::Shell(shells.Current()));
+        if (!maker.IsDone()) throw Standard_Failure("the mesh does not close up");
+        TopoDS_Solid solid = maker.Solid();
+        BRepLib::OrientClosedSolid(solid);
+        // Coplanar triangles merged into one face each, so a flat side picks as a face.
+        ShapeUpgrade_UnifySameDomain unify(solid, true, true, false);
+        unify.Build();
+        return onlySolid(unify.Shape(), "the mesh");
+    });
+}

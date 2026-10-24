@@ -33,6 +33,9 @@ enum ModelingTool: String, CaseIterable {
     case planeAngle, plane3Point, planeTangent, axis
     /// A smooth curve drawn freehand and fitted through a few points (Shapes ▸ Spline).
     case spline
+    /// Draft (Modify ▸), and Loft, Sweep, and Rib (Create ▸), October 24, 2026.
+    case draft, loft, sweep, rib
+    var isShapeTool: Bool { [.draft, .loft, .sweep, .rib].contains(self) }
     var isConstructionTool: Bool { [.planeAngle, .plane3Point, .planeTangent, .axis].contains(self) }
     var title: String {
         switch self {
@@ -103,6 +106,10 @@ enum ModelingTool: String, CaseIterable {
         case .planeTangent: .planeTangent
         case .axis: .axis
         case .spline: .spline
+        case .draft: .draft
+        case .loft: .loft
+        case .sweep: .sweep
+        case .rib: .rib
         }
     }
     var shapeKind: ShapeKind? { self == .spline ? .curve : ShapeKind(rawValue: rawValue) }
@@ -206,12 +213,14 @@ enum DimensionTarget: Hashable {
     case primitiveSize(PrimitiveKind, Int)
     /// Plane at Angle: degrees turned about its line.
     case constructionAngle
+    /// Draft's angle and Rib's thickness.
+    case draftAngle, ribThickness
     var unit: String {
         switch self {
         case .scalePercent: "%"
         case .extrusionTaper: "°"
         case .polygonSides: ""
-        case .transformAngle, .alignAngle, .revolveAngle, .bodyAngle, .patternAngle, .constructionAngle: "°"
+        case .transformAngle, .alignAngle, .revolveAngle, .bodyAngle, .patternAngle, .constructionAngle, .draftAngle: "°"
         case .patternCount: ""
         case .relation(_, let angle): angle ? "°" : "mm"
         default: "mm"
@@ -256,6 +265,8 @@ enum DimensionTarget: Hashable {
         case .patternAngle: "Angle"
         case .patternCount: "Quantity"
         case .constructionAngle: "Angle"
+        case .draftAngle: "Draft"
+        case .ribThickness: "Thickness"
         }
     }
     var accessibilityName: String {
@@ -298,6 +309,8 @@ enum DimensionTarget: Hashable {
         case .patternAngle: "pattern.angle"
         case .patternCount: "pattern.count"
         case .constructionAngle: "plane.angle"
+        case .draftAngle: "draft.angle"
+        case .ribThickness: "rib.thickness"
         }
     }
     /// Values that may be exactly 0: offsets, turns, and dimensions between sketch items (0 lines them up).
@@ -310,7 +323,7 @@ enum DimensionTarget: Hashable {
     var allowsNegative: Bool {
         switch self {
         case .bodyDepth, .extrusion, .transformDistance, .transformAngle, .planeOffset, .alignOffset, .alignAngle, .revolveAngle, .bodyAngle,
-             .patternDistance, .patternAngle, .extrusionTaper, .sectionOffset, .offsetDistance, .constructionAngle: true
+             .patternDistance, .patternAngle, .extrusionTaper, .sectionOffset, .offsetDistance, .constructionAngle, .draftAngle: true
         default: false
         }
     }
@@ -319,7 +332,7 @@ enum DimensionTarget: Hashable {
         switch self {
         case .extrusion, .finishSize, .shellThickness, .holeDiameter, .holeDepth, .pegDiameter, .pegHeight, .pegEmbed, .transformDistance, .transformAngle,
              .planeOffset, .alignOffset, .alignAngle, .revolveAngle, .cornerRadius, .patternDistance, .patternAngle, .threadDiameter, .threadPitch, .threadLength, .textHeight, .textDepth,
-             .scalePercent, .sectionOffset, .polygonSides, .offsetDistance, .primitiveSize, .constructionAngle: true
+             .scalePercent, .sectionOffset, .polygonSides, .offsetDistance, .primitiveSize, .constructionAngle, .draftAngle, .ribThickness: true
         case .shape, .bodyDepth, .bodyAngle, .relation, .patternCount, .clearance, .fitClearance, .faceDiameter, .faceDistance, .selectedFinish, .extrusionTaper: false
         }
     }
@@ -373,6 +386,26 @@ struct PlacedPivot: Equatable {
 struct PlaneDraft: Equatable {
     var references: [PlaneReference] = []
     var offset = 0.0
+}
+
+/// Draft, Loft, Sweep, or Rib being set up: what has been picked and the values typed.
+struct ShapeToolDraft: Equatable {
+    /// Draft: the solid, its neutral face (a point on it and the pull, into the solid), the faces to
+    /// lean (a point on each), and the angle.
+    var bodyID: UUID?
+    var neutral: SIMD3<Double>?
+    var pull: SIMD3<Double>?
+    var faces: [SIMD3<Double>] = []
+    var angle = 3.0
+    /// Rib: the sketch line, the web's thickness, and its side (nil: whichever meets a solid).
+    var line: UUID?
+    var thickness = 3.0
+    var side: Double?
+    /// Loft: the regions in order (Sweep: its section first); Sweep: the path's shape.
+    var regions: [SketchProfile] = []
+    var path: UUID?
+    var ruled = false
+    var error: String?
 }
 
 /// Plane at Angle, 3-Point Plane, Tangent Plane, or Axis being set up: what has been picked.
@@ -942,6 +975,8 @@ struct DimensionEdit: Identifiable {
     /// Offset Plane / Midplane in progress, and the plane it would make.
     @Published private(set) var planeDraft: PlaneDraft?
     @Published private(set) var constructionDraft: ConstructionDraft?
+    @Published private(set) var shapeToolDraft: ShapeToolDraft?
+    @Published private(set) var shapeToolPreview: Workspace?
     /// What Done makes: a construction plane, or an axis from one point to another.
     @Published private(set) var constructionPreview: ConstructionPlane?
     @Published private(set) var axisPreview: (from: SIMD3<Double>, to: SIMD3<Double>)?
@@ -1104,7 +1139,7 @@ struct DimensionEdit: Identifiable {
     func canEditDimension(_ target: DimensionTarget) -> Bool { target == .sectionOffset ? !isViewingBlocked : !isEditingBlocked }
     var projectName: String { document?.fileURL.deletingPathExtension().lastPathComponent ?? "Untitled Project" }
     var workspace: Workspace { history.workspace }
-    var displayWorkspace: Workspace { assistantPreview ?? editPreview ?? finishPreview ?? shellPreview ?? primitivePreview ?? holePreview ?? pegPreview ?? threadPreview ?? textPreview ?? splitPreview ?? mirrorPreview ?? patternPreview ?? scalePreview ?? deleteFacePreview ?? sketchMirrorPreview ?? unionPreview ?? subtractPreview ?? alignPreview ?? revolvePreview ?? operationPreview ?? workspace }
+    var displayWorkspace: Workspace { assistantPreview ?? editPreview ?? finishPreview ?? shellPreview ?? shapeToolPreview ?? primitivePreview ?? holePreview ?? pegPreview ?? threadPreview ?? textPreview ?? splitPreview ?? mirrorPreview ?? patternPreview ?? scalePreview ?? deleteFacePreview ?? sketchMirrorPreview ?? unionPreview ?? subtractPreview ?? alignPreview ?? revolvePreview ?? operationPreview ?? workspace }
     var isShelling: Bool { shellDraft != nil }
     var isPlacingHole: Bool { holeDraft != nil }
     var isPlacingPeg: Bool { pegDraft != nil }
@@ -2289,6 +2324,28 @@ struct DimensionEdit: Identifiable {
         case .trim: return "Tap or scribble over the part of a shape to remove: it goes back to where other shapes cross it. Tap empty space when done."
         case .ellipse: return guidePrefix + "Place Pencil at the center, then drag to a corner of the box around it. Drag its handles to turn or resize it."
         case .point: return guidePrefix + "Tap to place a point: something to snap, dimension, and align to."
+        case .draft:
+            guard let draft = shapeToolDraft else { return "" }
+            if let error = draft.error { return error }
+            if draft.neutral == nil { return "Tap the flat face the draft leans from, such as a mold's parting face: it stays put." }
+            return draft.faces.isEmpty ? "Tap the faces to lean, such as the sides." :
+                "Tap more faces, or a picked one to take it out. Tap the angle to change it (negative leans outward). Done applies the draft."
+        case .rib:
+            guard let draft = shapeToolDraft else { return "" }
+            if let error = draft.error { return error }
+            return draft.line == nil ? "Tap a sketch line drawn across a corner, on a plane through the solid." :
+                "The rib grows from the line until it meets the solid. Tap the thickness to change it, Flip for the other side, or Done."
+        case .loft:
+            guard let draft = shapeToolDraft else { return "" }
+            if let error = draft.error { return error }
+            return draft.regions.count < 2 ? "Tap the sketch regions to blend between, in order (\(draft.regions.count) picked)." :
+                "Tap more regions to pass through, or a picked one to take it out. Done makes the loft a solid of its own."
+        case .sweep:
+            guard let draft = shapeToolDraft else { return "" }
+            if let error = draft.error { return error }
+            if draft.regions.isEmpty { return "Tap the sketch region to sweep." }
+            return draft.path == nil ? "Tap the path: a sketch line, arc, or spline (joined lines follow too), starting at the region." :
+                "Done makes the sweep a solid of its own. Tap another path or region to change it."
         case .spline: return guidePrefix + "Draw the curve with Pencil; it becomes a smooth spline through a few points. End where you began to close it. Drag its points to reshape it."
         case .polygon: return editablePolygon != nil ? "Tap the number of sides to change it, or draw another polygon." :
             guidePrefix + "Place Pencil at the center, then drag to a corner. It has \(polygonSides) sides; tap the number afterward to change it."
@@ -2445,6 +2502,7 @@ struct DimensionEdit: Identifiable {
         if value == .measure { beginMeasure(); return }
         if value.isPlaneTool { beginPlaneTool(value); return }
         if value.isConstructionTool { beginConstruction(value); return }
+        if value.isShapeTool { beginShapeTool(value); return }
         if value == .project { beginProjection(); return }
         if value == .split { beginSplit(); return }
         if value == .mirror { beginMirror(); return }
@@ -2784,6 +2842,157 @@ struct DimensionEdit: Identifiable {
     func flatFaceNormal(bodyID: UUID, beside edge: Int) -> SIMD3<Double>? {
         guard let body = workspace.bodies.first(where: { $0.id == bodyID }), let solid = try? SolidKernel.solid(for: body) else { return nil }
         return (0..<solid.faceCount).lazy.compactMap { face in solid.faceEdges(face).contains(edge) ? solid.facePlane(face)?.normal : nil }.first
+    }
+
+    // MARK: Draft, Loft, Sweep, and Rib (October 24, 2026)
+
+    func beginShapeTool(_ value: ModelingTool) {
+        guard value.isShapeTool, !isEditingBlocked else { return }
+        // A selected region starts a loft or sweep; a selected line, a rib.
+        let region = selectedProfiles.first, line = selectedShape.flatMap { $0.kind == .line ? $0.id : nil }
+        cancelTransient()
+        endSketchMode()
+        selection = nil
+        tool = value
+        var draft = ShapeToolDraft()
+        if (value == .loft || value == .sweep), let region { draft.regions = [region] }
+        if value == .rib, let line { draft.line = line }
+        updateShapeTool(draft)
+    }
+
+    /// Draft: the flat face the others lean from (it stays put); the pull runs into the solid.
+    func pickDraftNeutral(bodyID: UUID, point: SIMD3<Double>, outward: SIMD3<Double>) {
+        guard tool == .draft, var draft = shapeToolDraft else { return }
+        draft.bodyID = bodyID
+        draft.neutral = point
+        draft.pull = -simd_normalize(outward)
+        draft.faces = []
+        UISelectionFeedbackGenerator().selectionChanged()
+        updateShapeTool(draft)
+    }
+
+    /// Draft: a face of the solid to lean, or taken out again.
+    func toggleDraftFace(bodyID: UUID, point: SIMD3<Double>) {
+        guard tool == .draft, var draft = shapeToolDraft, draft.bodyID == bodyID,
+              let body = workspace.bodies.first(where: { $0.id == bodyID }), let solid = try? SolidKernel.solid(for: body),
+              let face = solid.face(near: point, tolerance: 1e-3) else { return }
+        if let index = draft.faces.firstIndex(where: { solid.face(near: $0, tolerance: 1e-3) == face }) { draft.faces.remove(at: index) }
+        else { draft.faces.append(point) }
+        UISelectionFeedbackGenerator().selectionChanged()
+        updateShapeTool(draft)
+    }
+
+    /// Rib: the sketch line it grows from.
+    func pickRibLine(_ shape: SketchShape) {
+        guard tool == .rib, var draft = shapeToolDraft else { return }
+        guard shape.kind == .line else { draft.error = "A rib grows from a straight sketch line."; shapeToolDraft = draft; return }
+        draft.line = shape.id
+        draft.side = nil
+        updateShapeTool(draft)
+    }
+
+    /// Rib: the web on the other side of its line.
+    func flipRib() {
+        guard tool == .rib, var draft = shapeToolDraft, let side = currentRibSide else { return }
+        draft.side = -side
+        updateShapeTool(draft)
+    }
+    private var currentRibSide: Double? {
+        guard let body = shapeToolPreview?.bodies.first(where: { $0.cuts.last?.rib != nil && !workspace.bodies.contains($0) }) else { return nil }
+        return body.cuts.last?.rib?.side
+    }
+
+    /// Loft: a region added in order, or taken out again. Sweep: the region to carry along the path.
+    func pickShapeRegion(_ profile: SketchProfile) {
+        guard tool == .loft || tool == .sweep, var draft = shapeToolDraft else { return }
+        if tool == .sweep {
+            draft.regions = [profile]
+        } else if let index = draft.regions.firstIndex(where: { $0.id == profile.id }) {
+            draft.regions.remove(at: index)
+        } else {
+            draft.regions.append(profile)
+        }
+        UISelectionFeedbackGenerator().selectionChanged()
+        updateShapeTool(draft)
+    }
+
+    /// Sweep: the sketch line, arc, or spline (with lines joined to a line) the region follows.
+    func pickSweepPath(_ shape: SketchShape) {
+        guard tool == .sweep, var draft = shapeToolDraft else { return }
+        draft.path = shape.id
+        updateShapeTool(draft)
+    }
+
+    func setLoftRuled(_ ruled: Bool) {
+        guard tool == .loft, var draft = shapeToolDraft else { return }
+        draft.ruled = ruled
+        updateShapeTool(draft)
+    }
+
+    private func updateShapeTool(_ draft: ShapeToolDraft) {
+        var draft = draft
+        draft.error = nil
+        shapeToolPreview = nil
+        defer { shapeToolDraft = draft }
+        switch tool {
+        case .draft:
+            guard let id = draft.bodyID, let neutral = draft.neutral, let pull = draft.pull, !draft.faces.isEmpty,
+                  let index = workspace.bodies.firstIndex(where: { $0.id == id }) else { return }
+            guard let drafted = Drafting.drafting(workspace.bodies[index], faces: draft.faces, pull: pull, origin: neutral, angle: draft.angle) else {
+                draft.error = "Those faces cannot lean that way: a face square to the pull, or neighbors that cannot follow. Try a smaller angle."
+                return
+            }
+            var next = workspace
+            next.bodies[index] = drafted
+            shapeToolPreview = next
+        case .rib:
+            guard let id = draft.line, let line = workspace.shapes.first(where: { $0.id == id }) else { return }
+            let a = line.plane.point(line.start), b = line.plane.point(line.end), n = line.plane.normalAxis
+            for index in workspace.bodies.indices where !workspace.isHidden(workspace.bodies[index]) {
+                if let ribbed = Ribs.ribbing(workspace.bodies[index], from: a, to: b, normal: n, thickness: draft.thickness, side: draft.side) {
+                    var next = workspace
+                    next.bodies[index] = ribbed
+                    shapeToolPreview = next
+                    return
+                }
+            }
+            draft.error = "A rib grows from the line until it meets a solid, and this one meets none. Draw the line across a corner, on a plane through the solid."
+        case .loft:
+            guard draft.regions.count >= 2 else { return }
+            do {
+                let solid = try ShapedSolids.loft(draft.regions, ruled: draft.ruled)
+                if let added = ShapedSolids.adding(solid, named: "Loft", to: workspace) { shapeToolPreview = added.workspace }
+            } catch { draft.error = "Those regions cannot be lofted. Try regions that face the same way, one above another." }
+        case .sweep:
+            guard let section = draft.regions.first, let id = draft.path, let shape = workspace.shapes.first(where: { $0.id == id }),
+                  let path = ShapedSolids.chain(from: shape, in: workspace.shapes) else { return }
+            do {
+                let solid = try ShapedSolids.sweep(section, along: path.points, smooth: path.smooth)
+                if let added = ShapedSolids.adding(solid, named: "Sweep", to: workspace) { shapeToolPreview = added.workspace }
+            } catch { draft.error = "The region cannot follow that path. Start the path at the region, across it, and keep bends wider than the region." }
+        default: break
+        }
+    }
+
+    /// One undo step; the changed or new solid is selected.
+    func confirmShapeTool() {
+        guard let preview = shapeToolPreview, !isEditingBlocked else { return }
+        let before = workspace
+        let kind = tool
+        clearShapeTool()
+        commit(preview)
+        let changed = preview.bodies.first { body in !before.bodies.contains(body) }
+        selection = changed.map { .body($0.id) }
+        tool = .select
+        status = ["draft": "Drafted", "rib": "Added a rib", "loft": "Lofted", "sweep": "Swept"][kind.rawValue] ?? "Done"
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    func cancelShapeTool() { clearShapeTool(); dimensionEdit = nil; tool = .select }
+
+    private func clearShapeTool() {
+        if shapeToolDraft != nil { shapeToolDraft = nil }
+        if shapeToolPreview != nil { shapeToolPreview = nil }
     }
 
     // MARK: Split Body
@@ -3601,6 +3810,7 @@ struct DimensionEdit: Identifiable {
         clearHoleDraft()
         clearPrimitive()
         clearConstruction()
+        clearShapeTool()
         clearPegDraft()
         clearThread()
         clearTextDraft()
@@ -6049,6 +6259,8 @@ struct DimensionEdit: Identifiable {
             return record.amount
         case .planeOffset: return tool == .offsetPlane && planePreview != nil ? planeDraft?.offset : nil
         case .constructionAngle: return tool == .planeAngle && constructionDraft?.line != nil ? constructionDraft?.angle : nil
+        case .draftAngle: return tool == .draft && shapeToolDraft?.faces.isEmpty == false ? shapeToolDraft?.angle : nil
+        case .ribThickness: return tool == .rib && shapeToolDraft?.line != nil ? shapeToolDraft?.thickness : nil
         case .alignOffset: return alignPreview != nil ? alignDraft?.offset : nil
         case .alignAngle: return alignPreview != nil ? alignDraft?.angle : nil
         case .revolveAngle: return revolveDraft?.axis != nil ? revolveDraft?.angle : nil
@@ -6225,6 +6437,17 @@ struct DimensionEdit: Identifiable {
         case .planeOffset:
             guard tool == .offsetPlane, planeDraft?.references.isEmpty == false else { return false }
             setPlaneOffset(value)
+        case .draftAngle:
+            guard tool == .draft, var draft = shapeToolDraft else { return false }
+            guard DraftSpec.angleRange.contains(abs(value)) else { dimensionError = "Enter an angle from 0.01° to 60° (negative leans outward)."; return false }
+            draft.angle = value
+            updateShapeTool(draft)
+            guard shapeToolPreview != nil else { dimensionError = shapeToolDraft?.error ?? "Those faces cannot lean that far."; return false }
+        case .ribThickness:
+            guard tool == .rib, var draft = shapeToolDraft else { return false }
+            guard RibSpec.thicknessRange.contains(value) else { dimensionError = "Enter a thickness from \(lengthText(0.1)) to \(lengthText(100))."; return false }
+            draft.thickness = value
+            updateShapeTool(draft)
         case .constructionAngle:
             guard tool == .planeAngle, var draft = constructionDraft, draft.line != nil else { return false }
             guard abs(value) <= 360 else { dimensionError = "Enter an angle from −360° to 360°."; return false }

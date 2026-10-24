@@ -288,6 +288,8 @@ struct AssistantWorkbench {
             case .intersect: label = "intersected with a solid (only the overlap kept)"
             case .deleteFace: label = "\(cut.removedFaces?.points.count ?? 1) face(s) deleted"
             case .offsetFace: label = "\(cut.movedFaces?.points.count ?? 1) face(s) moved \(Self.mm(cut.movedFaces?.distance ?? 0)) mm"
+            case .draft: label = "\(cut.draft?.points.count ?? 1) face(s) drafted \(Self.mm(cut.draft?.angle ?? 0))°"
+            case .rib: label = "rib \(Self.mm(cut.rib?.thickness ?? 0)) mm thick"
             case .scale:
                 let f = cut.scale?.factors ?? .one
                 label = cut.scale?.isUniform == true ? "scaled \(Self.mm(f.x * 100))%" : "stretched \(Self.mm(f.x * 100)) × \(Self.mm(f.y * 100)) × \(Self.mm(f.z * 100))%"
@@ -1828,6 +1830,78 @@ struct AssistantWorkbench {
     }
 
     /// Adds a construction plane parallel to a world plane, construction plane, or flat face.
+    /// Leans faces of a body (`faces`: names or numbers) by `angle` degrees from its flat face
+    /// `from`, which stays put (the pull runs into the body from it); negative leans outward.
+    @discardableResult mutating func draft(body bodyName: String, faces specs: [String], from neutralSpec: String, angle: Double) throws -> String {
+        let body = try body(named: bodyName), solid = try buildable(body), name = self.bodyName(body.id)
+        let neutral = try face(neutralSpec, of: body)
+        guard let plane = solid.facePlane(neutral), let center = solid.faceCenter(neutral) else { throw Failure("Draft leans faces from a flat face.") }
+        guard DraftSpec.angleRange.contains(abs(angle)) else { throw Failure("The draft angle is 0.01–60° (negative leans outward).") }
+        let points = try specs.map { spec -> SIMD3<Double> in
+            let index = try face(spec, of: body)
+            guard let point = solid.faceCenter(index) else { throw Failure("Face \(spec) of \(name) cannot be found.") }
+            return point
+        }
+        guard !points.isEmpty, let drafted = Drafting.drafting(body, faces: points, pull: -plane.normal, origin: center, angle: angle),
+              let index = workspace.bodies.firstIndex(where: { $0.id == body.id }) else {
+            throw Failure("Those faces of \(name) cannot lean \(Self.mm(angle))° from that face; a face square to it cannot be drafted.")
+        }
+        var next = workspace
+        next.bodies[index] = drafted
+        let change = "Drafted \(specs.count) face\(specs.count == 1 ? "" : "s") of \(name) \(Self.mm(angle))° from its \(neutralSpec) face"
+        try keep(next, change: change, checking: [body.id], focus: .body(body.id))
+        return change + "."
+    }
+
+    /// A rib from a sketch line (by name, such as Line 03) to whichever solid it meets, `thickness` thick.
+    @discardableResult mutating func rib(line lineName: String, thickness: Double) throws -> String {
+        guard case .shape(let id) = try item(named: lineName), let line = workspace.shapes.first(where: { $0.id == id }), line.kind == .line else {
+            throw Failure("A rib grows from a sketch line; name one such as Line 01.")
+        }
+        guard RibSpec.thicknessRange.contains(thickness) else { throw Failure("A rib is 0.1–100 mm thick.") }
+        let a = line.plane.point(line.start), b = line.plane.point(line.end)
+        for index in workspace.bodies.indices {
+            guard let ribbed = Ribs.ribbing(workspace.bodies[index], from: a, to: b, normal: line.plane.normalAxis, thickness: thickness) else { continue }
+            var next = workspace
+            next.bodies[index] = ribbed
+            let change = "Added a \(Self.mm(thickness)) mm rib from \(lineName) to \(bodyName(ribbed.id))"
+            try keep(next, change: change, checking: [ribbed.id], focus: .body(ribbed.id))
+            return change + "."
+        }
+        throw Failure("\(lineName) meets no solid on either side; draw it across a corner, on a plane through the solid.")
+    }
+
+    /// A loft through the first region of each sketch, in order (`ruled`: flat sides).
+    @discardableResult mutating func loft(sketches names: [String], ruled: Bool) throws -> String {
+        let regions = try names.map { name -> SketchProfile in
+            guard case .sketch(let id) = try item(named: name), let sketch = workspace.sketch(id),
+                  let region = workspace.profiles(in: sketch).first(where: \.isSolidProfile) else { throw Failure("\(name) has no closed region.") }
+            return region
+        }
+        let solid: KernelSolid
+        do { solid = try ShapedSolids.loft(regions, ruled: ruled) } catch { throw Failure("Those regions cannot be lofted; use regions one above another, facing the same way.") }
+        guard let added = ShapedSolids.adding(solid, named: "Loft", to: workspace) else { throw Failure("The loft could not be saved.") }
+        let change = "Lofted \(names.joined(separator: " → ")) into \(added.workspace.bodyNames[added.body] ?? "a loft")"
+        try keep(added.workspace, change: change, checking: [added.body], focus: .body(added.body))
+        return change + "."
+    }
+
+    /// Sweeps the first region of `sketch` along the sketch line, arc, or spline `path` (by name).
+    @discardableResult mutating func sweep(sketch sketchName: String, path pathName: String) throws -> String {
+        guard case .sketch(let id) = try item(named: sketchName), let sketch = workspace.sketch(id),
+              let region = workspace.profiles(in: sketch).first(where: \.isSolidProfile) else { throw Failure("\(sketchName) has no closed region.") }
+        guard case .shape(let pathID) = try item(named: pathName), let shape = workspace.shapes.first(where: { $0.id == pathID }),
+              let path = ShapedSolids.chain(from: shape, in: workspace.shapes) else { throw Failure("The path is a sketch line, arc, or spline, such as Line 02.") }
+        let solid: KernelSolid
+        do { solid = try ShapedSolids.sweep(region, along: path.points, smooth: path.smooth) } catch {
+            throw Failure("\(sketchName) cannot follow \(pathName); start the path at the region, across it, with bends wider than it.")
+        }
+        guard let added = ShapedSolids.adding(solid, named: "Sweep", to: workspace) else { throw Failure("The sweep could not be saved.") }
+        let change = "Swept \(sketchName) along \(pathName) into \(added.workspace.bodyNames[added.body] ?? "a sweep")"
+        try keep(added.workspace, change: change, checking: [added.body], focus: .body(added.body))
+        return change + "."
+    }
+
     /// A construction plane through three world points, or a construction axis from one point to
     /// another (a sketch named Axis 01 … holding one construction line).
     @discardableResult mutating func addConstruction(kind: String, points: [SIMD3<Double>]) throws -> String {
