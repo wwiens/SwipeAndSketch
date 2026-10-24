@@ -356,6 +356,24 @@ import simd
         XCTAssertTrue(session.measureItems.isEmpty)
     }
 
+    func testMeasurePicksTheCornersInSightAndTheFaceOverTheHiddenOne() {
+        let (session, controller) = boxScene()
+        session.chooseTool(.measure)
+        var points = 0, faces = 0
+        for x in [-30.0, 30] { for y in [-20.0, 20] { for z in [0.0, 20] {
+            tap(controller, SIMD3(Float(x), Float(y), Float(z)))
+            switch session.measureItems.last {
+            case .point(let p): XCTAssertLessThan(simd_distance(p, SIMD3(x, y, z)), 1e-6); points += 1
+            case .face: faces += 1
+            default: XCTFail("Tapped (\(x), \(y), \(z)): \(String(describing: session.measureItems.last))")
+            }
+            session.pickMeasureItem(nil)
+            controller.forgetTaps()
+        } } }
+        XCTAssertEqual(points, 7, "Seven corners of a box are in sight in the 3D view")
+        XCTAssertEqual(faces, 1, "A tap over the hidden corner picks the face in front of it")
+    }
+
     // MARK: Units
 
     func testInchesShowOnLabelsAndTheKeypadTakesThem() throws {
@@ -375,3 +393,4 @@ import simd
         XCTAssertEqual(controller.dimensionAnnotations().first?.text, "50.8 mm")
     }
 }
+

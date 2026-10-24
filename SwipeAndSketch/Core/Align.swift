@@ -52,11 +52,11 @@ struct AlignFeature: Equatable, Sendable {
     }
 
     static func corners(of solid: KernelSolid, edges: [Int]) -> [SIMD3<Double>] {
-        var result: [SIMD3<Double>] = []
+        var result: [SIMD3<Double>] = [], seen = DistinctPoints()
         for edge in edges {
             let ends = solid.edgeSamples(edge, count: 2)
             guard ends.count == 2, simd_distance(ends[0], ends[1]) > 1e-6 else { continue }
-            for end in ends where !result.contains(where: { simd_distance($0, end) < 1e-6 }) { result.append(end) }
+            for end in ends where seen.insert(end) { result.append(end) }
         }
         return result
     }
@@ -158,5 +158,27 @@ enum Aligning {
         }
         guard result.isValid, result.bodies.allSatisfy({ !bodies.contains($0.id) || (try? SolidKernel.solid(for: $0)) != nil }) else { return nil }
         return result
+    }
+}
+
+/// Points kept once each: one within `tolerance` of a point already added is a repeat. Lookups go
+/// through a grid, so an imported part's tens of thousands of corners don't each search them all.
+struct DistinctPoints {
+    let tolerance: Double
+    private var cells: [SIMD3<Int>: [SIMD3<Double>]] = [:]
+
+    init(tolerance: Double = 1e-6) { self.tolerance = tolerance }
+
+    /// Adds `point` unless it repeats one already added, and says whether it was added.
+    mutating func insert(_ point: SIMD3<Double>) -> Bool {
+        let scaled = point / tolerance
+        // Too far out for the grid (or not a number): compared with nothing, like a new point.
+        guard all(simd_abs(scaled) .< 1e15) else { return true }
+        let cell = SIMD3<Int>(scaled.rounded(.down))
+        for dx in -1...1 { for dy in -1...1 { for dz in -1...1 {
+            if cells[cell &+ SIMD3(dx, dy, dz)]?.contains(where: { simd_distance($0, point) < tolerance }) == true { return false }
+        } } }
+        cells[cell, default: []].append(point)
+        return true
     }
 }

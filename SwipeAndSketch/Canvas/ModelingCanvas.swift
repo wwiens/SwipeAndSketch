@@ -205,6 +205,8 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
     /// Move/Rotate widget drags it, and that original as its node was built.
     private var draggedGhost: (id: UUID, source: SolidBody)?
     private var visibility: (camera: ScreenCamera, content: Int, answers: [SIMD3<Double>: Bool])?
+    /// The overlay's visibility check running off the main thread, and the view it is for.
+    private var visibilityWork: (camera: ScreenCamera, content: Int, task: Task<Void, Never>)?
     private var extrusionStartDepth = 0.0
     private var extrusionPointsPerMillimeter = 1.0
     private var extrusionDragAxis = CGVector(dx: 0, dy: -1)
@@ -295,6 +297,8 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         let triangleFaces: [Int]
         /// Each face's span of `triangles` and its bounding box, so a ray cast skips faces it misses.
         let faceSpans: [(range: Range<Int>, low: SIMD3<Double>, high: SIMD3<Double>)]
+        /// The box around all the faces, so a ray cast skips a solid it misses without trying each face.
+        let bounds: (low: SIMD3<Double>, high: SIMD3<Double>)?
         init(_ solid: KernelSolid, _ mesh: KernelMesh, body: SolidBody, material: SCNMaterial) {
             triangles = mesh.indices.map { mesh.positions[Int($0)] }
             var planes = [SketchPlane?](repeating: nil, count: mesh.triangleCount)
@@ -302,11 +306,15 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             for (face, range) in mesh.faces.enumerated() { for triangle in range.lowerBound / 3..<range.upperBound / 3 { owners[triangle] = face } }
             triangleFaces = owners
             let corners = triangles
-            faceSpans = mesh.faces.compactMap { range in
+            let spans: [(range: Range<Int>, low: SIMD3<Double>, high: SIMD3<Double>)] = mesh.faces.compactMap { range in
                 guard !range.isEmpty, range.upperBound <= corners.count else { return nil }
                 var low = SIMD3<Double>(corners[range.lowerBound]), high = low
                 for i in range { let p = SIMD3<Double>(corners[i]); low = simd_min(low, p); high = simd_max(high, p) }
                 return (range, low, high)
+            }
+            faceSpans = spans
+            bounds = spans.first.map { first in
+                spans.reduce((first.low, first.high)) { (simd_min($0.0, $1.low), simd_max($0.1, $1.high)) }
             }
             for range in mesh.faces where !range.isEmpty {
                 let corners = mesh.indices[range].map { Int($0) }
@@ -2592,6 +2600,12 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
     /// corners of the other solids, sketch points, and the origin. Only points not hidden behind a
     /// face are offered.
     private func alignPoints(moving: Set<UUID>, from: Bool) -> [AlignFeature] {
+        let candidates = alignCandidates(moving: moving, from: from)
+        return zip(candidates, shownPoints(candidates.map(\.point))).filter(\.1).map(\.0)
+    }
+
+    /// Every point Align can pick, hidden or not.
+    private func alignCandidates(moving: Set<UUID>, from: Bool) -> [AlignFeature] {
         var result: [AlignFeature] = []
         for body in session.workspace.visible.bodies where moving.contains(body.id) == from {
             guard let render = solidRender(body), let solid = try? SolidKernel.solid(for: body) else { continue }
@@ -2606,15 +2620,17 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             }
             result.append(.point(.zero, source: .origin))
         }
-        return result.filter { isUnobstructed($0.point) }
+        return result
     }
 
-    /// The nearest pickable point within 12 pt of the Pencil.
+    /// The nearest pickable point within 12 pt of the Pencil. Only the points that close are
+    /// checked for being hidden, nearest first: an imported part has thousands of corners.
     private func alignPoint(at point: CGPoint, moving: Set<UUID>, from: Bool) -> AlignFeature? {
-        alignPoints(moving: moving, from: from)
+        alignCandidates(moving: moving, from: from)
             .map { ($0, distance(project(SIMD3<Float>($0.point)), point)) }
             .filter { $0.1 < 12 }
-            .min { $0.1 < $1.1 }?.0
+            .sorted { $0.1 < $1.1 }
+            .first { isUnobstructed($0.0.point) }?.0
     }
 
     /// The moving solids in blue, the feature being aligned in blue, and the target in purple.
@@ -3137,7 +3153,8 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         // A tap goes through X-rayed solids to a solid inside them, when there is one.
         var nearest: SurfaceHit?, nearestXrayed: SurfaceHit?
         for body in committed ? session.workspace.visible.bodies : session.visibleWorkspace.bodies {
-            guard let render = solidRender(body) else { continue }
+            guard let render = solidRender(body), let bounds = render.bounds,
+                  Self.line(through: origin, along: direction, meets: bounds.low, bounds.high) else { continue }
             let xrayed = session.isXrayed(body.id) && !session.xrayAll
             let triangles = render.triangles
             for span in render.faceSpans where Self.line(through: origin, along: direction, meets: span.low, span.high) {
@@ -3299,7 +3316,8 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         }
         guard let cached = pivotSnapCache[id] else { return ([], []) }
         // The middle is inside the solid, so it is always offered.
-        return (cached.points.filter { $0.kind == .center || isUnobstructed($0.point) }, cached.edges)
+        let shown = shownPoints(cached.points.map(\.point))
+        return (zip(cached.points, shown).filter { $0.0.kind == .center || $0.1 }.map(\.0), cached.edges)
     }
 
     /// Whether a point on a solid is in front of (or on) the nearest face under it on screen.
@@ -3311,10 +3329,129 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         let screen = project(SIMD3<Float>(point))
         let answer: Bool
         if !view.bounds.contains(screen) { answer = false }
-        else if let front = frontSurface(at: screen, committed: true) { answer = simd_dot(point, viewDirection) >= front.depth - max(0.05, unitsPerPoint * 3) }
+        else if let front = frontSurface(at: screen, committed: true) { answer = simd_dot(point, viewDirection) >= front.depth - occlusionTolerance }
         else { answer = true }
         visibility?.answers[point] = answer
         return answer
+    }
+
+    /// How far behind the face in front a point may be and still count as on it.
+    private var occlusionTolerance: Double { max(0.05, unitsPerPoint * 3) }
+
+    /// The shown solids' triangles and the view, as a visibility check reads them off the main thread.
+    private struct OcclusionScene: Sendable {
+        var solids: [(render: SolidRender, xrayed: Bool)]
+        var camera: ScreenCamera
+        var viewDirection: SIMD3<Double>
+        var tolerance: Double
+        /// About 8 pt on screen, in millimeters.
+        var cellSize: Double
+        var triangleCount: Int { solids.reduce(0) { $0 + $1.render.triangles.count / 3 } }
+    }
+
+    /// Models with fewer triangles than this have their dots checked right away, without waiting a
+    /// frame (tests lower it to check the other way).
+    static var inlineOcclusionTriangles = 20_000
+
+    /// Which of `points` the overlay shows (Align's dots, the widget center's snaps), as
+    /// `isUnobstructed` answers. On a big model the answers are worked out together off the main
+    /// thread: points are left out until they arrive, and the overlay redraws then. A ray cast per
+    /// point on an imported part with thousands of corners and faces froze the app.
+    private func shownPoints(_ points: [SIMD3<Double>]) -> [Bool] {
+        let camera = screenCamera
+        if visibility?.camera != camera || visibility?.content != contentVersion { visibility = (camera, contentVersion, [:]) }
+        var pending: [SIMD3<Double>] = []
+        for point in points where visibility?.answers[point] == nil {
+            if view.bounds.contains(project(SIMD3<Float>(point))) { pending.append(point) } else { visibility?.answers[point] = false }
+        }
+        if !pending.isEmpty {
+            let scene = OcclusionScene(
+                solids: session.workspace.visible.bodies.compactMap { body in solidRender(body).map { ($0, session.isXrayed(body.id) && !session.xrayAll) } },
+                camera: camera, viewDirection: viewDirection, tolerance: occlusionTolerance,
+                cellSize: 8 * camera.height / max(1, Double(view.bounds.height)))
+            if scene.triangleCount <= Self.inlineOcclusionTriangles, let answers = Self.unobstructed(pending, in: scene) {
+                for (point, answer) in zip(pending, answers) { visibility?.answers[point] = answer }
+            } else if visibilityWork?.camera != camera || visibilityWork?.content != contentVersion {
+                // One check at a time; a check for an old view is dropped. When it arrives, the
+                // redraw asks again for whatever is still missing.
+                visibilityWork?.task.cancel()
+                let content = contentVersion
+                let task = Task.detached(priority: .userInitiated) { [weak self] in
+                    guard let answers = CanvasController.unobstructed(pending, in: scene) else { return }
+                    await self?.visibilityArrived(answers, for: pending, camera: camera, content: content)
+                }
+                visibilityWork = (camera, content, task)
+            }
+        }
+        return points.map { visibility?.answers[$0] ?? false }
+    }
+
+    private func visibilityArrived(_ answers: [Bool], for points: [SIMD3<Double>], camera: ScreenCamera, content: Int) {
+        guard visibilityWork?.camera == camera, visibilityWork?.content == content else { return }
+        visibilityWork = nil
+        if visibility?.camera == camera, visibility?.content == content {
+            for (point, answer) in zip(points, answers) { visibility?.answers[point] = answer }
+        }
+        input.setNeedsDisplay()
+    }
+
+    /// `isUnobstructed` for points on screen, all at once: one pass over the solids' triangles,
+    /// each tried only against the points under it on screen. Nil when cancelled.
+    private nonisolated static func unobstructed(_ points: [SIMD3<Double>], in scene: OcclusionScene) -> [Bool]? {
+        let camera = scene.camera, view = scene.viewDirection, size = scene.cellSize
+        // The points in the screen's right/up frame (millimeters), binned in squares.
+        let flat = points.map { SIMD2(simd_dot($0, camera.right), simd_dot($0, camera.up)) }
+        let depths = points.map { simd_dot($0, view) }
+        guard let first = flat.first else { return [] }
+        let low = flat.reduce(first, simd_min), high = flat.reduce(first, simd_max)
+        let columns = Int((high.x - low.x) / size) + 1, rows = Int((high.y - low.y) / size) + 1
+        var cells = [[Int]](repeating: [], count: columns * rows)
+        for (n, p) in flat.enumerated() { cells[Int((p.y - low.y) / size) * columns + Int((p.x - low.x) / size)].append(n) }
+        /// The cells a screen rectangle covers, or nil when it misses them all.
+        func cellRange(_ from: SIMD2<Double>, _ to: SIMD2<Double>) -> (ClosedRange<Int>, ClosedRange<Int>)? {
+            let c0 = max(0, Int(floor((from.x - low.x) / size))), c1 = min(columns - 1, Int(floor((to.x - low.x) / size)))
+            let r0 = max(0, Int(floor((from.y - low.y) / size))), r1 = min(rows - 1, Int(floor((to.y - low.y) / size)))
+            return c0 <= c1 && r0 <= r1 ? (c0...c1, r0...r1) : nil
+        }
+        // The nearest depth in front of each point, on solids and on X-rayed solids (which a
+        // point is only checked against when nothing else covers it, like `frontSurface`).
+        var front = [Double](repeating: -.infinity, count: points.count), frontXrayed = front
+        let pad = 1e-6, right = camera.right, up = camera.up
+        for (render, xrayed) in scene.solids {
+            let triangles = render.triangles
+            for span in render.faceSpans {
+                if Task.isCancelled { return nil }
+                // The face's box on screen: skip the face when no point is under it.
+                let middle = (span.low + span.high) / 2, half = (span.high - span.low) / 2
+                let center = SIMD2(simd_dot(middle, right), simd_dot(middle, up))
+                let extent = SIMD2(simd_dot(half, simd_abs(right)), simd_dot(half, simd_abs(up))) + pad
+                guard let (spanColumns, spanRows) = cellRange(center - extent, center + extent),
+                      spanRows.contains(where: { row in spanColumns.contains { !cells[row * columns + $0].isEmpty } }) else { continue }
+                for t in stride(from: span.range.lowerBound, to: span.range.upperBound - 2, by: 3) {
+                    let a = SIMD3<Double>(triangles[t]), b = SIMD3<Double>(triangles[t + 1]), c = SIMD3<Double>(triangles[t + 2])
+                    let pa = SIMD2(simd_dot(a, right), simd_dot(a, up))
+                    let pb = SIMD2(simd_dot(b, right), simd_dot(b, up))
+                    let pc = SIMD2(simd_dot(c, right), simd_dot(c, up))
+                    let ab = pb - pa, ac = pc - pa, area = ab.x * ac.y - ab.y * ac.x
+                    // Edge-on to the screen, it covers nothing.
+                    guard abs(area) > 1e-12,
+                          let (triangleColumns, triangleRows) = cellRange(simd_min(pa, simd_min(pb, pc)) - pad, simd_max(pa, simd_max(pb, pc)) + pad) else { continue }
+                    let da = simd_dot(a, view), db = simd_dot(b, view), dc = simd_dot(c, view)
+                    for row in triangleRows {
+                        for column in triangleColumns {
+                            for n in cells[row * columns + column] {
+                                let ap = flat[n] - pa
+                                let u = (ap.x * ac.y - ap.y * ac.x) / area, v = (ab.x * ap.y - ab.y * ap.x) / area
+                                guard u >= 0, v >= 0, u + v <= 1 else { continue }
+                                let depth = da + (db - da) * u + (dc - da) * v
+                                if xrayed { frontXrayed[n] = max(frontXrayed[n], depth) } else { front[n] = max(front[n], depth) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return depths.indices.map { n in depths[n] >= (front[n] > -.infinity ? front[n] : frontXrayed[n]) - scene.tolerance }
     }
 
     /// The snap under the Pencil: the nearest snap point within 14 pt, else the nearest visible
@@ -3521,9 +3658,8 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
     private func measureTap(at point: CGPoint) {
         let now = CACurrentMediaTime()
         // Points first: solid corners, sketch points, and the origin.
-        if let nearest = alignPoints(moving: [], from: false).map({ ($0, distance(project(SIMD3<Float>($0.point)), point)) })
-            .filter({ $0.1 < 12 }).min(by: { $0.1 < $1.1 }) {
-            session.pickMeasureItem(.point(nearest.0.point))
+        if let nearest = alignPoint(at: point, moving: [], from: false) {
+            session.pickMeasureItem(.point(nearest.point))
             return
         }
         if let shape = nearestSketch(at: point, over: solidFace(at: point)) {

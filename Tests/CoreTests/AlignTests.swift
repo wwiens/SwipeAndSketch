@@ -46,6 +46,25 @@ final class AlignTests: XCTestCase {
         XCTAssertNil(Aligning.transform(from: from, to: try face(plate, normal: .init(0, 0, 1))))
     }
 
+    func testDistinctPointsDropRepeatsWithinTheTolerance() {
+        var points = DistinctPoints()
+        XCTAssertTrue(points.insert(SIMD3(1, 2, 3)))
+        XCTAssertFalse(points.insert(SIMD3(1, 2, 3 + 5e-7)), "Closer than 1e-6 is the same point")
+        XCTAssertFalse(points.insert(SIMD3(1 - 4e-7, 2 + 4e-7, 3)), "Across a grid line too")
+        XCTAssertTrue(points.insert(SIMD3(1, 2, 3 + 2e-6)))
+        XCTAssertTrue(points.insert(SIMD3(-1, -2, -3)))
+        XCTAssertTrue(points.insert(SIMD3(.nan, 0, 0)), "Off the grid: kept")
+    }
+
+    func testABoxHasEightCorners() throws {
+        let profile = Geometry.profiles(in: [SketchShape(kind: .rectangle, plane: .top, start: .init(x: -30, y: -20), end: .init(x: 30, y: 20))], on: .top)[0]
+        let corners = AlignFeature.corners(of: SolidBody(profile: profile, depth: 20))
+        XCTAssertEqual(corners.count, 8)
+        for x in [-30.0, 30] { for y in [-20.0, 20] { for z in [0.0, 20] {
+            XCTAssertTrue(corners.contains { simd_distance($0, SIMD3(x, y, z)) < 1e-6 })
+        } } }
+    }
+
     func testRoundSolidsHaveNoCornersAndSketchShapesHavePoints() throws {
         let disc = SketchShape(kind: .circle, plane: .top, start: .zero, end: .init(x: 5, y: 0))
         let cylinder = SolidBody(profile: try XCTUnwrap(Geometry.profiles(in: [disc], on: .top).first), depth: 10)

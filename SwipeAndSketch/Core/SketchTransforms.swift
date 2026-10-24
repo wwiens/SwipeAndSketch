@@ -252,9 +252,10 @@ struct TransformPivot: Equatable, Sendable {
         let bounds = solid.bounds
         var points = [TransformPivot(kind: .center, point: (bounds.min + bounds.max) / 2)]
         points += AlignFeature.corners(of: solid, edges: edges).map { TransformPivot(kind: .corner, point: $0) }
-        var lines: [[SIMD3<Double>]] = []
+        var lines: [[SIMD3<Double>]] = [], seen = DistinctPoints()
+        for pivot in points { _ = seen.insert(pivot.point) }
         func add(_ pivot: TransformPivot) {
-            if !points.contains(where: { simd_distance($0.point, pivot.point) < 1e-6 }) { points.append(pivot) }
+            if seen.insert(pivot.point) { points.append(pivot) }
         }
         for edge in edges {
             switch Projection.curve(of: solid, edge: edge) {

@@ -167,6 +167,19 @@ import simd
         XCTAssertEqual(session.workspace, before)
     }
 
+    func testBigModelsFindTheCenterSnapsInSightOffTheMainThread() async throws {
+        let inline = CanvasController.inlineOcclusionTriangles
+        CanvasController.inlineOcclusionTriangles = 0
+        defer { CanvasController.inlineOcclusionTriangles = inline }
+        let (_, controller) = boxScene()
+        func corners() -> [TransformPivot] { controller.pivotSnaps().points.filter { $0.kind == .corner } }
+        XCTAssertTrue(corners().isEmpty, "Snaps wait for the check")
+        XCTAssertEqual(controller.pivotSnaps().points.first?.kind, .center, "The middle is always offered")
+        for _ in 0..<500 where corners().isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(corners().count, 7, "Seven corners of a box are in sight in the 3D view")
+        XCTAssertTrue(corners().contains { simd_distance($0.point, SIMD3(30, 20, 20)) < 1e-6 })
+    }
+
     func testCenterOnAnEdgeHingesTheSolidAboutIt() throws {
         let (session, controller) = boxScene()
         try movePivot(controller, to: SIMD3(10.2, -20, 20))
