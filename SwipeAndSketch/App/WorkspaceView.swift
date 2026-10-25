@@ -686,7 +686,6 @@ struct WorkspaceView: View {
         }
         Menu { colorMenu(body.id, current: body.color ?? .gray) } label: { StripLabel(title: "Color", icon: .color, showsMenu: true) }
             .accessibilityLabel("Color").accessibilityIdentifier("selection.color")
-        stripButton("Duplicate", icon: .copy, id: "selection.duplicate") { session.duplicate() }
     }
 
     /// Union, Subtract, and Intersect share one menu, like the dock's Combine group.
@@ -716,14 +715,13 @@ struct WorkspaceView: View {
         .accessibilityLabel("Transform").accessibilityIdentifier("selection.transform")
     }
 
-    /// A Model Tree group: everything in it moves with the widget, and transforms, duplicates, and
-    /// exports together.
+    /// A Model Tree group: everything in it moves with the widget, and transforms and exports
+    /// together (Duplicate is in its row's menu).
     @ViewBuilder private func groupActions(_ id: UUID) -> some View {
         let contents = session.workspace.contents(of: id)
         stripLabel(session.workspace.groupNames[id] ?? "Group", id: "selection.groupName")
         if !(contents.bodies.isEmpty && contents.sketches.isEmpty) {
             AnyView(transformMenu(solid: false))
-            stripButton("Duplicate", icon: .copy, id: "selection.duplicate") { session.duplicate() }
         }
         if !contents.bodies.isEmpty {
             stripButton("Export", icon: .export, id: "selection.export") { session.printSheet = .export }
@@ -738,10 +736,9 @@ struct WorkspaceView: View {
             stripButton("Revolve", icon: .revolve, id: "selection.revolve") { session.beginRevolve() }
         }
         AnyView(transformMenu(solid: false))
-        stripButton("Duplicate", icon: .copy, id: "selection.duplicate") { session.duplicate() }
     }
 
-    /// Several solids picked together: they combine, transform, color, copy, export, and delete together.
+    /// Several solids picked together: they combine, transform, color, export, and delete together.
     @ViewBuilder private var pickedBodyActions: some View {
         let ids = session.pickedBodies
         stripLabel(session.pickedSummary, id: "selection.pickedCount")
@@ -756,7 +753,6 @@ struct WorkspaceView: View {
             }
         } label: { StripLabel(title: "Color", icon: .color, showsMenu: true) }
             .accessibilityLabel("Color").accessibilityIdentifier("selection.color")
-        stripButton("Duplicate", icon: .copy, id: "selection.duplicate") { session.duplicate() }
         stripButton("Export", icon: .export, id: "selection.export") { session.printSheet = .export }
     }
 
@@ -1067,7 +1063,7 @@ struct WorkspaceView: View {
         .disabled(!session.canEditGroups)
     }
 
-    /// A group row's menu (a long press): rename, a group inside it, move, ungroup, and delete.
+    /// A group row's menu (a long press): rename, a group inside it, move, duplicate, ungroup, and delete.
     @ViewBuilder private func groupMenu(_ item: ModelItem, id: UUID) -> some View {
         Button { beginRename(item.selection) } label: { Label { Text("Rename…") } icon: { SSIconGlyph(icon: .rename, size: 20, color: ink) } }
             .accessibilityIdentifier("group.rename")
@@ -1082,6 +1078,10 @@ struct WorkspaceView: View {
         } label: { Label { Text("New Group Inside") } icon: { SSIconGlyph(icon: .groupAdd, size: 20, color: ink) } }
             .disabled(!session.canEditGroups)
         moveToGroupMenu(item.selection)
+        if !(session.workspace.contents(of: id).bodies.isEmpty && session.workspace.contents(of: id).sketches.isEmpty) {
+            Button { session.duplicate(item.selection) } label: { Label { Text("Duplicate") } icon: { SSIconGlyph(icon: .copy, size: 20, color: ink) } }
+                .disabled(session.isEditingBlocked).accessibilityIdentifier("group.duplicate")
+        }
         Button { session.ungroup(id) } label: {
             Label { Text("Ungroup") } icon: { SSIconGlyph(icon: .ungroup, size: 20, color: ink) }
         }

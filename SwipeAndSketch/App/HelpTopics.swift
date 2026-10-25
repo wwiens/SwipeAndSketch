@@ -389,7 +389,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .modelGroup:
             HelpOverview(
                 summary: "A group in the Model Tree holds solids, sketches, planes, and other groups. Select its row to work on everything in it at once.",
-                steps: ["Tap a group's row in the Model Tree. Everything in it is outlined in blue.", "Drag an arrow of the widget to move it all, or an arc to turn it. Turn on Create Copy to copy the whole group.", "Or choose Transform to scale, mirror, or pattern it all, Duplicate for a copy of the group, or Export for a 3MF of just its solids."],
+                steps: ["Tap a group's row in the Model Tree. Everything in it is outlined in blue.", "Drag an arrow of the widget to move it all, or an arc to turn it. Turn on Create Copy to copy the whole group.", "Or choose Transform to scale, mirror, or pattern it all, or Export for a 3MF of just its solids. Long-press the row for Duplicate."],
                 tips: ["The group's eye hides everything inside without changing each item's own eye.", "Long-press the row to rename the group, X-ray it, ungroup it, or delete it with its contents."])
         case .planeAngle:
             HelpOverview(
