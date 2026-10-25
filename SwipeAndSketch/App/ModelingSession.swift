@@ -1173,7 +1173,9 @@ struct DimensionEdit: Identifiable {
     var isJoining: Bool { isExtruding && extrusionMode == .join }
     /// Done is available: a new body always, a cut or join only when it reaches a solid.
     var canConfirmExtrusion: Bool {
-        guard isExtruding, extrusionDepth.isFinite, abs(extrusionDepth) >= 0.01, abs(extrusionDepth) <= 10_000 else { return false }
+        // Through All needs no depth (it is 0 until dragged).
+        let throughAll = extrusionMode == .cut && cutThroughAll
+        guard isExtruding, throughAll || (extrusionDepth.isFinite && abs(extrusionDepth) >= 0.01 && abs(extrusionDepth) <= 10_000) else { return false }
         switch extrusionMode {
         case .newBody: return true
         case .cut: return !cutTargets.isEmpty

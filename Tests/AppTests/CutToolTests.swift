@@ -44,6 +44,8 @@ import simd
         XCTAssertTrue(controller.dimensionAnnotations().isEmpty)
         XCTAssertFalse(controller.previewNode.childNodes.isEmpty, "The red cut tool is shown")
         XCTAssertEqual(session.workspace.bodies[0].cuts, [], "Previews never change the document")
+        XCTAssertEqual(session.extrusionDepth, 0)
+        XCTAssertTrue(session.canConfirmExtrusion, "Through All needs no depth: Done is available")
         attach(controller, "Through-all hole preview")
 
         session.confirmExtrusion()
@@ -71,6 +73,7 @@ import simd
         session.beginExtrusion()
         session.chooseExtrusionMode(.cut)
         session.cutThroughAll = true
+        XCTAssertTrue(session.canConfirmExtrusion)
         session.confirmExtrusion()
         XCTAssertEqual(session.workspace.bodies.count, 2, "Each piece is its own solid")
         XCTAssertEqual(session.workspace.bodies[0].id, box, "The larger piece keeps the solid")
