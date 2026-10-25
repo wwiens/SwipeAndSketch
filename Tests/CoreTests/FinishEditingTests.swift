@@ -79,4 +79,19 @@ final class FinishEditingTests: XCTestCase {
         XCTAssertEqual(try volume(bench.workspace.bodies[0]), block, accuracy: 0.01)
         XCTAssertThrowsError(try bench.editFinish(body: "Body 01", which: "1", size: nil), "None left")
     }
+
+    /// A tap lands on the display mesh, a little inside a round face (user report, October 25,
+    /// 2026: a fillet's face offered a diameter instead of its radius). Moved onto the face, the
+    /// point finds its fillet.
+    func testATapOnTheMeshInsideARoundFindsItsFillet() throws {
+        let body = try rounded(6)
+        let solid = try SolidKernel.solid(for: body)
+        let axis = SIMD3(9.0, 0, 6), out = simd_normalize(SIMD3(1.0, 0, 1))
+        let onMesh = axis + out * (6 - 0.03)
+        XCTAssertNil(body.finishSource(atFace: onMesh), "Off the round, no face lies there")
+        let face = try XCTUnwrap(solid.face(near: axis + out * 6))
+        let snapped = try XCTUnwrap(solid.point(onFace: face, near: onMesh))
+        XCTAssertEqual(simd_distance(snapped, axis + out * 6), 0, accuracy: 1e-6)
+        XCTAssertEqual(body.finishSource(atFace: snapped), .named(0))
+    }
 }

@@ -166,4 +166,29 @@ import simd
         session.undo()
         XCTAssertEqual(session.workspace.bodies[0].finishes.first?.size, 5)
     }
+
+    /// A tap anywhere on a round finds its fillet, not just where the display mesh happens to touch
+    /// the curved face (user report, October 25, 2026: a 6 mm fillet's face showed Ø 12.2 mm and
+    /// refused every size).
+    func testTappingAnywhereOnARoundFindsItsFillet() throws {
+        let (session, controller, body) = try boxScene()
+        session.chooseTool(.fillet)
+        tap(controller, SIMD3(30, -20, 10))
+        XCTAssertTrue(session.applyDimension(6, target: .finishSize(.fillet)))
+        session.confirmFinish()
+        session.chooseTool(.select)
+
+        for degrees in stride(from: -78.0, through: -12, by: 6) {
+            // (Nearer its sides, a tap picks the edge there.) A tap far off on the top first, so taps
+            // on the round never make a double-tap.
+            tap(controller, SIMD3(-20, 10, 20))
+            let angle = degrees * .pi / 180
+            tap(controller, SIMD3(Float(24 + 6 * cos(angle)), Float(-14 + 6 * sin(angle)), 10))
+            XCTAssertEqual(session.selectedFace?.bodyID, body.id, "\(degrees)°")
+            XCTAssertEqual(session.selectedFinish?.size, 6, "\(degrees)°")
+            XCTAssertNil(session.selectedFaceSize, "No diameter at \(degrees)°")
+        }
+        XCTAssertTrue(session.applyDimension(4, target: .selectedFinish(.fillet)))
+        XCTAssertEqual(session.workspace.bodies[0].finishes.first?.size, 4)
+    }
 }

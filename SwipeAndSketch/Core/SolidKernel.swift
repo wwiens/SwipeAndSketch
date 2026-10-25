@@ -337,6 +337,13 @@ final class KernelSolid: @unchecked Sendable {
         return index >= 0 ? Int(index) : nil
     }
 
+    /// The point of `face` nearest `point`. A tap lands on the display mesh, which lies a little
+    /// off a curved face; this puts it back on the face itself.
+    func point(onFace face: Int, near point: SIMD3<Double>) -> SIMD3<Double>? {
+        guard let target = KernelSolid.point(point) else { return nil }
+        return distance(.face(face), to: target, .whole)?.from
+    }
+
     /// The flat face with outward `normal` that contains `point` strictly inside, if any.
     func face(containing point: SIMD3<Double>, normal: SIMD3<Double>, tolerance: Double = 1e-4) -> Int? {
         let index = ssk_face_at(pointer, SSKVec3(x: point.x, y: point.y, z: point.z), SSKVec3(x: normal.x, y: normal.y, z: normal.z), tolerance)

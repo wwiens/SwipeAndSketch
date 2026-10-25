@@ -3179,7 +3179,8 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         let origin = viewPlanePoint(screen), direction = screenCamera.direction
         // A tap goes through X-rayed solids to a solid inside them, when there is one.
         var nearest: SurfaceHit?, nearestXrayed: SurfaceHit?
-        for body in committed ? session.workspace.visible.bodies : session.visibleWorkspace.bodies {
+        let bodies = committed ? session.workspace.visible.bodies : session.visibleWorkspace.bodies
+        for body in bodies {
             guard let render = solidRender(body), let bounds = render.bounds,
                   Self.line(through: origin, along: direction, meets: bounds.low, bounds.high) else { continue }
             let xrayed = session.isXrayed(body.id) && !session.xrayAll
@@ -3203,7 +3204,13 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             }
             }
         }
-        return nearest ?? nearestXrayed
+        // A curved face's triangles lie a little inside it: put the point on the face itself, so it
+        // finds what made the face (a fillet, say) as a point on the face would.
+        guard var hit = nearest ?? nearestXrayed else { return nil }
+        if hit.plane == nil, let body = bodies.first(where: { $0.id == hit.bodyID }), let solid = try? SolidKernel.solid(for: body), let point = solid.point(onFace: hit.face, near: hit.point) {
+            hit.point = point
+        }
+        return hit
     }
 
     /// Whether the infinite line through `origin` along `direction` passes through a box (slightly
