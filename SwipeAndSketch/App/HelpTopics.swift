@@ -323,7 +323,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
             HelpOverview(
                 summary: "Extrude turns a flat sketch into a solid by giving it depth.",
                 steps: ["Tap inside a closed sketch shape.", "Drag the blue double-arrow to set the depth, or tap the value to type it.", "Tap Done to make the solid, or Cancel to discard it."],
-                tips: ["Drag back past zero to extrude the other way.", "Dragging into a solid cuts it; touching one joins it.",
+                tips: ["Drag back past zero to extrude the other way.", "Dragging into a solid cuts it; touching one joins it. A cut that leaves pieces apart makes each its own solid.",
                        "Symmetric extrudes half each way; Taper leans the sides in by an angle; Up To sets the depth to reach a face you tap.",
                        "Tap other regions of the sketch to extrude them at the same time, or pick several regions and sketches before choosing Extrude."])
         case .extrudeFace:
@@ -524,7 +524,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
             HelpOverview(
                 summary: "Split Body cuts a solid into separate pieces without removing anything.",
                 steps: ["Tap the solids to split.", "Tap Splitting Tools, then a plane, flat face, sketch shape, or sketch line.", "Tap Done."],
-                tips: ["Several cutters can split it more than once."])
+                tips: ["Several cutters can split it more than once.", "Parts that end up apart, even on the same side, become separate solids."])
         case .align:
             HelpOverview(
                 summary: "Align moves a solid so one of its faces, edges, or corners meets another.",

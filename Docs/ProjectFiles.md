@@ -69,7 +69,7 @@ Decision recorded October 18, 2026. A solid may carry `cuts`, an ordered list of
 | `throughAll` | When true, the cut spans the solid's full extent on both sides of the sketch plane |
 | `id` | Stable UUID |
 
-One Cut operation records a copy on every solid it removes material from, so solids stay independent. A solid is rebuilt as: extrude, then finishes in order, then cuts in order. Finish edge names refer to the uncut extrusion; edges created by cuts have no names. A cut may split a solid into separate pieces; a cut that would remove the whole solid is rejected.
+One Cut operation records a copy on every solid it removes material from, so solids stay independent. A solid is rebuilt as: extrude, then finishes in order, then cuts in order. Finish edge names refer to the uncut extrusion; edges created by cuts have no names. A cut that would remove the whole solid is rejected; one that leaves it in separate pieces makes each piece its own solid (see *Splits*).
 
 ## More operations
 
@@ -128,6 +128,8 @@ Peg & Socket (October 20, 2026) adds no new data: the peg is an ordinary `join` 
 ## Splits
 
 Decision recorded October 19, 2026. Split Body divides a solid into pieces without removing material. Each piece is saved as its own solid: the original definition (profile, depth, finishes, and ordered `cuts`) with one more entry at the end of `cuts` that keeps only that piece. For a plane, the entry carries `"split": {"keep": "front"}` or `{"keep": "back"}` and keeps the side of `profile.plane` its normal points to, or the other side; its `profile` (a small square on the plane) and `depth` are placeholders, because the kernel builds a half-space box covering the whole solid when it rebuilds. For a sketch region, the inside piece carries `{"keep": "inside"}` with `throughAll` and the region's `profile`, and the outside piece is an ordinary through-all cut. Several tools apply one after another, so a piece may carry several entries. Pieces have new ids; with Keep Input the original solid is kept too. Moving a piece moves its split planes with it.
+
+Decision recorded October 24, 2026. A cut, subtract, intersect, hole, or split that leaves a solid in separate pieces (parts that do not touch) makes each piece its own solid, in the same undo step. Each is the solid's definition with one more entry at the end of `cuts`: `"split": {"keep": "piece", "point": [x, y, z]}`, which keeps the piece that point is strictly inside. The point is in the solid's own frame (`profile.plane`'s axes and normal, like a finish's edge points), so moving or mirroring the solid carries it; `profile` and `depth` are placeholders. When the solid is in one piece again (an earlier step was edited), the entry keeps it whole; when no piece contains the point, it keeps the piece whose bounding box center is nearest. The largest piece keeps the solid's id; the others have new ids and follow after the last solid, with the same name, color, and group.
 
 ## Projections
 

@@ -63,6 +63,27 @@ import simd
         XCTAssertEqual(session.workspace.bodies[0].cuts.count, 1)
     }
 
+    func testACutAcrossTheBoxLeavesTwoSolidsInOneUndoStep() throws {
+        let (session, _) = boxScene()
+        let box = session.workspace.bodies[0].id
+        session.choosePlane(.top)
+        session.addShape(.init(kind: .rectangle, plane: .top, start: .init(x: 8, y: -25), end: .init(x: 12, y: 25)))
+        session.beginExtrusion()
+        session.chooseExtrusionMode(.cut)
+        session.cutThroughAll = true
+        session.confirmExtrusion()
+        XCTAssertEqual(session.workspace.bodies.count, 2, "Each piece is its own solid")
+        XCTAssertEqual(session.workspace.bodies[0].id, box, "The larger piece keeps the solid")
+        XCTAssertEqual(try volume(session, 0), 38 * 40 * 20, accuracy: 1e-6)
+        XCTAssertEqual(try volume(session, 1), 18 * 40 * 20, accuracy: 1e-6)
+        XCTAssertEqual(session.status, "Separated into 2 solids")
+        session.undo()
+        XCTAssertEqual(session.workspace.bodies.count, 1)
+        XCTAssertEqual(session.workspace.bodies[0].cuts, [])
+        session.redo()
+        XCTAssertEqual(session.workspace.bodies.count, 2)
+    }
+
     func testPocketDepthFollowsDragAndMissingCutsCannotBeConfirmed() throws {
         let (session, controller) = boxScene()
         addCircle(session)

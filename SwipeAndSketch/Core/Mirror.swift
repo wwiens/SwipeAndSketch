@@ -174,6 +174,8 @@ extension SolidBody {
                 copy.finish = finish
             }
             copy.scale = cut.scale?.mirrored
+            // A piece's point is in the solid's own frame, whose y axis the reflection flips.
+            if var split = cut.split, let point = split.point { split.point = SIMD3(point.x, -point.y, point.z); copy.split = split }
             // Points are in the solid's own frame, whose y axis the reflection flips.
             if var removed = cut.removedFaces { removed.points = removed.points.map { SIMD3($0.x, -$0.y, $0.z) }; copy.removedFaces = removed }
             if var draft = cut.draft {

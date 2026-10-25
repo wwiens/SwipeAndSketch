@@ -6794,6 +6794,11 @@ struct DimensionEdit: Identifiable {
         var updated = updated
         updated.normalizeSketches()
         updated.pruneImportedShapes()
+        // A solid a removal left in separate pieces becomes one solid per piece, in the same step.
+        let separated = updated.separatingPieces(since: workspace)
+        updated = separated.workspace
+        let count = separated.added.values.reduce(0) { $0 + $1.count + 1 }
+        if count > 0 { status = "Separated into \(count) solids" }
         history.commit(updated)
         save()
     }

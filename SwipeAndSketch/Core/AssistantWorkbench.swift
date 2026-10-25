@@ -283,7 +283,7 @@ struct AssistantWorkbench {
             case .merge: label = "united solid"
             case .shell: label = "shell \(Self.mm(cut.shell?.thickness ?? 0)) mm"
             case .hole: label = "\(cut.hole?.kind.title.lowercased() ?? "") \(cut.hole?.size ?? "") hole"
-            case .split: label = "split"
+            case .split: label = cut.split?.keep == .piece ? "one piece of a solid a cut divided" : "split"
             case .subtract: label = cut.clearance.map { "subtracted solid with \(Self.mm($0)) mm clearance" } ?? "subtracted solid"
             case .intersect: label = "intersected with a solid (only the overlap kept)"
             case .deleteFace: label = "\(cut.removedFaces?.points.count ?? 1) face(s) deleted"
@@ -531,6 +531,9 @@ struct AssistantWorkbench {
         var next = next
         next.normalizeSketches()
         next.pruneImportedShapes()
+        // A solid a removal left in separate pieces becomes one solid per piece.
+        let separated = next.separatingPieces(since: workspace)
+        next = separated.workspace
         // A change that changes nothing (a height it already has) is not listed.
         guard next != workspace else { return }
         guard next.isValid else { throw Failure("That change would make the model invalid (sizes must be 0.01–10000 mm and coordinates within ±100000 mm).") }
@@ -542,6 +545,10 @@ struct AssistantWorkbench {
         }
         workspace = next
         changes.append(change)
+        for (id, pieces) in separated.added.sorted(by: { $0.key.uuidString < $1.key.uuidString }) {
+            changes.append("\(bodyName(id)) came apart into \(pieces.count + 1) separate solids: " +
+                           ([id] + pieces).map(bodyName).joined(separator: ", "))
+        }
         if let focus { self.focus = focus }
     }
 

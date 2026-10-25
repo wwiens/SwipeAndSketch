@@ -116,7 +116,9 @@ struct ExtrusionCut: Codable, Equatable, Identifiable, Sendable {
         case .rib: return rib?.isValid ?? false
         case .shell: return shell?.isValid ?? false
         case .hole: return (hole?.isValid ?? false) && profile.circle != nil && (throughAll || depthIsValid)
-        case .split: return split?.keep == .inside ? throughAll : !throughAll && depthIsValid
+        case .split:
+            guard split?.isValid == true else { return false }
+            return split?.keep == .inside ? throughAll : !throughAll && depthIsValid
         case .finish: return finish?.isValid ?? false
         case .thread: return thread?.isValid ?? false
         case .text: return (text?.isValid ?? false) && depthIsValid && !throughAll
@@ -152,7 +154,7 @@ extension SolidKernel {
         case .merge: return try applyMerge(cut, to: solid)
         case .shell: return try applyShell(cut, to: solid, of: body)
         case .hole: return try applyHole(cut, to: solid)
-        case .split: return try applySplit(cut, to: solid)
+        case .split: return try applySplit(cut, to: solid, of: body)
         case .subtract: return try applySubtract(cut, to: solid)
         case .intersect: return try applyIntersect(cut, to: solid)
         case .scale: return try applyScale(cut, to: solid, of: body)

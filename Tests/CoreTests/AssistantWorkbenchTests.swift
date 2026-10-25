@@ -97,6 +97,17 @@ final class AssistantWorkbenchTests: XCTestCase {
         XCTAssertEqual(try volume(shelled), 48_000 - 56 * 36 * 18, accuracy: 1e-3)
     }
 
+    func testACutThatDividesASolidMakesTwoSolidsAndSaysSo() throws {
+        var bench = try boxBench()
+        // A 4 mm slot right across the box at x 8…12.
+        try bench.addShapes([Input(kind: .rectangle, point: [10, 0, 0], width: 4, height: 50)], on: .world(.top))
+        try bench.extrude(sketch: "Sketch 02", regions: [], distance: 1, mode: .cut, throughAll: true)
+        XCTAssertEqual(bench.workspace.bodies.count, 2)
+        XCTAssertEqual(try volume(bench, 0), 38 * 40 * 20, accuracy: 1e-6)
+        XCTAssertEqual(try volume(bench, 1), 18 * 40 * 20, accuracy: 1e-6)
+        XCTAssertEqual(bench.changes.last, "Body 01 came apart into 2 separate solids: Body 01, Body 02")
+    }
+
     func testCutsAndJoinsFindTheSolidTheyTouch() throws {
         var bench = try boxBench()
         // A slot through the box from a Top sketch: a cut, not a new body.
