@@ -2194,11 +2194,14 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         }
         if let stroke = polygonStroke {
             polygonStroke = nil
-            if !cancelled, let local = pointOnPlane(point, plane: stroke.plane), session.plane == stroke.plane {
-                session.addPolygon(center: stroke.center, vertex: snapped(local, start: stroke.center).point)
+            let vertex = pointOnPlane(point, plane: stroke.plane).map { snapped($0, start: stroke.center).point }
+            if !cancelled, let vertex, session.plane == stroke.plane,
+               distance(project(stroke.plane.world(stroke.center)), project(stroke.plane.world(vertex))) >= Self.smallestStroke {
+                session.addPolygon(center: stroke.center, vertex: vertex)
             } else { session.preview = nil; session.snapLabel = "" }
-        } else if !cancelled, let shape = activeShape, session.tool.shapeKind == shape.kind, session.plane == shape.plane { session.addShape(shape) }
-        else { session.preview = nil; session.snapLabel = "" }
+        } else if !cancelled, let shape = activeShape, session.tool.shapeKind == shape.kind, session.plane == shape.plane, isBigEnoughOnScreen(shape) {
+            session.addShape(shape)
+        } else { session.preview = nil; session.snapLabel = "" }
         activeShape = nil
         sketchDrag = nil
         dragMoved = false
@@ -2219,6 +2222,20 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         session.viewCube.pencilActive = false
         session.isPencilDown = false
         gestures.forEach { $0.isEnabled = true }
+    }
+
+    /// Strokes smaller than this on screen draw nothing: a Pencil tap wobbles a point or two, and
+    /// snapping can pull its two ends apart.
+    static let smallestStroke: CGFloat = 6
+
+    /// Whether a drawn shape spans at least `smallestStroke` on screen. A point is meant to be tapped.
+    private func isBigEnoughOnScreen(_ shape: SketchShape) -> Bool {
+        guard shape.kind != .point else { return true }
+        let points = shape.outline.map { project(shape.plane.world($0)) }
+        guard let first = points.first else { return false }
+        let low = points.reduce(first) { CGPoint(x: min($0.x, $1.x), y: min($0.y, $1.y)) }
+        let high = points.reduce(first) { CGPoint(x: max($0.x, $1.x), y: max($0.y, $1.y)) }
+        return distance(low, high) >= Self.smallestStroke
     }
 
     func sketchHandles(for shape: SketchShape) -> [(SketchHandle, Point2)] {

@@ -179,6 +179,27 @@ import simd
         attach(controller, "Drawing into a sketch in 3D")
     }
 
+    func testATapOrAWobbleDrawsNothingButAPointIsPlaced() throws {
+        let session = ModelingSession(inMemory: true)
+        _ = squareOnTop(session)
+        let controller = canvas(session, camera: .reset)
+        let before = session.workspace.shapes.count
+        session.chooseTool(.line)
+        let spot = controller.project(SIMD3(25.3, 14.6, 0))
+        // A tap, a tap next to the square's side (the two ends may snap apart), and a 3 pt wobble.
+        tap(controller, SIMD3(25.3, 14.6, 0))
+        tap(controller, SIMD3(10.4, 3.1, 0))
+        drag(controller, from: spot, to: CGPoint(x: spot.x + 3, y: spot.y - 1))
+        XCTAssertEqual(session.workspace.shapes.count, before, "Nothing is drawn")
+        drag(controller, from: spot, to: CGPoint(x: spot.x + 40, y: spot.y - 10))
+        XCTAssertEqual(session.workspace.shapes.count, before + 1, "A real stroke still draws")
+        XCTAssertEqual(session.workspace.shapes.last?.kind, .line)
+        session.chooseTool(.point)
+        tap(controller, SIMD3(-25.3, -14.6, 0))
+        XCTAssertEqual(session.workspace.shapes.last?.kind, .point, "A point is placed with a tap")
+        XCTAssertEqual(session.workspace.shapes.count, before + 2)
+    }
+
     func testTappingALineHighlightsEverythingOnItsPlane() throws {
         let session = ModelingSession(inMemory: true)
         let square = squareOnTop(session)
