@@ -179,6 +179,44 @@ import simd
         attach(controller, "Drawing into a sketch in 3D")
     }
 
+    func testTappingALineHighlightsEverythingOnItsPlane() throws {
+        let session = ModelingSession(inMemory: true)
+        let square = squareOnTop(session)
+        session.exitSketch()
+        session.pickPlaneForTesting(.top)
+        session.addShape(SketchShape(kind: .line, plane: .top, start: .init(x: 20, y: -10), end: .init(x: 40, y: 10)))
+        let line = try XCTUnwrap(session.workspace.shapes.last)
+        session.exitSketch()
+        session.pickPlaneForTesting(.front)
+        session.addShape(SketchShape(kind: .circle, plane: .front, start: .init(x: 0, y: 20), end: .init(x: 6, y: 20)))
+        let circle = try XCTUnwrap(session.workspace.shapes.last)
+        session.exitSketch()
+        session.select(nil)
+        let controller = canvas(session)
+        func color(_ shape: SketchShape) throws -> (red: CGFloat, alpha: CGFloat) {
+            let node = try XCTUnwrap(controller.content.childNode(withName: "shape|" + shape.id.uuidString, recursively: false))
+            let material = try XCTUnwrap(node.geometry?.firstMaterial)
+            let drawn = try XCTUnwrap(material.diffuse.contents as? UIColor)
+            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            drawn.getRed(&r, green: &g, blue: &b, alpha: &a)
+            return (r, material.transparency)
+        }
+        XCTAssertEqual(try color(line).alpha, 1, "Outside a sketch nothing fades")
+        tap(controller, SketchPlane.top.world(.init(x: 10, y: 0)))
+        XCTAssertEqual(session.sketchMode?.sketchID, square.sketch)
+        XCTAssertEqual(try color(line).red, 0x6D / 255, accuracy: 0.02, "Another sketch on the same plane is highlighted")
+        XCTAssertEqual(try color(square).red, 0.12, accuracy: 0.02, "The tapped shape stays selected")
+        XCTAssertLessThan(try color(circle).alpha, 0.5, "A sketch on another plane fades")
+        attach(controller, "A line tapped: its plane highlighted")
+        session.chooseTool(.line)
+        controller.refresh()
+        attach(controller, "Drawing on the highlighted plane")
+        session.exitSketch()
+        session.select(nil)
+        controller.refresh()
+        XCTAssertEqual(try color(circle).alpha, 1, "Leaving the sketch brings everything back")
+    }
+
     func testDoubleTappingALineSelectsTheWholeSketch() throws {
         let session = ModelingSession(inMemory: true)
         let square = squareOnTop(session)

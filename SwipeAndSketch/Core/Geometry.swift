@@ -285,6 +285,15 @@ struct SketchShape: Codable, Equatable, Identifiable, Sendable {
         }
     }
 
+    /// The middles of its straight sides (a line, a rectangle's sides), which strokes also snap to.
+    var snapMiddles: [Point2] {
+        switch kind {
+        case .line: [(start + end) * 0.5]
+        case .rectangle: (0..<4).map { (outline[$0] + outline[($0 + 1) % 4]) * 0.5 }
+        default: []
+        }
+    }
+
     var snapPoints: [Point2] {
         switch kind {
         case .line: [start, end]
@@ -757,15 +766,7 @@ enum SketchSnap {
             guides.map { (SnapResult(point: $0.point, label: $0.kind.label), 1) }
         // The world origin, where the plane passes through it.
         if let origin { points.append((SnapResult(point: origin, label: "Origin"), 1)) }
-        for shape in fixed {
-            let sides: [(Point2, Point2)]
-            switch shape.kind {
-            case .line: sides = [(shape.start, shape.end)]
-            case .rectangle: let p = shape.outline; sides = (0..<4).map { (p[$0], p[($0 + 1) % 4]) }
-            default: sides = []
-            }
-            points += sides.map { (SnapResult(point: ($0.0 + $0.1) * 0.5, label: "Midpoint"), 1.5) }
-        }
+        points += fixed.flatMap(\.snapMiddles).map { (SnapResult(point: $0, label: "Midpoint"), 1.5) }
         for i in curves.indices {
             for j in curves.indices where j > i && curves[j].shape.id != curves[i].shape.id {
                 points += curves[i].curve.meetings(with: curves[j].curve).map { (SnapResult(point: curves[i].curve.point($0.0), label: "Intersection"), 1.5) }

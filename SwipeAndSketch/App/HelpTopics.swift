@@ -181,6 +181,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                 summary: "You are in a sketch. Everything you draw now belongs to it and stays on its plane.",
                 steps: ["Pick a drawing tool in the dock: Line, Rectangle, or one under Shapes (Circle, Arc, Slot, and more).", "Draw with Pencil.", "Tap Finish Sketch when you are finished."],
                 tips: ["Purple dots are snap points. Line up with one and a dashed guide appears.",
+                       "Everything on this plane, from any sketch, turns violet with its ends and middles marked: draw from or onto any of it.",
                        "Strokes catch the ends, middles, and crossings of your lines, and anywhere along a line or circle; a purple ring shows the catch. Snap Off turns off only the grid and the guides.",
                        "Tap a shape with no tool chosen to see and change its sizes.",
                        "Tap the active tool again to put it down."])

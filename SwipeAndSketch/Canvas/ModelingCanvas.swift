@@ -233,6 +233,7 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
     /// lifts without moving, so dragging the same line twice is never a double-tap.
     private var pendingSketchTap: (sketchID: UUID, time: CFTimeInterval, point: CGPoint)?
     private var lastSketchMode: SketchMode?
+    private var lastHighlightsPlane = false
     /// Project's previous item tap (a sketch or a solid), for double-tap-to-pick-all-of-it. Kept
     /// apart from taps made with no tool, so a tap made before Project never pairs with one inside it.
     private var lastProjectionTap: (sketchID: UUID?, bodyID: UUID?, time: CFTimeInterval, point: CGPoint)?
@@ -259,6 +260,8 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
     private var sketchDrag: (shape: SketchShape, handle: SketchHandle, offset: Point2)?
     private var dragMoved = false
     private let blue = UIColor(red: 0.12, green: 0.29, blue: 1, alpha: 1)
+    /// Swipe Violet: the sketch plane's lines while sketching on it.
+    private let violet = UIColor(named: "ss-violet") ?? UIColor(red: 0.43, green: 0.24, blue: 0.96, alpha: 1)
     private let edgeGray = UIColor(white: 0.09, alpha: 1)
     private let cutRed = UIColor(red: 0.92, green: 0.26, blue: 0.2, alpha: 0.3)
     /// Kernel solids are derived from document bodies once and reused across zoom, orbit, and selection.
@@ -439,7 +442,8 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             (session.section.map { "|section \($0.orientation.normalAxis) \($0.flipped) \($0.offset)" } ?? "") +
             (session.xrayAll ? "|xray" : session.xrayBodies.isEmpty ? "" : "|xray " + session.xrayBodies.map(\.uuidString).sorted().joined())
         let othersChanged = lastSelection != session.selection || lastExtraSelection != session.extraSelection || lastPlane != session.plane || lastIsExtruding != session.isExtruding ||
-            lastFinishDraft != session.finishDraft || lastSketchMode != session.sketchMode || lastRevolveKey != revolveKey
+            lastFinishDraft != session.finishDraft || lastSketchMode != session.sketchMode || lastRevolveKey != revolveKey ||
+            lastHighlightsPlane != highlightsPlane
         if !othersChanged, lastWorkspace != session.visibleWorkspace, moveDraggedGhost() {
             lastWorkspace = session.visibleWorkspace
             lastFaceTap = nil
@@ -461,6 +465,7 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             lastIsExtruding = session.isExtruding
             lastRevolveKey = revolveKey
             lastFinishDraft = session.finishDraft
+            lastHighlightsPlane = highlightsPlane
             rebuildContent()
             if gridChanged { rebuildGrid() }
         }
@@ -763,9 +768,9 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
     }
 
     private func outlineNode(_ points: [Point2], plane: SketchPlane, color: UIColor, closed: Bool,
-                             height: Double = 0.035, name: String? = nil, dashed: Bool = false) -> SCNNode {
+                             height: Double = 0.035, name: String? = nil, dashed: Bool = false, weight: Double = 1) -> SCNNode {
         // Stroke as explicit triangles: this keeps outlines hollow across SceneKit tessellators.
-        let radius = max(0.03, unitsPerPoint * 0.85)
+        let radius = max(0.03, unitsPerPoint * 0.85) * weight
         var vertices: [SCNVector3] = []
         var indices: [UInt32] = []
         func vertex(_ p: Point2) { vertices.append(SCNVector3(Float(p.x), Float(p.y), 0)) }
@@ -826,6 +831,9 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             session.selectedShape != nil || session.selectedProfile != nil || session.isMultipleSelection
     }
 
+    /// In a sketch or with a drawing tool: the plane's shapes are highlighted with their snap points.
+    private var highlightsPlane: Bool { session.sketchMode != nil || session.tool.shapeKind != nil }
+
     /// The selected shape whose handles and dimensions show: none while several sketch items are picked.
     private var editableShape: SketchShape? { session.isMultipleSelection ? nil : session.selectedShape }
 
@@ -881,9 +889,14 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             let active = shape.plane == session.plane
             let picked = session.sketchMirrorDraft.map { $0.shapes.contains(shape.id) || $0.line == shape.id } ?? false ||
                 session.offsetDraft?.shapeID == shape.id
-            let outline = outlineNode(shape.outline, plane: shape.plane,
-                                      color: selected || picked ? blue : active ? UIColor(red: 0.22, green: 0.35, blue: 0.46, alpha: 1) : .systemGray,
-                                      closed: shape.isClosed, name: "shape|" + shape.id.uuidString, dashed: shape.isConstruction)
+            // While sketching, everything on the plane stands out (it can be drawn from and snapped
+            // to) and sketches on other planes fade.
+            let color: UIColor = selected || picked ? blue
+                : active ? (highlightsPlane ? violet : UIColor(red: 0.22, green: 0.35, blue: 0.46, alpha: 1))
+                : highlightsPlane ? UIColor.systemGray.withAlphaComponent(0.45) : .systemGray
+            let outline = outlineNode(shape.outline, plane: shape.plane, color: color, closed: shape.isClosed,
+                                      name: "shape|" + shape.id.uuidString, dashed: shape.isConstruction,
+                                      weight: highlightsPlane && (active || selected || picked) ? 1.35 : 1)
             if sketching && (active || selected) { drawOnTop(outline, order: 10) }
             content.addChildNode(outline)
         }
@@ -4276,6 +4289,19 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             ring.lineWidth = 2
             UIColor(red: 0.58, green: 0.36, blue: 0.96, alpha: 0.9).setStroke()
             ring.stroke()
+        }
+        if highlightsPlane {
+            // The snap points of every shape on the plane: ends, corners, centers, and side middles.
+            let purple = UIColor(red: 0.58, green: 0.36, blue: 0.96, alpha: 1)
+            let plane = session.plane
+            for shape in planeShapes where shape.id != editableShape?.id && shape.id != session.preview?.id {
+                for (point, size) in shape.snapPoints.map({ ($0, CGFloat(7)) }) + shape.snapMiddles.map({ ($0, CGFloat(5)) }) {
+                    let p = project(plane.world(point, height: 0.05))
+                    let dot = UIBezierPath(ovalIn: CGRect(x: p.x - size / 2, y: p.y - size / 2, width: size, height: size))
+                    UIColor.white.setFill(); dot.fill()
+                    purple.setStroke(); dot.lineWidth = 1.5; dot.stroke()
+                }
+            }
         }
         if let sketchMode = session.sketchMode {
             // Guide points: purple anchors on solid corners, edge midpoints, and centers.
