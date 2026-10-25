@@ -877,7 +877,8 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             }
             let source = (session.isExtruding && (selected || session.extraExtrusionProfiles.contains { $0.id == profile.id })) ||
                 (session.revolveDraft.map { $0.face == nil && $0.profiles.contains { $0.id == profile.id } } ?? false)
-            let fillColor = source ? UIColor(red: 0.74, green: 0.58, blue: 0.31, alpha: 0.52) : blue.withAlphaComponent(selected ? 0.08 : 0.035)
+            // A picked region is tinted clearly, so it stands out from the faint fill of the others.
+            let fillColor = source ? UIColor(red: 0.74, green: 0.58, blue: 0.31, alpha: 0.52) : blue.withAlphaComponent(selected ? 0.2 : 0.035)
             let fill = planarNode(path: path(for: profile), plane: plane, height: 0.01,
                                   color: fillColor, name: "profile|" + profile.id)
             if sketching && (plane == session.plane || selected) { drawOnTop(fill, order: 9) }

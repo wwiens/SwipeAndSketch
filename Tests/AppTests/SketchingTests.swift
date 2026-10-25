@@ -200,6 +200,26 @@ import simd
         XCTAssertEqual(session.workspace.shapes.count, before + 2)
     }
 
+    func testAPickedRegionIsTintedClearly() throws {
+        let session = ModelingSession(inMemory: true)
+        _ = squareOnTop(session)
+        session.addShape(SketchShape(kind: .rectangle, plane: .top, start: .init(x: 20, y: -10), end: .init(x: 40, y: 10)))
+        session.exitSketch()
+        session.select(nil)
+        let controller = canvas(session, camera: .reset)
+        let profiles = session.workspace.profiles
+        XCTAssertEqual(profiles.count, 2)
+        session.select(.profile(profiles[0].id))
+        controller.refresh()
+        func tint(_ profile: SketchProfile) throws -> CGFloat {
+            let node = try XCTUnwrap(controller.content.childNode(withName: "profile|" + profile.id, recursively: false))
+            return try XCTUnwrap(node.geometry?.firstMaterial).transparency
+        }
+        XCTAssertGreaterThanOrEqual(try tint(profiles[0]), 0.2)
+        XCTAssertGreaterThanOrEqual(try tint(profiles[0]), 4 * (try tint(profiles[1])), "Picked stands out from the rest")
+        attach(controller, "A picked region")
+    }
+
     func testTappingALineHighlightsEverythingOnItsPlane() throws {
         let session = ModelingSession(inMemory: true)
         let square = squareOnTop(session)
