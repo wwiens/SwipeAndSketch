@@ -39,6 +39,22 @@ struct AlignFeature: Equatable, Sendable {
         return feature(curve, source: .edge(body.id, edge))
     }
 
+    /// The round edge of a curved face nearest `point`, such as a cylinder's nearer rim: a tap on
+    /// the side picks what a tap right on the rim would (user request, October 25, 2026). Seams
+    /// are not rims. Nil for a flat face or one with no round edge (a sphere).
+    static func rim(of face: Int, of body: SolidBody, near point: SIMD3<Double>) -> AlignFeature? {
+        guard let solid = try? SolidKernel.solid(for: body), (0..<solid.faceCount).contains(face), solid.facePlane(face) == nil,
+              let mesh = try? solid.tessellate(), let target = KernelSolid.point(point) else { return nil }
+        return solid.faceEdges(face)
+            .filter { mesh.edges.indices.contains($0) && mesh.edges[$0].isBoundary }
+            .compactMap { edge -> (AlignFeature, Double)? in
+                guard let feature = Self.edge(edge, of: body), feature.kind == .circle,
+                      let distance = solid.distance(.edge(edge), to: target, .whole)?.distance else { return nil }
+                return (feature, distance)
+            }
+            .min { $0.1 < $1.1 }?.0
+    }
+
     /// A point: Align moves the From point onto the To point, without turning.
     static func point(_ point: SIMD3<Double>, source: Source) -> AlignFeature {
         AlignFeature(kind: .point, source: source, point: point, direction: SIMD3(0, 0, 1), outline: [point])

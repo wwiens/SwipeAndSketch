@@ -112,4 +112,25 @@ final class AlignTests: XCTestCase {
             abs(abs(simd_dot($0.direction, simd_normalize(SIMD3(1, 1, 0)))) - 1) < 1e-9 }, "The edge lies along the line, midpoint to midpoint")
         XCTAssertNil(Aligning.transform(from: edge, to: ring), "Kinds must match")
     }
+
+    /// A tap on a cylinder's side picks the nearer rim (user request, October 25, 2026).
+    func testACylindersSidePicksItsNearerRim() throws {
+        let disc = SketchShape(kind: .circle, plane: .top, start: .zero, end: .init(x: 5, y: 0))
+        let cylinder = SolidBody(profile: try XCTUnwrap(Geometry.profiles(in: [disc], on: .top).first), depth: 10)
+        let solid = try SolidKernel.solid(for: cylinder)
+        let side = try XCTUnwrap(solid.face(near: SIMD3(5, 0, 5)))
+        XCTAssertNil(solid.facePlane(side), "The side is round")
+        let upper = try XCTUnwrap(AlignFeature.rim(of: side, of: cylinder, near: SIMD3(0, -5, 8)))
+        XCTAssertEqual(upper.kind, .circle)
+        XCTAssertEqual(upper.point.z, 10, accuracy: 1e-6, "Nearer the top")
+        XCTAssertEqual(abs(upper.direction.z), 1, accuracy: 1e-9)
+        guard case .edge(cylinder.id, _) = upper.source else { return XCTFail("Picked as the rim edge itself") }
+        let lower = try XCTUnwrap(AlignFeature.rim(of: side, of: cylinder, near: SIMD3(0, 5, 2)))
+        XCTAssertEqual(lower.point.z, 0, accuracy: 1e-6, "Nearer the bottom")
+        let top = try XCTUnwrap(solid.face(near: SIMD3(0, 0, 10)))
+        XCTAssertNil(AlignFeature.rim(of: top, of: cylinder, near: SIMD3(0, 0, 10)), "A flat face is aligned as a face")
+        let ball = try XCTUnwrap(Primitives.body(.sphere, sizes: [10], on: .top, at: .zero))
+        let round = try SolidKernel.solid(for: ball)
+        XCTAssertNil(AlignFeature.rim(of: try XCTUnwrap(round.face(near: SIMD3(5, 0, 5))), of: ball, near: SIMD3(5, 0, 5)), "A sphere has no rim; its seam is not one")
+    }
 }

@@ -529,7 +529,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
             HelpOverview(
                 summary: "Align moves a solid so one of its faces, edges, or corners meets another.",
                 steps: ["Tap the solids to move.", "Tap From, then a face, edge, or corner on them.", "Tap To, then where it should go.", "Tap Done."],
-                tips: ["Flip turns it over. Drag the arrow to leave a gap."])
+                tips: ["Flip turns it over. Drag the arrow to leave a gap.", "To line up round parts, tap a cylinder's side: it picks the rim nearer your tap."])
         case .mirror:
             HelpOverview(
                 summary: "Mirror makes a reflected copy across a plane.",

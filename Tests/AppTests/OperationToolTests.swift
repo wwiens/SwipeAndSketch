@@ -251,6 +251,53 @@ import simd
         XCTAssertEqual(try SolidKernel.solid(for: session.workspace.bodies[1]).bounds.min.z, 0, accuracy: 1e-6, "One undo step")
     }
 
+    /// A tap on a cylinder's side picks its nearer rim, for From and To (user report, October 25,
+    /// 2026: no part of a cylinder could be picked; only its thin rims could).
+    func testAlignACylinderBySideTapsOntoAnotherCylinder() throws {
+        let (session, controller) = boxScene()
+        func addCylinder(at center: Point2, radius: Double, height: Double) throws -> UUID {
+            session.choosePlane(.top)
+            session.addShape(.init(kind: .circle, plane: .top, start: center, end: center + Point2(x: radius, y: 0)))
+            session.beginExtrusion()
+            session.chooseExtrusionMode(.newBody)
+            session.extrusionDepth = height
+            session.confirmExtrusion()
+            session.chooseTool(.select)
+            session.requestCamera(.home)
+            return try XCTUnwrap(session.workspace.bodies.last).id
+        }
+        let peg = try addCylinder(at: .init(x: 70, y: 0), radius: 5, height: 10)
+        let post = try addCylinder(at: .init(x: 0, y: -45), radius: 8, height: 20)
+        session.select(.body(peg))
+        session.chooseTool(.align)
+        controller.refresh()
+        // High on the peg's front side: its top rim.
+        tap(controller, SIMD3(70, -5, 8))
+        let from = try XCTUnwrap(session.alignDraft?.from)
+        XCTAssertEqual(from.kind, .circle)
+        XCTAssertEqual(from.point.z, 10, accuracy: 1e-6)
+        XCTAssertEqual(session.alignDraft?.step, .to)
+        // The peg's own side is not a target, and nothing behind it is picked instead.
+        tap(controller, SIMD3(70 + 5 * 0.7071, -5 * 0.7071, 5))
+        XCTAssertNil(session.alignDraft?.to)
+        // High on the post's front side: its top rim.
+        tap(controller, SIMD3(0, -53, 17))
+        let to = try XCTUnwrap(session.alignDraft?.to)
+        XCTAssertEqual(to.kind, .circle)
+        XCTAssertEqual(to.point.x, 0, accuracy: 1e-6)
+        XCTAssertEqual(to.point.y, -45, accuracy: 1e-6)
+        XCTAssertEqual(to.point.z, 20, accuracy: 1e-6)
+        XCTAssertNotNil(controller.previewNode.childNode(withName: "align.to", recursively: true))
+        let preview = try XCTUnwrap(session.alignPreview?.bodies.first { $0.id == peg })
+        let b = try SolidKernel.solid(for: preview).bounds
+        XCTAssertEqual((b.min.x + b.max.x) / 2, 0, accuracy: 1e-6, "Concentric with the post")
+        XCTAssertEqual((b.min.y + b.max.y) / 2, -45, accuracy: 1e-6)
+        XCTAssertEqual(min(abs(b.min.z - 20), abs(b.max.z - 20)), 0, accuracy: 1e-6, "Its rim on the post's rim")
+        session.confirmAlign()
+        XCTAssertEqual(session.selection, .body(peg))
+        XCTAssertEqual(session.workspace.bodies.first { $0.id == post }.map { try? SolidKernel.solid(for: $0).bounds.max.z } ?? nil, 20, "The post stays put")
+    }
+
     func testAlignCornerToCornerOfAnotherBox() throws {
         let (session, controller) = boxScene()
         addTouchingBox(session, from: 60, to: 80)

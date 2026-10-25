@@ -2163,12 +2163,12 @@ struct DimensionEdit: Identifiable {
             if let alignError { return alignError }
             switch draft.step {
             case .bodies: return draft.bodies.isEmpty ? "Tap the solids to move." : "Tap more solids, or From and then a face, edge, or corner on them."
-            case .from: return "Tap what to align on the moving solids: a flat face, a round edge, a straight edge, or a corner (the dots)."
+            case .from: return "Tap what to align on the moving solids: a flat face, a round edge (or a cylinder's side for its nearer rim), a straight edge, or a corner (the dots)."
             case .to:
                 if draft.from == nil { return "Tap From, then a face, edge, or corner of the moving solids." }
                 if draft.to == nil {
                     if draft.from?.kind == .point { return "Tap the point it goes to: a corner of another solid, a sketch point, or the origin." }
-                    return "Tap where it goes: a face, plane, or sketch region for a face; a round edge or circle for a round edge; a straight edge or line for a straight edge."
+                    return "Tap where it goes: a face, plane, or sketch region for a face; a round edge, cylinder side, or circle for a round edge; a straight edge or line for a straight edge."
                 }
                 if draft.to?.kind == .point { return "The corner moves onto the point. Done moves the solids." }
                 return "Flip turns it over. Drag the double-arrow or tap the values to offset or turn it. Done moves the solids."

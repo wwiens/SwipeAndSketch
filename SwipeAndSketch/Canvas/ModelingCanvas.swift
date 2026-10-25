@@ -2551,9 +2551,14 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             } else if let (bodyID, edge) = solidEdge(at: point, tolerance: 8), moving.contains(bodyID),
                let body = session.workspace.bodies.first(where: { $0.id == bodyID }), let feature = AlignFeature.edge(edge, of: body) {
                 session.setAlignFrom(feature)
-            } else if let hit = frontSurface(at: point, committed: true), moving.contains(hit.bodyID), hit.plane != nil,
-                      let body = session.workspace.bodies.first(where: { $0.id == hit.bodyID }), let reference = PlaneReference.face(hit.face, of: body) {
-                session.setAlignFrom(.plane(reference))
+            } else if let hit = frontSurface(at: point, committed: true), moving.contains(hit.bodyID),
+                      let body = session.workspace.bodies.first(where: { $0.id == hit.bodyID }) {
+                // A flat face, or a round face's nearer rim (a cylinder's side).
+                if hit.plane != nil, let reference = PlaneReference.face(hit.face, of: body) {
+                    session.setAlignFrom(.plane(reference))
+                } else if hit.plane == nil, let rim = AlignFeature.rim(of: hit.face, of: body, near: hit.point) {
+                    session.setAlignFrom(rim)
+                }
             }
         case .to:
             let surface = frontSurface(at: point, committed: true)
@@ -2564,6 +2569,13 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             } else if let (bodyID, edge) = solidEdge(at: point, tolerance: 8), !moving.contains(bodyID),
                       let body = session.workspace.bodies.first(where: { $0.id == bodyID }), let feature = AlignFeature.edge(edge, of: body) {
                 session.setAlignTo(feature)
+            } else if let hit = surface, hit.plane == nil, moving.contains(hit.bodyID) {
+                // The moving solids' own round faces are no target (nor what lies behind them).
+                return
+            } else if let hit = surface, hit.plane == nil, let body = session.workspace.bodies.first(where: { $0.id == hit.bodyID }),
+                      let rim = AlignFeature.rim(of: hit.face, of: body, near: hit.point) {
+                // Another solid's round face: its nearer rim, rather than a plane behind it.
+                session.setAlignTo(rim)
             } else if let reference = planeReference(at: point, committed: true) {
                 if case .face(let bodyID, _) = reference.source, moving.contains(bodyID) { return }
                 session.setAlignTo(.plane(reference))
