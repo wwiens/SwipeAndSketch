@@ -75,6 +75,22 @@ import simd
     }
 
 
+    func testExtendCarriesALineToTheFacesEdge() throws {
+        let (session, controller) = boxScene()
+        _ = try sketchOnFace(session, controller, at: SIMD3(5, 3, 20))
+        session.snapEnabled = false
+        stroke(controller, from: SIMD3(-10, 5, 20), to: SIMD3(10, 5, 20))
+        let line = try XCTUnwrap(session.workspace.shapes.last)
+        XCTAssertEqual(line.kind, .line)
+        session.chooseTool(.extend)
+        controller.refresh()
+        tap(controller, line.plane.world(line.end + (line.start - line.end) * 0.1))
+        let extended = try XCTUnwrap(session.workspace.shapes.first { $0.id == line.id })
+        XCTAssertEqual(line.plane.point(extended.end).x, 30, accuracy: 1e-6, "It stops at the face's edge")
+        XCTAssertEqual(extended.start, line.start, "The far end stays")
+        XCTAssertEqual(session.status, "Extended")
+    }
+
     func testChoosingADrawingToolWithAFaceSelectedSketchesOnThatFace() throws {
         let (session, controller) = boxScene()
         tap(controller, SIMD3(5, 3, 20))

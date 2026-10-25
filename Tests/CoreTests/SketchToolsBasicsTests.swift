@@ -65,6 +65,23 @@ final class SketchToolsBasicsTests: XCTestCase {
         XCTAssertNil(SketchTools.extend(wall.id, near: .init(x: 20, y: 9), in: space), "Nothing ahead")
     }
 
+    func testExtendReachesOtherSketchesOnThePlaneAndFaceEdges() throws {
+        var line = SketchShape(kind: .line, plane: .top, start: .zero, end: .init(x: 5, y: 0))
+        line.sketch = UUID()
+        var wall = SketchShape(kind: .line, plane: .top, start: .init(x: 20, y: -10), end: .init(x: 20, y: 10))
+        wall.sketch = UUID()
+        let front = SketchShape(kind: .line, plane: .front, start: .init(x: 10, y: -10), end: .init(x: 10, y: 10))
+        let space = sketch([line, wall, front])
+        let extended = try XCTUnwrap(SketchTools.extend(line.id, near: .init(x: 4, y: 0), in: space))
+        XCTAssertEqual(extended.shapes[0].end.x, 20, accuracy: 1e-9, "A wall drawn in another sketch on the plane stops it")
+        // Without the wall: the Front line is on another plane, but a face edge on this one stops it.
+        let alone = sketch([line, front])
+        XCTAssertNil(SketchTools.extend(line.id, near: .init(x: 4, y: 0), in: alone), "The Front line is on another plane")
+        let edge = (Point2(x: 30, y: -40), Point2(x: 30, y: 40))
+        let toEdge = try XCTUnwrap(SketchTools.extend(line.id, near: .init(x: 4, y: 0), in: alone, edges: [edge]))
+        XCTAssertEqual(toEdge.shapes[0].end.x, 30, accuracy: 1e-9)
+    }
+
     func testMirrorInsideASketchAndMovingShapes() throws {
         let axis = SketchShape(kind: .line, plane: .top, start: .init(x: 0, y: -10), end: .init(x: 0, y: 10))
         let arc = SketchShape.arc(center: .init(x: 5, y: 0), from: .init(x: 8, y: 0), to: .init(x: 5, y: 3), plane: .top)

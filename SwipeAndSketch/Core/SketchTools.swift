@@ -21,8 +21,9 @@ enum SketchTools {
 
     // MARK: Extend
 
-    /// The line's end nearer `point` carried on, straight, to the first shape of its sketch it meets.
-    static func extend(_ shapeID: UUID, near point: Point2, in workspace: Workspace) -> Workspace? {
+    /// The line's end nearer `point` carried on, straight, to the first thing it meets: a shown
+    /// shape on its plane (from any sketch), or one of `edges` (a face's straight edges on the plane).
+    static func extend(_ shapeID: UUID, near point: Point2, in workspace: Workspace, edges: [(Point2, Point2)] = []) -> Workspace? {
         guard let index = workspace.shapes.firstIndex(where: { $0.id == shapeID }), workspace.shapes[index].kind == .line else { return nil }
         let line = workspace.shapes[index]
         let movesEnd = point.distance(to: line.end) <= point.distance(to: line.start)
@@ -31,14 +32,13 @@ enum SketchTools {
         guard length > 1e-9 else { return nil }
         let unit = direction * (1 / length)
         // A long ray ahead of the end (past anything in the sketch), and where it first meets another shape.
-        let others = workspace.shapes.filter { $0.sketch == line.sketch && $0.id != line.id && $0.kind != .point }
-        let reach = others.flatMap(\.outline).reduce(1_000.0) { max($0, $1.distance(to: from) * 2 + 10) }
+        let others = workspace.visible.shapes.filter { $0.plane == line.plane && $0.id != line.id && $0.kind != .point }
+        let curves = others.flatMap(\.regionCurves) + edges.map { SketchCurve(kind: .polyline([$0.0, $0.1])) }
+        let reach = (others.flatMap(\.outline) + edges.flatMap { [$0.0, $0.1] }).reduce(1_000.0) { max($0, $1.distance(to: from) * 2 + 10) }
         let ray = SketchCurve(kind: .polyline([from, from + unit * reach]))
         var nearest: Double?
-        for shape in others {
-            for curve in shape.regionCurves {
-                for (t, _) in ray.meetings(with: curve) where t * reach > 1e-6 { nearest = min(nearest ?? .infinity, t * reach) }
-            }
+        for curve in curves {
+            for (t, _) in ray.meetings(with: curve) where t * reach > 1e-6 { nearest = min(nearest ?? .infinity, t * reach) }
         }
         guard let distance = nearest else { return nil }
         var result = workspace

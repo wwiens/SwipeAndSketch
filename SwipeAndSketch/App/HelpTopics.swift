@@ -228,9 +228,9 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                 tips: ["A construction line through the middle makes a good mirror line or revolve axis."])
         case .extend:
             HelpOverview(
-                summary: "Extend carries a line on until it meets another shape.",
-                steps: ["Choose Trim, then Extend.", "Tap a line near the end you want to lengthen."],
-                tips: ["If nothing lies ahead, the line stays as it is."])
+                summary: "Extend carries a straight line on until it meets another shape on this plane, or the edge of the face you are sketching on.",
+                steps: ["Open Modify in the dock and choose Extend.", "Tap a line near the end you want to lengthen."],
+                tips: ["Lines from any sketch on this plane stop it, not just this sketch's.", "If nothing lies ahead, the line stays as it is."])
         case .offset:
             HelpOverview(
                 summary: "Offset draws a copy of an outline a set distance away: a lip for a lid, a wall around a shape, a gasket.",

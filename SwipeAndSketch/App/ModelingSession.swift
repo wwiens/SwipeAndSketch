@@ -3914,7 +3914,9 @@ struct DimensionEdit: Identifiable {
     /// Extend: carries the line's nearer end on to the next shape it meets.
     func extend(_ shapeID: UUID, near point: Point2) {
         guard tool == .extend, !isEditingBlocked else { return }
-        guard let next = SketchTools.extend(shapeID, near: point, in: workspace) else {
+        // A face's edges count while sketching on its plane.
+        let edges = workspace.shapes.first { $0.id == shapeID }?.plane == sketchMode?.plane ? sketchGuideLines : []
+        guard let next = SketchTools.extend(shapeID, near: point, in: workspace, edges: edges) else {
             status = "Nothing ahead to extend to"
             return
         }
