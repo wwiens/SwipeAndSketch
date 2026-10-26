@@ -12,7 +12,8 @@ import simd
 enum AssistantSelection: Equatable, Sendable {
     /// An edge is its index on the solid as it is now.
     case body(UUID), face(bodyID: UUID, face: Int), edge(bodyID: UUID, edge: Int), sketch(UUID), shape(UUID), plane(UUID), profile(String)
-    /// Several sketch regions and whole sketches on one plane, picked together on the canvas.
+    /// Several items picked together on the canvas: sketch regions and whole sketches on one plane,
+    /// whole solids, or edges of one solid.
     case several([AssistantSelection])
 }
 
@@ -107,6 +108,10 @@ struct AssistantWorkbench {
                    let sketch = workspace.shapes.first(where: { $0.id == source })?.sketch { return .sketch(sketch) }
                 throw Failure("Nothing usable is selected.")
             case .several(let items):
+                if !pickedBodies.isEmpty {
+                    throw Failure("\(pickedBodies.count) solids are selected. Name one, or use \"selected\" in a list of items (move, delete, hide, scale, mirror, pattern, group, combine, color) to take them all.")
+                }
+                if !pickedEdges.isEmpty { return .body(pickedEdges[0].body) }
                 // Items of one sketch stand for it; otherwise only extrude and revolve take them all.
                 let sketches = Set(items.compactMap { sketchID(of: $0) })
                 if sketches.count == 1, let id = sketches.first { return .sketch(id) }
@@ -330,7 +335,8 @@ struct AssistantWorkbench {
                 single.selection = item
                 return single.selectionDescription()
             }
-            return "\(items.count) sketch items on one plane: \(names.joined(separator: "; "))"
+            let kind = !pickedBodies.isEmpty ? "solids" : !pickedEdges.isEmpty ? "edges of one solid" : "sketch items on one plane"
+            return "\(items.count) \(kind): \(names.joined(separator: "; "))"
         }
     }
 
@@ -367,6 +373,31 @@ struct AssistantWorkbench {
     private static func isSelectionWord(_ text: String) -> Bool {
         ["selected", "selection", "the selection", "selected item", "selected items", "it", "this", "these", "them"]
             .contains(text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+    }
+
+    /// The solids picked together on the canvas, in the order picked (empty unless several solids are).
+    var pickedBodies: [UUID] {
+        guard case .several(let items) = selection else { return [] }
+        let bodies = items.compactMap { item -> UUID? in if case .body(let id) = item { id } else { nil } }
+        return bodies.count == items.count ? bodies : []
+    }
+
+    /// The edges picked together on one solid (empty unless several edges are).
+    var pickedEdges: [(body: UUID, edge: Int)] {
+        guard case .several(let items) = selection else { return [] }
+        let edges = items.compactMap { item -> (body: UUID, edge: Int)? in if case .edge(let body, let edge) = item { (body, edge) } else { nil } }
+        return edges.count == items.count && Set(edges.map(\.body)).count == 1 ? edges : []
+    }
+
+    /// A list of names with "selected" standing for every solid picked together, when several are.
+    private func expandingSelection(_ names: [String]) -> [String] {
+        let picked = pickedBodies.map(bodyName)
+        guard !picked.isEmpty else { return names }
+        var result: [String] = []
+        for name in names {
+            for item in Self.isSelectionWord(name) ? picked : [name] where !result.contains(item) { result.append(item) }
+        }
+        return result
     }
 
     /// A compact description of the whole document, sent with each request.
@@ -504,6 +535,9 @@ struct AssistantWorkbench {
             case "circular", "round", "circles", "arcs": add(all.filter { solid.edgeCircle($0) != nil })
             case "straight": add(all.filter { direction($0) != nil })
             case "selected", "selection", "it", "this":
+                // One selected edge, or several picked on this solid.
+                let picked = pickedEdges.filter { $0.body == body.id }.map(\.edge)
+                if !picked.isEmpty, picked.allSatisfy(all.contains) { add(picked); break }
                 guard case .edge(let id, let index) = selection, id == body.id, all.contains(index) else {
                     throw Failure("No edge of \(bodyName(body.id)) is selected.")
                 }
@@ -1113,6 +1147,7 @@ struct AssistantWorkbench {
 
     /// Moves and/or turns solids and sketches (or copies of them).
     @discardableResult mutating func transform(items names: [String], move offset: SIMD3<Double>, rotate degrees: Double, axis: String, pivot: SIMD3<Double>?, copy: Bool) throws -> String {
+        let names = expandingSelection(names)
         guard !names.isEmpty else { throw Failure("Name the items to move.") }
         let axes: [String: SIMD3<Double>] = ["x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]]
         guard let axisVector = axes[axis.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: " +"))] else { throw Failure("Rotation axis must be x, y, or z.") }
@@ -1226,6 +1261,7 @@ struct AssistantWorkbench {
 
     /// Deletes solids, sketches, shapes, and construction planes.
     @discardableResult mutating func delete(items names: [String]) throws -> String {
+        let names = expandingSelection(names)
         guard !names.isEmpty else { throw Failure("Name the items to delete.") }
         let items = try names.map { try item(named: $0) }
         let labels = items.map(name(of:))
@@ -1245,6 +1281,7 @@ struct AssistantWorkbench {
 
     /// Hides or shows solids, sketches, construction planes, and groups (a group's contents with it).
     @discardableResult mutating func setHidden(items names: [String], hidden: Bool) throws -> String {
+        let names = expandingSelection(names)
         var next = workspace, labels: [String] = []
         var items: [AssistantItem] = []
         for name in names {
@@ -1282,9 +1319,7 @@ struct AssistantWorkbench {
             guard !union else { throw Failure("Clearance only applies to subtract.") }
             guard Fit.clearanceRange.contains(clearance) else { throw Failure("Clearance must be 0.01–2 mm.") }
         }
-        let target = try body(named: targetName)
-        let tools = try toolNames.map { try body(named: $0) }.filter { $0.id != target.id }
-        guard !tools.isEmpty else { throw Failure("Name at least one other solid.") }
+        let (target, tools) = try targetAndTools(targetName, toolNames)
         var next = workspace
         guard let index = next.bodies.firstIndex(where: { $0.id == target.id }) else { throw Failure("That body no longer exists.") }
         let used: [UUID]
@@ -1311,6 +1346,7 @@ struct AssistantWorkbench {
     /// Scales bodies and sketches by a percentage (sketches only uniformly), about their middle, the
     /// middle of their bottom ("base", so a part stays on the plate), or the origin.
     @discardableResult mutating func scale(items names: [String], percent: Double?, percents: SIMD3<Double>?, about pivot: String?, copy: Bool) throws -> String {
+        let names = expandingSelection(names)
         guard !names.isEmpty else { throw Failure("Name the items to scale.") }
         let factors: SIMD3<Double>
         if let percents { factors = percents / 100 } else if let percent { factors = SIMD3(repeating: percent / 100) } else {
@@ -1666,7 +1702,7 @@ struct AssistantWorkbench {
     /// else a new group is made (named `newName` when given). An empty `group` of "none" or "top"
     /// takes them out of their groups.
     @discardableResult mutating func group(items names: [String], into target: String?, newName: String?) throws -> String {
-        let members = try names.map(member(named:))
+        let members = try expandingSelection(names).map(member(named:))
         guard !members.isEmpty else { throw Failure("Name the items to group.") }
         let labels = names.joined(separator: ", ")
         let text = target?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
@@ -1701,23 +1737,33 @@ struct AssistantWorkbench {
 
     /// Gives a body a color (for multicolor prints); gray is the default.
     @discardableResult mutating func setColor(body bodyName: String, color raw: String) throws -> String {
-        let body = try body(named: bodyName)
         guard let color = BodyColor(rawValue: raw.lowercased().trimmingCharacters(in: .whitespaces)) else {
             throw Failure("Colors are " + BodyColor.allCases.map(\.rawValue).joined(separator: ", ") + ".")
         }
+        // "selected" with several solids picked colors them all.
+        let ids = try expandingSelection([bodyName]).map { try body(named: $0).id }
         var next = workspace
-        guard let index = next.bodies.firstIndex(where: { $0.id == body.id }) else { throw Failure("That body no longer exists.") }
-        next.bodies[index].color = color == .gray ? nil : color
-        let text = "Colored \(self.bodyName(body.id)) \(color.rawValue)"
-        try keep(next, change: text, focus: .body(body.id))
+        for id in ids {
+            guard let index = next.bodies.firstIndex(where: { $0.id == id }) else { throw Failure("That body no longer exists.") }
+            next.bodies[index].color = color == .gray ? nil : color
+        }
+        let text = "Colored \(ids.map(self.bodyName).joined(separator: ", ")) \(color.rawValue)"
+        try keep(next, change: text, focus: ids.first.map { .body($0) })
         return text + "."
+    }
+
+    /// A target and the tools to combine with it. With several solids picked, "selected" as the
+    /// target is the first picked, and "selected" among the tools is the rest.
+    private func targetAndTools(_ targetName: String, _ toolNames: [String]) throws -> (target: SolidBody, tools: [SolidBody]) {
+        let target = try Self.isSelectionWord(targetName) && !pickedBodies.isEmpty ? body(named: bodyName(pickedBodies[0])) : body(named: targetName)
+        let tools = try expandingSelection(toolNames).map { try body(named: $0) }.filter { $0.id != target.id }
+        guard !tools.isEmpty else { throw Failure("Name at least one other solid.") }
+        return (target, tools)
     }
 
     /// Keeps only the volume a target shares with every tool solid (Intersect).
     @discardableResult mutating func intersect(target targetName: String, tools toolNames: [String], keepTools: Bool) throws -> String {
-        let target = try body(named: targetName)
-        let tools = try toolNames.map { try body(named: $0) }.filter { $0.id != target.id }
-        guard !tools.isEmpty else { throw Failure("Name at least one other solid.") }
+        let (target, tools) = try targetAndTools(targetName, toolNames)
         var next = workspace
         guard let index = next.bodies.firstIndex(where: { $0.id == target.id }) else { throw Failure("That body no longer exists.") }
         guard let result = Intersecting.intersect(target, with: tools) else {
@@ -1755,6 +1801,7 @@ struct AssistantWorkbench {
 
     /// Reflects solids and sketches across a plane.
     @discardableResult mutating func mirror(items names: [String], across planeName: String, face: String?, keepOriginals: Bool) throws -> String {
+        let names = expandingSelection(names)
         let (plane, _, label) = try plane(planeName, face: face)
         var bodies: [UUID] = [], sketches: [UUID] = []
         for name in names {
@@ -1777,7 +1824,7 @@ struct AssistantWorkbench {
     private func patternItems(_ names: [String]) throws -> (bodies: [UUID], sketches: [UUID]) {
         guard !names.isEmpty else { throw Failure("Name the items to pattern.") }
         var bodies: [UUID] = [], sketches: [UUID] = []
-        for name in names {
+        for name in expandingSelection(names) {
             switch try item(named: name) {
             case .body(let id): bodies.append(id)
             case .sketch(let id): sketches.append(id)
@@ -1934,6 +1981,78 @@ struct AssistantWorkbench {
         default:
             throw Failure("Choose plane (three points) or axis (two points).")
         }
+    }
+
+    /// A construction plane through a sketch line, turned `degrees` about it: 0° lies on the line's
+    /// sketch plane, 90° stands straight up from it (Plane at Angle).
+    @discardableResult mutating func addPlaneAtAngle(line lineName: String, degrees: Double) throws -> String {
+        guard case .shape(let id) = try item(named: lineName), let line = workspace.shapes.first(where: { $0.id == id }), line.kind == .line else {
+            throw Failure("A plane at an angle turns about a sketch line; name one such as Line 01.")
+        }
+        guard degrees.isFinite, abs(degrees) <= 360 else { throw Failure("The angle must be within ±360°.") }
+        let a = line.plane.point(line.start), b = line.plane.point(line.end)
+        guard let plane = ConstructionPlanes.atAngle(through: (a + b) / 2, along: b - a, length: simd_distance(a, b),
+                                                     reference: line.plane.normalAxis, degrees: degrees) else {
+            throw Failure("A plane cannot be made about \(lineName).")
+        }
+        var next = workspace
+        next.constructionPlanes.append(plane)
+        let name = next.planeNames[plane.id] ?? "a plane"
+        let change = "Added \(name), turned \(Self.mm(degrees))° about \(lineName)"
+        try keep(next, change: change, focus: .plane(plane.id))
+        return change + ". Sketch on it with on: \"\(name)\"."
+    }
+
+    /// A construction plane touching a solid's round face along a line, on the `side` it faces
+    /// (top, bottom, front, back, left, right, or ±x/±y/±z): Tangent Plane.
+    @discardableResult mutating func addTangentPlane(body bodyName: String, face spec: String, side: String) throws -> String {
+        let body = try body(named: bodyName), solid = try buildable(body)
+        let text = spec.trimmingCharacters(in: .whitespaces).lowercased()
+        let face = ["round", "side", "curved", "cylinder", "round face", "curved face"].contains(text)
+            ? (0..<solid.faceCount).first { solid.faceCylinder($0) != nil }
+            : try self.face(spec, of: body)
+        guard let face, let cylinder = solid.faceCylinder(face) else { throw Failure("\(self.bodyName(body.id)) has no round face there; name a cylinder's side or a hole's wall.") }
+        guard let direction = Self.sideDirections[side.trimmingCharacters(in: .whitespaces).lowercased()] else {
+            throw Failure("Side must be top, bottom, front, back, left, right, or ±x, ±y, ±z.")
+        }
+        let axis = simd_normalize(cylinder.direction)
+        let radial = direction - axis * simd_dot(direction, axis)
+        guard simd_length(radial) > 1e-6 else { throw Failure("The \(side) side runs along the face's axis; choose a side across it.") }
+        // Halfway along the face, on the chosen side.
+        let heights = solid.faceEdges(face).flatMap { solid.edgeSamples($0, count: 9) }.map { simd_dot($0 - cylinder.point, axis) }
+        let low = heights.min() ?? -10, high = heights.max() ?? 10
+        let point = cylinder.point + axis * ((low + high) / 2) + simd_normalize(radial) * cylinder.radius
+        guard let plane = ConstructionPlanes.tangent(toCylinderAt: cylinder.point, axisDirection: axis, radius: cylinder.radius,
+                                                     through: point, height: high - low) else { throw Failure("A plane cannot touch that face.") }
+        var next = workspace
+        next.constructionPlanes.append(plane)
+        let name = next.planeNames[plane.id] ?? "a plane"
+        let change = "Added \(name), touching the \(side) of \(self.bodyName(body.id))'s round face (Ø\(Self.mm(2 * cylinder.radius)) mm)"
+        try keep(next, change: change, focus: .plane(plane.id))
+        return change + ". Sketch on it with on: \"\(name)\"."
+    }
+
+    /// Carries a sketch line's end (`start`, `end`, or both when nil) on, straight, to the next shape
+    /// on its plane (Extend).
+    @discardableResult mutating func extendLine(_ lineName: String, end: String?) throws -> String {
+        guard case .shape(let id) = try item(named: lineName), let line = workspace.shapes.first(where: { $0.id == id }), line.kind == .line else {
+            throw Failure("Extend carries a sketch line on; name one such as Line 01.")
+        }
+        let ends: [(label: String, point: Point2)]
+        switch end?.trimmingCharacters(in: .whitespaces).lowercased() {
+        case "start", "first": ends = [("start", line.start)]
+        case "end", "last": ends = [("end", line.end)]
+        case nil, "", "both": ends = [("end", line.end), ("start", line.start)]
+        default: throw Failure("End must be start, end, or both.")
+        }
+        var next = workspace, moved: [String] = []
+        for (label, point) in ends {
+            if let extended = SketchTools.extend(id, near: point, in: next) { next = extended; moved.append(label) }
+        }
+        guard !moved.isEmpty else { throw Failure("Nothing on \(lineName)'s plane lies ahead of it to extend to.") }
+        let change = "Extended \(lineName) at its \(moved.joined(separator: " and "))"
+        try keep(next, change: change, focus: line.sketch.map { .sketch($0) })
+        return change + "."
     }
 
     @discardableResult mutating func addPlane(from planeName: String, face: String?, offset: Double) throws -> String {

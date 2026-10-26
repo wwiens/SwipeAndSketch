@@ -865,17 +865,42 @@ struct ShapeOperationTool: Tool {
 struct AddConstructionTool: Tool {
     let context: AssistantContext
     let name = "add_construction"
-    let description = "Adds a construction plane through three points, or a construction axis between two points (a sketch line usable to revolve about or mirror across)."
+    let description = "Adds a construction plane (through three points; at an angle about a sketch line; or touching a solid's round face), or a construction axis between two points (a sketch line usable to revolve about or mirror across)."
     @Generable struct Arguments {
-        @Guide(.anyOf(["plane", "axis"])) var kind: String
-        @Guide(description: "World points in mm as x, y, z triples, flattened: 9 numbers for a plane, 6 for an axis") var coordinates: [Double]
+        @Guide(.anyOf(["plane", "axis", "angle", "tangent"])) var kind: String
+        @Guide(description: "plane and axis: world points in mm as x, y, z triples, flattened: 9 numbers for a plane, 6 for an axis") var coordinates: [Double]?
+        @Guide(description: "angle: the sketch line to turn about, such as Line 01") var line: String?
+        @Guide(description: "angle: degrees; 0 lies on the line's sketch plane, 90 stands straight up from it") var angle: Double?
+        @Guide(description: "tangent: the solid, such as Body 01") var body: String?
+        @Guide(description: "tangent: the round face, round for its first one, a face number, or selected") var face: String?
+        @Guide(description: "tangent: which side the plane touches: top, bottom, front, back, left, right") var side: String?
     }
     func call(arguments: Arguments) async throws -> String {
         await context.run(arguments.kind == "axis" ? "Adding an axis" : "Adding a plane") { bench in
-            let c = arguments.coordinates
-            let points = stride(from: 0, to: c.count - c.count % 3, by: 3).map { SIMD3(c[$0], c[$0 + 1], c[$0 + 2]) }
-            return try bench.addConstruction(kind: arguments.kind, points: points)
+            switch arguments.kind {
+            case "angle":
+                return try bench.addPlaneAtAngle(line: arguments.line ?? "selected", degrees: arguments.angle ?? 90)
+            case "tangent":
+                return try bench.addTangentPlane(body: arguments.body ?? "selected", face: arguments.face ?? "round", side: arguments.side ?? "front")
+            default:
+                let c = arguments.coordinates ?? []
+                let points = stride(from: 0, to: c.count - c.count % 3, by: 3).map { SIMD3(c[$0], c[$0 + 1], c[$0 + 2]) }
+                return try bench.addConstruction(kind: arguments.kind, points: points)
+            }
         }
+    }
+}
+
+struct ExtendLineTool: Tool {
+    let context: AssistantContext
+    let name = "extend_line"
+    let description = "Carries a sketch line's end on, straight, until it meets the next shape on its plane (both ends unless one is named)."
+    @Generable struct Arguments {
+        @Guide(description: "A line name such as Line 01") var line: String
+        @Guide(.anyOf(["start", "end", "both"])) var end: String?
+    }
+    func call(arguments: Arguments) async throws -> String {
+        await context.run("Extending \(arguments.line)") { bench in try bench.extendLine(arguments.line, end: arguments.end) }
     }
 }
 
@@ -931,7 +956,7 @@ extension AssistantContext {
          FilletEdgesTool(context: self), ChamferEdgesTool(context: self), ShellTool(context: self), AddHoleTool(context: self), AddPegTool(context: self), AddThreadTool(context: self), AddMatingPartTool(context: self), AddTextTool(context: self), FitTestTool(context: self),
          MoveItemsTool(context: self), SetDimensionTool(context: self), DeleteItemsTool(context: self), SetVisibilityTool(context: self), CombineTool(context: self),
          MirrorTool(context: self), PatternTool(context: self), AddPlaneTool(context: self), RevolveTool(context: self), RoundSketchCornersTool(context: self), MeasureTool(context: self),
-         ScaleItemsTool(context: self), DeleteFacesTool(context: self), DeleteHoleTool(context: self), EditFinishTool(context: self), EditFeatureTool(context: self), AddPrimitiveTool(context: self), AddConstructionTool(context: self), ShapeOperationTool(context: self), ResizeFaceTool(context: self), OffsetSketchTool(context: self), RenameItemTool(context: self), GroupItemsTool(context: self), UngroupTool(context: self),
+         ScaleItemsTool(context: self), DeleteFacesTool(context: self), DeleteHoleTool(context: self), EditFinishTool(context: self), EditFeatureTool(context: self), AddPrimitiveTool(context: self), AddConstructionTool(context: self), ShapeOperationTool(context: self), ResizeFaceTool(context: self), OffsetSketchTool(context: self), ExtendLineTool(context: self), RenameItemTool(context: self), GroupItemsTool(context: self), UngroupTool(context: self),
          SetColorTool(context: self)]
     }
     /// The everyday tools, which fit the on-device model's smaller context.
