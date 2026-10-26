@@ -265,6 +265,27 @@ final class TemplateTests: XCTestCase {
         XCTAssertEqual((rim.min.x + rim.max.x) / 2, lid.x, accuracy: 1e-6)
     }
 
+    /// Jar with Screw Lid (October 26, 2026): the jar's outside threaded by Screw Lid, the lid top
+    /// down on the plate beside it.
+    func testScrewLidJarIsThreadedWithItsLidBesideIt() throws {
+        let template = try XCTUnwrap(TemplateCatalog.template("enclosures.screw-lid-jar"))
+        XCTAssertEqual(template.name(template.defaults), "Jar Ø60 × 60 mm")
+        let workspace = try template.workspace(template.defaults)
+        let solids = try build(workspace, "jar")
+        XCTAssertEqual(solids.count, 2)
+        XCTAssertTrue(solids.allSatisfy(\.isValidSolid))
+        let thread = try XCTUnwrap(workspace.bodies[0].cuts.last?.thread)
+        XCTAssertTrue(thread.isRaised && thread.shape == .printable)
+        XCTAssertEqual(thread.startCount, 2)
+        XCTAssertEqual(workspace.bodyNames[workspace.bodies[1].id], "Lid")
+        // The jar stands on the plate, open side up; the lid lies top down beside it, not touching.
+        XCTAssertEqual(solids[0].bounds.min.z, 0, accuracy: 1e-6)
+        XCTAssertEqual(solids[0].bounds.max.z, 62, accuracy: 1e-6)
+        XCTAssertEqual(solids[1].bounds.min.z, 0, accuracy: 1e-6)
+        XCTAssertGreaterThan(solids[1].bounds.min.x, solids[0].bounds.max.x)
+        XCTAssertEqual(try SolidKernel.solid(for: workspace.bodies[1]).volume, solids[1].volume, accuracy: 1e-6)
+    }
+
     func testScrewLidLinesUpWithThePosts() throws {
         let template = try XCTUnwrap(TemplateCatalog.template("enclosures.screw-lid-box"))
         let workspace = try template.workspace(template.defaults)

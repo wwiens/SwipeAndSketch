@@ -1,4 +1,5 @@
 import Foundation
+import simd
 
 /// Boxes sized by their inside, with a lid that slips on or screws on. Each comes out as two
 /// solids laid side by side, ready to print: the box open side up and the lid with its outer face
@@ -36,10 +37,61 @@ enum BoxTemplates {
                 try screwLidBox(inside: Inside(values), wall: values["wall"], radius: values["radius"],
                                 screw: screwChoices[min(max(values.choice("screw"), 0), screwChoices.count - 1)],
                                 fixing: values.choice("fixing") == 1 ? .insert : .selfTapping, lid: values["lid"])
+            }),
+         ProjectTemplate(
+            id: "enclosures.screw-lid-jar", category: .enclosures, title: "Jar with Screw Lid",
+            summary: "A round jar and a lid that screws onto it in about a turn, with a printable thread that needs no supports.",
+            parameters: [
+                TemplateParameter(id: "diameter", title: "Inside diameter", kind: .length(20...200, step: 1), defaultValue: 60),
+                TemplateParameter(id: "height", title: "Inside height", kind: .length(15...300, step: 1), defaultValue: 60),
+                TemplateParameter(id: "wall", title: "Wall thickness", kind: .length(1.6...6, step: 0.2), defaultValue: 2),
+                TemplateParameter(id: "pitch", title: "Thread pitch", kind: .length(2...5, step: 0.5), defaultValue: 3),
+                TemplateParameter(id: "fit", title: "Lid fit", kind: .length(0.1...0.6, step: 0.05), defaultValue: Fit.preferredClearance,
+                                  note: "Gap on each side of the thread; starts from the Fit in the project menu"),
+                TemplateParameter(id: "ribbed", title: "Ribbed grip", kind: .toggle, defaultValue: 1)
+            ],
+            name: { values in
+                func text(_ value: Double) -> String { value.rounded() == value ? String(Int(value)) : String(format: "%.1f", value) }
+                return "Jar Ø\(text(values["diameter"])) × \(text(values["height"])) mm"
+            },
+            make: { values in
+                try screwLidJar(inside: values["diameter"], height: values["height"], wall: values["wall"], pitch: values["pitch"],
+                                fit: values["fit"], ribbed: values.flag("ribbed"))
             })]
     }
 
     static let screwChoices = ["M2.5", "M3", "M4"]
+
+    // MARK: Jar with screw lid
+
+    /// A jar (open side up) and its lid (top down) side by side: the jar's outside is its neck, made
+    /// by Screw Lid, so the lid's thread is the one Screw Lid would make.
+    static func screwLidJar(inside: Double, height: Double, wall: Double, pitch: Double, fit: Double, ribbed: Bool) throws -> [TemplatePart] {
+        let outer = inside + 2 * wall, floor = wall, total = floor + height
+        // Room for the lid beside the jar: its wall and ribs outside the thread's crest.
+        let lidOuter = outer + 2 * (ThreadProfile.printable.diameterLoss * pitch / 2 + 2 + 1)
+        let (jarCenter, lidCenter) = layout(outerWidth: max(outer, lidOuter))
+        guard let outside = PegJoint.circle(outer, at: jarCenter, on: .top),
+              let bore = PegJoint.circle(inside, at: jarCenter, on: TemplateGeometry.horizontal(total)) else {
+            throw ScrewLid.Failure(message: "The jar cannot be drawn at that size.")
+        }
+        var jar = SolidBody(profile: outside, depth: total)
+        jar.cuts.append(ExtrusionCut(profile: bore, depth: -height))
+        let solid = try SolidKernel.solid(for: jar)
+        guard let neck = (0..<solid.faceCount).first(where: { face in
+            solid.cylinderSide(face) == 1 && abs((solid.faceCylinder(face)?.radius ?? 0) - outer / 2) < 1e-4
+        }) else { throw ScrewLid.Failure(message: "The jar's outside could not be found.") }
+        var spec = ScrewLidSpec(clearance: fit)
+        spec.pitch = pitch
+        spec.ribbed = ribbed
+        let made = try ScrewLid.make(on: jar, face: neck, spec)
+        // The lid turned top down onto the plate, beside the jar.
+        let lidTop = (try SolidKernel.solid(for: made.lid)).bounds.max.z
+        let flip = RigidTransform(rotation: simd_quatd(angle: .pi, axis: SIMD3(1, 0, 0)), pivot: SIMD3(jarCenter.x, jarCenter.y, lidTop),
+                                  translation: SIMD3(lidCenter.x - jarCenter.x, lidCenter.y - jarCenter.y, -lidTop))
+        guard let lid = made.lid.transformed(by: flip) else { throw ScrewLid.Failure(message: "The lid could not be laid out.") }
+        return [TemplatePart(name: "Jar", body: made.jar), TemplatePart(name: "Lid", body: lid)]
+    }
 
     static func insideParameters(width: Double, depth: Double, height: Double, smallest: Double = 10) -> [TemplateParameter] {
         [TemplateParameter(id: "width", title: "Inside width", kind: .length(smallest...400, step: 1), defaultValue: width),
