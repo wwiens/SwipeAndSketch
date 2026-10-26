@@ -62,6 +62,27 @@ import simd
         XCTAssertEqual(thread.size, "M10", "The preview is of the latest settings")
     }
 
+    /// The profile (ISO 60° or Printable 45°) and a raised thread's tapered ends, from the bar.
+    func testProfileAndTaperedEndsAreChosenInTheBar() async throws {
+        let (session, _) = try drilledScene()
+        session.chooseTool(.thread)
+        session.beginThread(bodyID: session.workspace.bodies[0].id, face: try holeWall(session))
+        XCTAssertEqual(session.threadDraft?.spec.shape, .iso, "A standard size stays ISO")
+        await session.threadPreviewSettled()
+        session.setThreadProfile(.printable)
+        await session.threadPreviewSettled()
+        XCTAssertEqual(session.threadDraft?.spec.shape, .printable)
+        XCTAssertTrue(session.threadDraft?.spec.title.hasSuffix(", 45°") == true)
+        XCTAssertNotNil(session.threadPreview, "The printable thread builds")
+        session.setThreadRaised(true)
+        XCTAssertEqual(session.threadDraft?.spec.taperedEnds, true, "Raised ridges taper by default")
+        session.setThreadTaperedEnds(false)
+        XCTAssertNil(session.threadDraft?.spec.taperedEnds)
+        await session.threadPreviewSettled()
+        session.confirmThread()
+        XCTAssertEqual(session.workspace.bodies[0].cuts.last?.thread?.shape, .printable)
+    }
+
     func testThreadToolCutsAnM8NutThreadInTheHole() async throws {
         let (session, controller) = try drilledScene()
         session.chooseTool(.thread)
@@ -277,21 +298,21 @@ import simd
         let outside = try XCTUnwrap((0..<solid.faceCount).first { solid.cylinderSide($0) == 1 })
         session.beginThread(bodyID: body.id, face: outside)
         await session.threadPreviewSettled()
-        XCTAssertEqual(session.threadDraft?.spec.title, "Ø60 × 3")
+        XCTAssertEqual(session.threadDraft?.spec.title, "Ø60 × 3, 45°", "A custom thread this size takes the printable profile")
         XCTAssertFalse(session.threadDraft?.spec.isRaised ?? true, "Cut by default")
-        // The cut grooves leave about 0.2 mm of the 2 mm wall: the hint says so and points to Raised.
-        XCTAssertEqual(session.threadWall ?? -1, 0.2, accuracy: 0.11)
-        XCTAssertTrue(session.hint.hasPrefix("Only about 0.2 mm of wall stays behind this thread. Choose Raised"), session.hint)
+        // The cut grooves leave under a millimeter of the 2 mm wall: the hint says so and points to Raised.
+        XCTAssertEqual(session.threadWall ?? -1, 0.9, accuracy: 0.11)
+        XCTAssertTrue(session.hint.hasPrefix("Only about 0.9 mm of wall stays behind this thread. Choose Raised"), session.hint)
 
         session.setThreadRaised(true)
-        XCTAssertEqual(session.threadDraft?.spec.title, "Ø63.25 × 3", "The neck is the thread's minor diameter")
+        XCTAssertEqual(session.threadDraft?.spec.title, "Ø61.8 × 3, 45°", "The neck is the thread's minor diameter")
         await session.threadPreviewSettled()
         XCTAssertNil(session.threadWall)
-        XCTAssertTrue(session.hint.hasPrefix("Ø63.25 × 3 is raised on this 60 mm boss"), session.hint)
+        XCTAssertTrue(session.hint.hasPrefix("Ø61.8 × 3, 45° is raised on this 60 mm boss"), session.hint)
         XCTAssertTrue(session.hint.hasSuffix("Done adds it."), session.hint)
         // A custom raised thread keeps the neck as its minor when the pitch changes.
         session.chooseThreadPitch(2.5)
-        XCTAssertEqual(session.threadDraft?.spec.majorDiameter ?? 0, 60 + 1.082532 * 2.5, accuracy: 1e-9)
+        XCTAssertEqual(session.threadDraft?.spec.majorDiameter ?? 0, 60 + 0.6 * 2.5, accuracy: 1e-9)
         XCTAssertTrue(session.threadPitchChoices.contains { $0.pitch == 3 && $0.usable })
         // A typed diameter the neck would fill is refused.
         XCTAssertFalse(session.applyDimension(61, target: .threadDiameter))
@@ -308,7 +329,7 @@ import simd
         controller.refresh()
         attach(controller, "Raised 2-start thread on a jar's neck")
         session.confirmThread()
-        XCTAssertEqual(session.status, "Threaded Ø63.25 × 3, 2-start")
+        XCTAssertEqual(session.status, "Threaded Ø61.8 × 3, 2-start, 45°")
         XCTAssertEqual(session.workspace.bodies[0].cuts.last?.thread?.isRaised, true)
 
         // Its cap screws on in step, with its own (cut) thread.

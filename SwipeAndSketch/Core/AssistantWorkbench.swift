@@ -1028,7 +1028,7 @@ struct AssistantWorkbench {
     /// instead of cutting grooves into it, keeping a thin wall whole.
     @discardableResult mutating func thread(body bodyName: String, face spec: String, size: String?, diameter: Double?, pitch: Double?,
                                             clearance: Double, leftHanded: Bool, starts: Int? = nil, length: Double? = nil,
-                                            raised: Bool = false) throws -> String {
+                                            raised: Bool = false, profile: String? = nil) throws -> String {
         let body = try body(named: bodyName), solid = try buildable(body)
         let text = spec.trimmingCharacters(in: .whitespaces).lowercased()
         let index: Int
@@ -1056,6 +1056,13 @@ struct AssistantWorkbench {
         }
         if let diameter { thread = thread.with(size: nil, diameter: diameter, pitch: thread.pitch) }
         if let pitch { thread = diameter == nil ? thread.with(pitch: pitch) : thread.with(size: thread.standardSize, diameter: thread.majorDiameter, pitch: pitch) }
+        if let profile, !profile.isEmpty {
+            switch profile.lowercased() {
+            case "iso", "iso 60", "60", "standard": thread = thread.with(profile: .iso)
+            case "printable", "printable 45", "45", "lid": thread = thread.with(profile: .printable)
+            default: throw Failure("Profile is iso (screws and nuts) or printable (45°, for lids and jars).")
+            }
+        }
         if leftHanded { thread.leftHanded = true }
         if let starts {
             guard ThreadSpec.startsRange.contains(starts) else { throw Failure("A thread has 1 to 4 starts.") }

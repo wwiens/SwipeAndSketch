@@ -1808,7 +1808,7 @@ struct WorkspaceView: View {
 
     /// Cut grooves into the face, or raise ridges onto it (October 22, 2026).
     private func threadMadeMenu(_ draft: ThreadDraft) -> AnyView {
-        let raised = draft.spec.isRaised, hole = draft.spec.isInternal
+        let raised = draft.spec.isRaised, hole = draft.spec.isInternal, profile = draft.spec.shape
         return AnyView(Menu {
             Button { session.setThreadRaised(false) } label: {
                 Text(raised ? "Cut" : "Cut (in use)")
@@ -1818,8 +1818,25 @@ struct WorkspaceView: View {
                 Text(raised ? "Raised (in use)" : "Raised")
                 Text(hole ? "Ridges added inside the hole, so a thin wall stays whole" : "Ridges added onto the boss, so a thin wall stays whole, as on a jar's neck")
             }
+            // The cross-section (October 26, 2026): ISO for hardware, 45° for printed lids and jars.
+            Section("Profile") {
+                Button { session.setThreadProfile(.iso) } label: {
+                    Text(profile == .iso ? "ISO 60° (in use)" : "ISO 60°")
+                    Text("The standard for screws and nuts")
+                }
+                Button { session.setThreadProfile(.printable) } label: {
+                    Text(profile == .printable ? "Printable 45° (in use)" : "Printable 45°")
+                    Text("Shallower, with flanks that print without supports either way up, for lids and jars")
+                }
+            }
+            if raised {
+                Toggle(isOn: Binding(get: { draft.spec.taperedEnds == true }, set: { session.setThreadTaperedEnds($0) })) {
+                    Text("Tapered Ends")
+                    Text("Ridges fade out over a quarter turn instead of stopping square")
+                }
+            }
         } label: {
-            Text(raised ? "Raised" : "Cut").font(.system(size: 15, weight: .medium)).padding(.horizontal, 8)
+            Text((raised ? "Raised" : "Cut") + (profile == .printable ? " · 45°" : "")).font(.system(size: 15, weight: .medium)).padding(.horizontal, 8)
         }
         .accessibilityIdentifier("thread.made"))
     }
@@ -2023,7 +2040,7 @@ struct WorkspaceView: View {
                 Section("Mirror") { Text("Tap Transform in the dock, then Mirror (or select a solid or sketch and choose Transform ▾ → Mirror above it). Tap the solids and sketches to mirror, then Mirror Plane and the plane to mirror across: one of the planes at the origin, a construction plane, a flat face, a sketch region's plane, or a sketch line (the plane through it, square to its sketch). Keep Input is on: the mirror images are new solids and sketches beside the originals; turn it off to replace them. A mirrored solid is an ordinary solid: its fillets, holes, cuts, and shells come along, and it can be edited, moved, or filleted like any other. Done is one undo step.") }
                 Section("Pattern") { Text("Tap Transform in the dock, then Pattern (or select a solid or sketch and choose Transform ▾ → Pattern above it). Tap the solids and sketches to copy. Linear: drag one of the gizmo arrows to lay copies out along it, and others for a grid; Extent spreads the copies across the distance, Spacing is the gap between neighbors. The quantity (− and +, or tap it to type it) counts the original and applies to the last arrow dragged. Circular: drag the gizmo center onto a corner, edge, circle center, or face center of any solid, a sketch point, or the origin (on a circle or edge the gizmo turns to follow it), then turn a ring; Rotated copies turn with the pattern, Fixed ones keep their orientation. Tap a value to type it. Done adds the copies as ordinary, independent solids and sketches in one undo step; a pattern makes at most 100.") }
                 Section("Joints and Fit Clearance") { Text("Printed parts that go together need a small gap. Set Fit Clearance in the project menu once for your printer: Tight (0.1 mm), Standard (0.2 mm), Loose (0.3 mm), or Custom. To find yours, choose Add a Fit Test Print in the same menu (or Joints ▸ Fit Test). Joints ▸ Peg & Socket (or Features ▸ Peg & Socket while sketching on a face) puts a round peg on a flat face, and every solid it pushes into gets a matching socket, even a hidden one, so hide a lid to reach the rim under it. Tap a peg later and choose Edit Peg to change it; its sockets follow. Subtract's Clearance leaves that gap around the tools, so a part shaped like them fits; choose Keep: Tools to keep the part.") }
-                Section("Threads") { Text("Choose Joints ▸ Thread and tap the inside of a hole (a nut's thread) or the side of a round boss (a bolt's thread), or select that face and tap Thread above the dock. A size is picked from the face: a hole near an M-size's tap-drill diameter, a boss near its diameter, or a custom thread fitted to the face. The Size menu lists metric M2 to M36 and inch #4 to 3/4 (UNC and UNF) and says how each fits the face; Pitch offers the fine pitches, or tap the diameter or pitch to type your own, such as a 3 mm pitch for a jar lid. Cut grooves the thread into the face; Raised adds its ridges onto it, so a thin wall keeps its thickness. Length threads part of the face, and more starts close a lid in fewer turns. Holes open up and bosses slim down by the clearance. Left-hand turns the thread the other way. Lead-in (on unless you turn it off) bevels the open ends so the thread starts straight. The preview takes a moment to build; Done adds the thread as one step, and Edit Thread (tap the thread) changes it later. A matching part made before keeps its own thread, so make it again after an edit. Then tap the thread and choose Matching Part above the dock for the nut or cap (on a bolt's thread) or bolt or plug (in a hole's) that screws onto it: it appears already screwed on, with the same size, hand, and clearance. Move it aside, or export with Arrange on Plate, to print the parts separately.") }
+                Section("Threads") { Text("Choose Joints ▸ Thread and tap the inside of a hole (a nut's thread) or the side of a round boss (a bolt's thread), or select that face and tap Thread above the dock. A size is picked from the face: a hole near an M-size's tap-drill diameter, a boss near its diameter, or a custom thread fitted to the face. The Size menu lists metric M2 to M36 and inch #4 to 3/4 (UNC and UNF) and says how each fits the face; Pitch offers the fine pitches, or tap the diameter or pitch to type your own, such as a 3 mm pitch for a jar lid. Cut grooves the thread into the face; Raised adds its ridges onto it, so a thin wall keeps its thickness, and fades them out at their ends. The same menu picks the profile: ISO 60° for hardware, or Printable 45° (shallower, printing without supports either way up), the default for raised threads and custom threads of 20 mm and more. Length threads part of the face, and more starts close a lid in fewer turns. Holes open up and bosses slim down by the clearance. Left-hand turns the thread the other way. Lead-in (on unless you turn it off) bevels the open ends so the thread starts straight. The preview takes a moment to build; Done adds the thread as one step, and Edit Thread (tap the thread) changes it later. A matching part made before keeps its own thread, so make it again after an edit. Then tap the thread and choose Matching Part above the dock for the nut or cap (on a bolt's thread) or bolt or plug (in a hole's) that screws onto it: it appears already screwed on, with the same size, hand, and clearance. Move it aside, or export with Arrange on Plate, to print the parts separately.") }
                 Section("Measure") { Text("Tap Measure in the rail at the top left; a selected item becomes the first one measured. Tap a corner, edge, face, or sketch item to read its size: length, radius, area, or for a solid (double-tap a face) its volume and size. Tap a second item for the distance between them, its parts across, back, and up, and the angle between them. The results replace the dock; Done ends Measure. A selected edge, face, or solid also shows its size in the strip above the dock.") }
                 Section("Section View") { Text("Tap Section at the top left to cut the solids open along a plane and look inside; the cut faces are coral. Choose Top, Front, or Right, drag the arrow to move the cut, Flip for the other half, Done to finish. Nothing changes.") }
                 Section("X-ray") { Text("Tap X-ray in the rail at the top left to see every solid through, or long-press a solid or group in the Model Tree and choose X-ray to see only it through. With one solid X-rayed, a tap goes through it to a part inside. X-ray changes nothing and is not saved.") }

@@ -602,12 +602,13 @@ struct AddThreadTool: Tool {
         @Guide(description: "1–4 ridges side by side (2–4 for quick jar lids); omit for 1") var starts: Int?
         @Guide(description: "Threaded length in mm from the open end; omit for the whole face") var length: Double?
         @Guide(description: "True to add the ridges onto the face instead of cutting grooves into it, for thin walls such as a jar's neck") var raised: Bool?
+        @Guide(description: "iso (60°, screws and nuts) or printable (45°, prints without supports; the default for raised threads and custom ones of 20 mm and more); omit for the default") var profile: String?
     }
     func call(arguments: Arguments) async throws -> String {
         await context.run("Threading \(arguments.body)") { bench in
             try bench.thread(body: arguments.body, face: arguments.face, size: arguments.size, diameter: arguments.diameter, pitch: arguments.pitch,
                              clearance: arguments.clearance ?? Fit.preferredClearance, leftHanded: arguments.leftHanded ?? false,
-                             starts: arguments.starts, length: arguments.length, raised: arguments.raised ?? false)
+                             starts: arguments.starts, length: arguments.length, raised: arguments.raised ?? false, profile: arguments.profile)
         }
     }
 }

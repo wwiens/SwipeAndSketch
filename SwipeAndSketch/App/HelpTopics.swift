@@ -505,6 +505,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                 steps: ["Choose Joints, then Thread, and tap the inside of a hole or the side of a round boss. Or select that face and tap Thread above the dock.",
                         "The bar shows the face's diameter, and the size that best fits it is picked for you. The message above the bar says how the thread fits.",
                         "Cut cuts grooves into the face. Raised adds ridges onto it instead, so a thin wall stays whole: use it for a jar's neck or a thin-walled tube.",
+                        "The same menu sets the profile: ISO 60° for screws and nuts, or Printable 45°, shallower, with flanks that print without supports either way up (the default for raised threads and custom ones of 20 mm and more). Raised ridges fade out over a quarter turn at their ends (Tapered Ends).",
                         "Size lists the sizes that fit the face as it is first, each with a note: Best fit, Full thread, or how much of a full thread's depth it gets. Other sizes cut the hole out or turn the boss down first; sizes that would miss the face are greyed out with the reason. Inch sizes (UNC/UNF) are in their own submenu, and Custom Diameter takes any size, such as a jar lid's.",
                         "Pitch is the distance between crests: each size's standard (coarse) pitch and its fine ones, or any pitch you type.",
                         "Length threads the whole face, or only part of it from the open end, like a bolt with a plain shank.",

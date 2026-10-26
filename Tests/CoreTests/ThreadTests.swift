@@ -126,7 +126,8 @@ final class ThreadTests: XCTestCase {
         let jar = ThreadPresets.suggestion(internal: true, surfaceDiameter: 60, clearance: 0.2)
         XCTAssertEqual(jar.size, "")
         XCTAssertEqual(jar.pitch, 3)
-        XCTAssertEqual(jar.major, 60 + 1.082532 * 3, accuracy: 1e-9)
+        // A custom thread of 20 mm and more takes the printable profile, 0.3 pitch deep.
+        XCTAssertEqual(jar.major, 60 + 0.6 * 3, accuracy: 1e-9)
     }
 
     func testDraggingAThreadedSolidMovesItsBuiltShapeInsteadOfRebuilding() throws {
@@ -475,7 +476,7 @@ final class ThreadTests: XCTestCase {
         let triple = try threaded(boss) { $0.pitch = 3; $0.starts = 3 }
         let tripleSpec = try XCTUnwrap(triple.cuts.last?.thread)
         XCTAssertEqual(tripleSpec.lead, 9)
-        XCTAssertTrue(tripleSpec.title.hasSuffix(", 3-start"), tripleSpec.title)
+        XCTAssertTrue(tripleSpec.title.contains(", 3-start"), tripleSpec.title)
         let a = try SolidKernel.solid(for: single), b = try SolidKernel.solid(for: triple)
         XCTAssertTrue(b.isValidSolid)
         // The same profile every pitch, only wound differently: the same material is left.
@@ -566,17 +567,22 @@ final class ThreadTests: XCTestCase {
     func testACutThreadWarnsOfAThinWallAndARaisedOneKeepsIt() throws {
         let neck = try jarNeck()
         let (cut, solid) = try roundFace(neck, side: 1)
-        XCTAssertEqual(cut.title, "Ø60 × 3")
-        // The grooves reach in to 28.18 mm of the 28 mm inside: about 0.2 mm of wall stays.
-        XCTAssertEqual(try XCTUnwrap(neck.wallBehindThread(cut, in: solid)), 0.2, accuracy: 0.11)
+        XCTAssertEqual(cut.title, "Ø60 × 3, 45°")
+        XCTAssertEqual(cut.profile, .printable, "A custom thread of 20 mm and more prints best at 45°")
+        // The printable grooves reach in to about 28.9 mm of the 28 mm inside: under a millimeter stays.
+        XCTAssertEqual(try XCTUnwrap(neck.wallBehindThread(cut, in: solid)), 0.9, accuracy: 0.11)
+        // As ISO 60° (deeper) only about 0.2 mm would.
+        XCTAssertEqual(try XCTUnwrap(neck.wallBehindThread(cut.with(profile: .iso), in: solid)), 0.2, accuracy: 0.11)
         XCTAssertEqual(cut.wallWarning(0.2) { "\(ThreadSpec.mm($0)) mm" }, "Only about 0.2 mm of wall stays behind this thread.")
         XCTAssertNil(try bossOnPlate(8).wallBehindThread(try faceSpec(try bossOnPlate(8)), in: SolidKernel.solid(for: bossOnPlate(8))),
                      "A solid boss has its core behind the thread")
 
         let raised = cut.made(raised: true)
         XCTAssertTrue(raised.isRaised)
-        XCTAssertEqual(raised.majorDiameter, 60 + 1.082532 * 3, accuracy: 1e-9, "The boss is the thread's minor diameter")
-        XCTAssertEqual(raised.title, "Ø63.25 × 3")
+        XCTAssertEqual(raised.majorDiameter, 60 + 0.6 * 3, accuracy: 1e-9, "The boss is the thread's minor diameter")
+        XCTAssertEqual(raised.title, "Ø61.8 × 3, 45°")
+        XCTAssertEqual(raised.taperedEnds, true)
+        XCTAssertEqual(raised.with(profile: .iso).majorDiameter, 60 + 1.082532 * 3, accuracy: 1e-9, "As ISO, still the boss is its minor")
         XCTAssertEqual(raised.fit.kind, .full)
         XCTAssertNil(neck.wallBehindThread(raised, in: solid))
         let mm = { (v: Double) in "\(ThreadSpec.mm(v)) mm" }
@@ -601,6 +607,60 @@ final class ThreadTests: XCTestCase {
         }
         XCTAssertTrue(crest, "Ridges reach the crest")
         XCTAssertNil(threaded.wallBehindThread(raised, in: built))
+    }
+
+    /// The printable 45° profile (October 26, 2026): shallower than ISO, saved only when chosen, and
+    /// raised ridges fade out at the closed end instead of stopping square.
+    func testPrintableProfileAndTaperedEnds() throws {
+        let neck = try jarNeck()
+        let (cut, solid) = try roundFace(neck, side: 1)
+        // Cut into the neck: the printable thread takes less material than ISO 60° would.
+        let printable = try SolidKernel.solid(for: try XCTUnwrap(neck.threading(cut)))
+        let iso = try SolidKernel.solid(for: try XCTUnwrap(neck.threading(cut.with(profile: .iso))))
+        XCTAssertTrue(printable.isValidSolid && iso.isValidSolid)
+        XCTAssertLessThan(solid.volume - printable.volume, solid.volume - iso.volume)
+        XCTAssertGreaterThan(solid.volume - printable.volume, 0.3 * (solid.volume - iso.volume))
+
+        // Raised, with and without the fade where the ridges meet the plate.
+        let raised = cut.made(raised: true)
+        let ends = try XCTUnwrap(raised.ends)
+        XCTAssertNotEqual(ends.startOpen, ends.endOpen, "Open at the rim, closed at the plate")
+        var square = raised
+        square.taperedEnds = nil
+        let faded = try SolidKernel.solid(for: try XCTUnwrap(neck.threading(raised)))
+        let blunt = try SolidKernel.solid(for: try XCTUnwrap(neck.threading(square)))
+        XCTAssertTrue(faded.isValidSolid)
+        let removed = blunt.volume - faded.volume
+        // At most a quarter turn's worth of ridge for each start, and something.
+        let ridgePerTurn = (blunt.volume - solid.volume) / (raised.threadedLength / raised.lead)
+        XCTAssertGreaterThan(removed, 0.01)
+        XCTAssertLessThan(removed, 0.5 * ridgePerTurn)
+        // Right at the plate nothing stands out of the neck; a quarter of the lead up, ridges do.
+        let origin = neck.worldPoint(raised.origin), axis = simd_normalize(neck.worldPoint(raised.origin + raised.axis) - origin)
+        let closed = ends.startOpen ? ends.end : ends.start, inward = ends.startOpen ? -axis : axis
+        let foot = (origin + axis * closed + inward * 0.05).z, up = foot + inward.z * (raised.lead / 4 + 0.2)
+        var low = false, high = false
+        for step in 0..<48 {
+            let angle = Double(step) * .pi / 24
+            low = low || isInside(faded, radius: raised.crestRadius - 0.1, z: foot, angle: angle)
+            high = high || isInside(faded, radius: raised.crestRadius - 0.1, z: up, angle: angle)
+        }
+        XCTAssertFalse(low, "No full-height ridge at the plate")
+        XCTAssertTrue(high, "Full ridges a quarter turn up")
+
+        // Saved: the profile and the fade only when set; an older thread reads as ISO with square ends.
+        let saved = try JSONSerialization.jsonObject(with: JSONEncoder().encode(raised)) as! [String: Any]
+        XCTAssertEqual(saved["profile"] as? String, "printable")
+        XCTAssertEqual(saved["taperedEnds"] as? Bool, true)
+        var older = saved
+        older["profile"] = nil
+        older["taperedEnds"] = nil
+        let decoded = try JSONDecoder().decode(ThreadSpec.self, from: JSONSerialization.data(withJSONObject: older))
+        XCTAssertEqual(decoded.shape, .iso)
+        XCTAssertNil(decoded.taperedEnds)
+        let isoSaved = try JSONSerialization.jsonObject(with: JSONEncoder().encode(cut.with(profile: .iso))) as! [String: Any]
+        XCTAssertNil(isoSaved["profile"], "ISO threads write nothing new")
+        XCTAssertNil(isoSaved["taperedEnds"])
     }
 
     func testARaisedNeckTakesACapThatScrewsOnInStep() throws {
@@ -632,7 +692,7 @@ final class ThreadTests: XCTestCase {
         let block = try drilledBlock(20)
         let (cut, solid) = try roundFace(block, side: -1)
         let raised = cut.made(raised: true)
-        XCTAssertEqual(raised.title, "M20 × 2.5", "A Ø20 hole is M20's major diameter")
+        XCTAssertEqual(raised.title, "M20 × 2.5, 45°", "A Ø20 hole is M20's major diameter; raised threads print at 45°")
         XCTAssertEqual(raised.fit.kind, .full)
         let nut = try XCTUnwrap(block.threading(raised))
         let built = try SolidKernel.solid(for: nut)
@@ -662,16 +722,17 @@ final class ThreadTests: XCTestCase {
     }
 
     func testRaisedFitsAndSuggestions() throws {
-        XCTAssertEqual(ThreadPresets.suggestion(internal: false, surfaceDiameter: 60, clearance: 0.2, raised: true).major, 60 + 1.082532 * 3, accuracy: 1e-9)
+        // Raised threads take the printable profile, 0.3 pitch deep.
+        XCTAssertEqual(ThreadPresets.suggestion(internal: false, surfaceDiameter: 60, clearance: 0.2, raised: true).major, 60 + 0.6 * 3, accuracy: 1e-9)
         XCTAssertEqual(ThreadPresets.suggestion(internal: true, surfaceDiameter: 20, clearance: 0.2, raised: true).size, "M20")
-        XCTAssertEqual(ThreadPresets.suggestion(internal: false, surfaceDiameter: 8.3, clearance: 0.2, raised: true).size, "M10",
-                       "M10's minor (8.38 mm) is just outside the boss")
-        XCTAssertEqual(ThreadPresets.suggestion(internal: false, surfaceDiameter: 8.5, clearance: 0.2, raised: true).size, "",
+        XCTAssertEqual(ThreadPresets.suggestion(internal: false, surfaceDiameter: 9, clearance: 0.2, raised: true).size, "M10",
+                       "M10's printable minor (9.1 mm) is just outside the boss")
+        XCTAssertEqual(ThreadPresets.suggestion(internal: false, surfaceDiameter: 9.2, clearance: 0.2, raised: true).size, "",
                        "Inside M10's minor: its grooves would be filled")
 
         let boss = try faceSpec(try bossOnPlate(8)).made(raised: true)
         XCTAssertEqual(boss.size, "", "No size's minor is near 8 mm")
-        XCTAssertEqual(boss.majorDiameter, 8 + 1.082532 * 1.25, accuracy: 1e-9)
+        XCTAssertEqual(boss.majorDiameter, 8 + 0.6 * 1.25, accuracy: 1e-9)
         XCTAssertEqual(try spec(boss, "M8").fit.kind, .misses, "Raised M8 would be buried in an 8 mm boss")
         XCTAssertEqual(try spec(boss, "M10").fit.kind, .full)
         let m12 = try spec(boss, "M12")
@@ -682,7 +743,7 @@ final class ThreadTests: XCTestCase {
         XCTAssertEqual(m12.fitNote(mm), "Builds the boss up to \(ThreadSpec.mm(2 * m12.rootRadius)) mm")
         let miss = try spec(boss, "M8").fitSummary(mm)
         XCTAssertTrue(miss.contains("too small to raise") && miss.contains("Try M10"), miss)
-        XCTAssertEqual(try spec(boss, "M8").reachableDiameters?.lowerBound ?? 0, 8 + 1.082532 * 1.25 - 0.06 * 0.541266 * 1.25, accuracy: 1e-3)
+        XCTAssertEqual(try spec(boss, "M8").reachableDiameters?.lowerBound ?? 0, 8 + 0.6 * 1.25 - 0.06 * 0.3 * 1.25, accuracy: 1e-3)
         // A built-up boss builds.
         let plate = try bossOnPlate(8)
         let built = try SolidKernel.solid(for: try XCTUnwrap(plate.threading(m12)))
@@ -690,7 +751,7 @@ final class ThreadTests: XCTestCase {
         XCTAssertTrue(isInside(built, radius: 4.5, z: 12, angle: 0.3), "The sleeve under the ridges")
 
         // Custom raised threads keep the boss as their minor when the pitch changes; Cut puts it back.
-        XCTAssertEqual(boss.with(pitch: 2).majorDiameter, 8 + 1.082532 * 2, accuracy: 1e-9)
+        XCTAssertEqual(boss.with(pitch: 2).majorDiameter, 8 + 0.6 * 2, accuracy: 1e-9)
         XCTAssertEqual(boss.made(raised: false).majorDiameter, 8, accuracy: 1e-9)
         let hole = try faceSpec(try drilledBlock(6.8))
         XCTAssertEqual(hole.made(raised: true).fit.kind, .full)
@@ -720,13 +781,13 @@ final class ThreadTests: XCTestCase {
     func testAssistantRaisesThreadsAndWarnsOfThinWalls() throws {
         var bench = AssistantWorkbench(workspace: Workspace(bodies: [try jarNeck()]))
         let cut = try bench.thread(body: "Body 01", face: "boss", size: nil, diameter: nil, pitch: nil, clearance: 0.2, leftHanded: false)
-        XCTAssertTrue(cut.contains("Cut a Ø60 × 3 bolt thread"), cut)
-        XCTAssertTrue(cut.contains("Only about 0.2 mm of wall") && cut.contains("raised"), cut)
+        XCTAssertTrue(cut.contains("Cut a Ø60 × 3, 45° bolt thread"), cut)
+        XCTAssertTrue(cut.contains("Only about 0.9 mm of wall") && cut.contains("raised"), cut)
 
         bench = AssistantWorkbench(workspace: Workspace(bodies: [try jarNeck()]))
         let raised = try bench.thread(body: "Body 01", face: "boss", size: nil, diameter: nil, pitch: 2.5, clearance: 0.2, leftHanded: false,
                                       starts: 2, length: 10, raised: true)
-        XCTAssertTrue(raised.contains("Raised a Ø62.71 × 2.5, 2-start bolt thread"), raised)
+        XCTAssertTrue(raised.contains("Raised a Ø61.5 × 2.5, 2-start, 45° bolt thread"), raised)
         XCTAssertFalse(raised.contains("wall"), raised)
         let spec = try XCTUnwrap(bench.workspace.bodies[0].cuts.last?.thread)
         XCTAssertTrue(spec.isRaised)
@@ -748,7 +809,7 @@ final class ThreadTests: XCTestCase {
         let clip = spec.ends.map { ($0.startOpen ? $0.start : 0, $0.endOpen ? $0.end : spec.length) } ?? (0, spec.length)
         return ssk_thread_tool(vec(origin), vec(axis), vec(reference), 0, spec.length, spec.pitch, spec.crestRadius,
                                spec.rootRadius, spec.surfaceDiameter / 2, spec.isInternal, spec.leftHanded == true, Int32(spec.startCount),
-                               spec.isRaised, clip.0, clip.1).map { KernelSolid(adopting: $0) }
+                               spec.isRaised, clip.0, clip.1, spec.shape.flankDegrees).map { KernelSolid(adopting: $0) }
     }
 
     /// Probes halfway between `spec`'s root and crest, staggered around the axis along `tool`'s length

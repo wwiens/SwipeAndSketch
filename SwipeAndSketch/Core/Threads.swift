@@ -7,6 +7,25 @@ import simd
 // as a `thread` entry in a solid's ordered `cuts` list, with its axis in the solid's own frame so it
 // moves with the solid.
 
+/// A thread's cross-section. ISO 60° is the standard for screws and nuts; Printable 45° has 90°
+/// between its flanks, so each overhangs 45° whether the part prints upright or upside down (a
+/// jar's base and its lid), and is shallower (October 26, 2026).
+enum ThreadProfile: String, Codable, CaseIterable, Sendable {
+    case iso, printable
+
+    /// Each flank's lean from a plane square to the axis.
+    var flankDegrees: Double { self == .iso ? 30 : 45 }
+    /// The major diameter less the minor, in pitches (twice the thread's depth).
+    var diameterLoss: Double { self == .iso ? 1.082532 : 0.6 }
+    var title: String { self == .iso ? "ISO 60°" : "Printable 45°" }
+
+    /// Raised threads, and custom threads of 20 mm and more (jar lids, caps), print best with 45°
+    /// flanks; standard sizes stay ISO to fit hardware. Nil is ISO, as files store it.
+    static func defaultFor(raised: Bool, majorDiameter: Double, standard: Bool) -> ThreadProfile? {
+        raised || !standard && majorDiameter >= 20 ? .printable : nil
+    }
+}
+
 /// A screw thread on a cylindrical face. Internal threads (a hole) open up by the clearance and
 /// external ones (a boss) slim down by it, so printed threads turn freely.
 struct ThreadSpec: Codable, Equatable, Sendable {
@@ -40,9 +59,15 @@ struct ThreadSpec: Codable, Equatable, Sendable {
     /// thin wall keeps its thickness: a boss's face is the thread's minor diameter, a hole's its
     /// major. Omitted for a cut thread.
     var raised: Bool?
+    /// The cross-section; omitted for ISO 60° (and on every thread made before October 26, 2026).
+    var profile: ThreadProfile?
+    /// A raised thread's ridges fade out over a quarter turn where they meet the solid (and at an
+    /// open end with no lead-in) instead of stopping square. Omitted when off.
+    var taperedEnds: Bool?
 
     private enum CodingKeys: String, CodingKey {
-        case isInternal = "internal", size, majorDiameter, pitch, clearance, leftHanded, origin, axis, reference, length, surfaceDiameter, ends, leadIn, starts, raised
+        case isInternal = "internal", size, majorDiameter, pitch, clearance, leftHanded, origin, axis, reference, length, surfaceDiameter, ends, leadIn, starts, raised,
+             profile, taperedEnds
     }
 
     static let pitchRange = 0.2...20.0
@@ -53,16 +78,18 @@ struct ThreadSpec: Codable, Equatable, Sendable {
     /// How far one turn screws it in: the pitch times the starts.
     var lead: Double { pitch * Double(startCount) }
     var isRaised: Bool { raised == true }
+    var shape: ThreadProfile { profile ?? .iso }
 
-    /// The ISO basic minor diameter: the major less 5/8 of the fundamental triangle's height, twice.
-    var minorDiameter: Double { majorDiameter - 1.082532 * pitch }
+    /// The basic minor diameter: for ISO, the major less 5/8 of the fundamental triangle's height,
+    /// twice; for the printable profile, 0.3 pitch deep.
+    var minorDiameter: Double { majorDiameter - shape.diameterLoss * pitch }
     /// The ridge of the thread as cut: a nut's ridge is the groove in its wall, opened up by the clearance.
     var crestRadius: Double { majorDiameter / 2 + (isInternal ? clearance : -clearance) }
     var rootRadius: Double { minorDiameter / 2 + (isInternal ? clearance : -clearance) }
     /// "M8 × 1.25", "1/4-20 UNC", or "Ø30 × 3", with the starts and hand when they are not the usual.
     var title: String {
         let base = standardSize.map { $0.title(pitch: pitch) } ?? "Ø\(Self.mm(majorDiameter)) × \(Self.mm(pitch))"
-        return base + (startCount > 1 ? ", \(startCount)-start" : "") + (leftHanded == true ? " LH" : "")
+        return base + (startCount > 1 ? ", \(startCount)-start" : "") + (shape == .printable ? ", 45°" : "") + (leftHanded == true ? " LH" : "")
     }
 
     /// The standard size this thread is, when its name, diameter, and pitch all agree.
@@ -186,14 +213,16 @@ enum ThreadPresets {
         if raised {
             // A standard size whose minor (on a boss) or major (in a hole) is on the thread's side
             // of the face, up to 0.3 mm off, so its grooves stay clear; otherwise one fitted exactly.
-            func gap(_ size: ThreadSize) -> Double { isInternal ? d - size.diameter : size.diameter - 1.082532 * size.coarse - d }
+            // Raised threads take the printable profile.
+            let loss = ThreadProfile.printable.diameterLoss
+            func gap(_ size: ThreadSize) -> Double { isInternal ? d - size.diameter : size.diameter - loss * size.coarse - d }
             for sizes in families {
                 if let best = sizes.filter({ (-1e-9...0.3).contains(gap($0)) }).min(by: { gap($0) < gap($1) }) {
                     return (best.name, best.diameter, best.coarse)
                 }
             }
             let pitch = pitch(for: d)
-            return ("", isInternal ? d : d + 1.082532 * pitch, pitch)
+            return ("", isInternal ? d : d + loss * pitch, pitch)
         }
         for sizes in families {
             if isInternal {
@@ -207,7 +236,8 @@ enum ThreadPresets {
         }
         if isInternal {
             let pitch = pitch(for: d + 1)
-            return ("", d + 1.082532 * pitch, pitch)
+            let loss = (ThreadProfile.defaultFor(raised: false, majorDiameter: d, standard: false) ?? .iso).diameterLoss
+            return ("", d + loss * pitch, pitch)
         }
         return ("", d, pitch(for: d))
     }
@@ -283,7 +313,7 @@ extension ThreadSpec {
     /// The same size with another pitch. A custom raised thread on a boss keeps the boss as its
     /// minor diameter, so its diameter follows the pitch.
     func with(pitch: Double) -> ThreadSpec {
-        let diameter = isRaised && !isInternal && standardSize == nil ? surfaceDiameter + 1.082532 * pitch : majorDiameter
+        let diameter = isRaised && !isInternal && standardSize == nil ? surfaceDiameter + shape.diameterLoss * pitch : majorDiameter
         return with(size: standardSize, diameter: diameter, pitch: pitch)
     }
 
@@ -292,21 +322,33 @@ extension ThreadSpec {
     func made(raised: Bool, preferInch: Bool = false) -> ThreadSpec {
         var spec = self
         spec.raised = raised ? true : nil
+        spec.taperedEnds = raised ? true : nil
         let suggestion = ThreadPresets.suggestion(internal: isInternal, surfaceDiameter: surfaceDiameter, clearance: clearance,
                                                   preferInch: preferInch, raised: raised)
         if suggestion.size.isEmpty, standardSize == nil {
             // A custom thread's face: a raised boss's or cut hole's minor diameter, else its major.
+            spec.profile = ThreadProfile.defaultFor(raised: raised, majorDiameter: majorDiameter, standard: false)
             let atMinor = raised != isInternal
-            return spec.with(size: nil, diameter: surfaceDiameter + (atMinor ? 1.082532 * pitch : 0), pitch: pitch)
+            return spec.with(size: nil, diameter: surfaceDiameter + (atMinor ? spec.shape.diameterLoss * pitch : 0), pitch: pitch)
         }
+        spec.profile = ThreadProfile.defaultFor(raised: raised, majorDiameter: suggestion.major, standard: !suggestion.size.isEmpty)
         return spec.with(size: ThreadPresets.size(named: suggestion.size), diameter: suggestion.major, pitch: suggestion.pitch)
+    }
+
+    /// The same thread with another cross-section. A custom raised thread on a boss keeps the boss as
+    /// its minor diameter, so its diameter follows the profile's depth.
+    func with(profile: ThreadProfile) -> ThreadSpec {
+        var spec = self
+        spec.profile = profile == .iso ? nil : profile
+        guard isRaised, !isInternal, standardSize == nil else { return spec }
+        return spec.with(size: nil, diameter: surfaceDiameter + profile.diameterLoss * pitch, pitch: pitch)
     }
 
     /// The diameters a thread of this pitch can have and still reach the face: over the hole (less
     /// the clearance), or with its root inside the boss. Raised: at least the boss's diameter plus
     /// the thread's depth, or at most the hole's diameter.
     var reachableDiameters: ClosedRange<Double>? {
-        let core = 1.082532 * pitch
+        let core = shape.diameterLoss * pitch
         let slack = 2 * 0.03 * (crestRadius - rootRadius)
         let range = isRaised ? (isInternal ? Self.diameterRange.lowerBound...(surfaceDiameter + slack)
                                            : (surfaceDiameter + core - slack)...Self.diameterRange.upperBound)
@@ -319,7 +361,7 @@ extension ThreadSpec {
     /// The largest pitch this diameter can take (leaving a core, its profile fitting): 0 when none.
     var largestPitch: Double {
         let side = isInternal ? clearance : -clearance
-        return min(Self.pitchRange.upperBound, (majorDiameter + 2 * side - 0.2) / 1.082532 - 0.01)
+        return min(Self.pitchRange.upperBound, (majorDiameter + 2 * side - 0.2) / shape.diameterLoss - 0.01)
     }
 
     /// A sentence on how this thread fits its face, with lengths written by `length` ("6.8 mm").
@@ -356,7 +398,7 @@ extension ThreadSpec {
             return isInternal ? "\(title) is bigger than this \(d) hole: the hole is cut out to \(length(fit.resultDiameter)) for a full thread."
                 : "\(title) is smaller than this \(d) boss: the boss is turned down to \(length(fit.resultDiameter)) for a full thread."
         case .misses:
-            let limit = isInternal ? "over \(length(surfaceDiameter - 2 * clearance))" : "under \(length(surfaceDiameter + 2 * clearance + 1.082532 * pitch))"
+            let limit = isInternal ? "over \(length(surfaceDiameter - 2 * clearance))" : "under \(length(surfaceDiameter + 2 * clearance + shape.diameterLoss * pitch))"
             let reason = isInternal ? "is smaller than this \(d) hole, so it would not reach the wall"
                 : "is bigger than this \(d) boss, so its grooves would miss it"
             let nearest = ThreadPresets.nearestUsable(to: self).map { " Try \($0.name), or a" } ?? " Try a"
@@ -438,7 +480,8 @@ extension SolidBody {
         let ends = ThreadEnds(start: faceLow - low, end: faceHigh - low, startOpen: lowOpen, endOpen: highOpen)
         return ThreadSpec(isInternal: isInternal, size: suggestion.size, majorDiameter: suggestion.major, pitch: suggestion.pitch, clearance: clearance,
                           origin: localOrigin, axis: localAxis, reference: localReference, length: high - low, surfaceDiameter: diameter,
-                          ends: ends, leadIn: lowOpen || highOpen ? true : nil)
+                          ends: ends, leadIn: lowOpen || highOpen ? true : nil,
+                          profile: ThreadProfile.defaultFor(raised: false, majorDiameter: suggestion.major, standard: !suggestion.size.isEmpty))
     }
 
     /// Whether a thread is screwed into at its `ends.end` side rather than its start: the open end,
@@ -550,7 +593,7 @@ extension SolidKernel {
         let clip = spec.ends.map { ($0.startOpen ? $0.start : 0, $0.endOpen ? $0.end : spec.length) } ?? (0, spec.length)
         guard let tool = ssk_thread_tool(vec(origin), vec(axis), vec(reference), 0, spec.length, spec.pitch, spec.crestRadius, spec.rootRadius,
                                          spec.surfaceDiameter / 2, spec.isInternal, spec.leftHanded == true, Int32(spec.startCount),
-                                         spec.isRaised, clip.0, clip.1) else {
+                                         spec.isRaised, clip.0, clip.1, spec.shape.flankDegrees) else {
             throw Failure(message: ssk_last_error().map { String(cString: $0) } ?? "Thread failed")
         }
         var result: KernelSolid
@@ -570,7 +613,46 @@ extension SolidKernel {
                 }
             }
         }
+        if spec.isRaised, spec.taperedEnds == true, let ends = spec.ends {
+            // Raised ridges fade out where they meet the solid (and at an open end with no lead-in)
+            // rather than stopping square. A fade that will not build leaves the end square.
+            for (height, isOpen, inward) in [(ends.start, ends.startOpen, axis), (ends.end, ends.endOpen, -axis)] where !isOpen || spec.leadIn != true {
+                if let fade = try? fadeTool(spec, at: origin + axis * height, inward: inward, across: reference),
+                   let faded = try? boolean(result, fade, .subtract), faded.isValidSolid, faded.volume < result.volume {
+                    result = faded
+                }
+            }
+        }
         return result
+    }
+
+    /// What fades a raised thread's ridges out at an end at `face`, `inward` pointing along the
+    /// thread: everything beyond a cone from the face's own surface at the end to the ridges' full
+    /// height a quarter turn in (a quarter of the lead along the axis), so each ridge tapers away
+    /// over about a quarter turn. On a boss it is the outside of that cone, in a hole the inside.
+    static func fadeTool(_ spec: ThreadSpec, at face: SIMD3<Double>, inward: SIMD3<Double>, across: SIMD3<Double>) throws -> KernelSolid {
+        let surface = spec.surfaceDiameter / 2, run = spec.lead / 4
+        // (radius, depth into the thread) in a plane through the axis.
+        let points: [(Double, Double)]
+        if spec.isInternal {
+            // The ridges stand in from the wall to the root: take what lies inside the line from the
+            // wall at the end to the root a quarter turn in, carried on to the axis.
+            let root = spec.rootRadius - 0.05 * spec.pitch
+            guard surface - root > 1e-3 else { throw Failure(message: "No ridges to fade") }
+            points = [(0, 0), (surface, 0), (0, run * surface / (surface - root))]
+        } else {
+            let crest = spec.crestRadius + 0.05 * spec.pitch, outer = crest + 0.05
+            guard crest - surface > 1e-3 else { throw Failure(message: "No ridges to fade") }
+            points = [(surface, 0), (outer, 0), (outer, run * (outer - surface) / (crest - surface))]
+        }
+        let x = simd_normalize(across - inward * simd_dot(across, inward))
+        func vec(_ v: SIMD3<Double>) -> SSKVec3 { SSKVec3(x: v.x, y: v.y, z: v.z) }
+        let plane = SSKPlane(origin: vec(face), xAxis: vec(x), yAxis: vec(simd_normalize(inward)))
+        let xy = points.flatMap { [$0.0, $0.1] }
+        guard let cone = ssk_revolve_profile(plane, xy, nil, Int32(points.count), 0, 0, 0, 1, 360) else {
+            throw Failure(message: ssk_last_error().map { String(cString: $0) } ?? "Fade failed")
+        }
+        return KernelSolid(adopting: cone)
     }
 
     /// What a lead-in removes at an open end at `face`, `inward` pointing along the thread: in a nut a

@@ -5658,6 +5658,20 @@ struct DimensionEdit: Identifiable {
         updateThread(draft)
     }
 
+    /// ISO 60° (screws and nuts) or the printable 45° profile (lids and jars).
+    func setThreadProfile(_ profile: ThreadProfile) {
+        guard var draft = threadDraft, draft.spec.shape != profile else { return }
+        draft.spec = draft.spec.with(profile: profile)
+        updateThread(draft)
+    }
+
+    /// Whether a raised thread's ridges fade out at their ends instead of stopping square.
+    func setThreadTaperedEnds(_ on: Bool) {
+        guard var draft = threadDraft, draft.spec.isRaised else { return }
+        draft.spec.taperedEnds = on ? true : nil
+        updateThread(draft)
+    }
+
     /// How many ridges wind side by side (1–4).
     func setThreadStarts(_ starts: Int) {
         guard var draft = threadDraft, ThreadSpec.startsRange.contains(starts) else { return }

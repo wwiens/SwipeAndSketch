@@ -673,9 +673,10 @@ int32_t ssk_set_thread_attempt(int32_t attempt) {
 
 SSKShape *ssk_thread_tool(SSKVec3 origin, SSKVec3 axis, SSKVec3 reference, double start, double end, double pitch,
                           double crestRadius, double rootRadius, double surfaceRadius, bool internal, bool leftHanded, int32_t starts,
-                          bool raised, double clipStart, double clipEnd) {
+                          bool raised, double clipStart, double clipEnd, double flankDegrees) {
     return guarded("Thread", [&]() -> TopoDS_Shape {
         if (starts < 1 || starts > 8) throw Standard_Failure("a thread has 1 to 8 starts");
+        if (!std::isfinite(flankDegrees) || flankDegrees < 20 || flankDegrees > 50) throw Standard_Failure("a thread's flanks lean 20 to 50 degrees");
         const double length = end - start;
         if (!std::isfinite(pitch) || pitch < 0.2 || pitch > 20) throw Standard_Failure("pitch must be 0.2 to 20 mm");
         if (!std::isfinite(length) || length < pitch * 0.5) throw Standard_Failure("the thread is shorter than half a pitch");
@@ -694,10 +695,11 @@ SSKShape *ssk_thread_tool(SSKVec3 origin, SSKVec3 axis, SSKVec3 reference, doubl
         if (xv.Magnitude() < 1e-9) throw Standard_Failure("the reference direction is along the axis");
         const gp_Dir x(xv);
         const gp_Pnt o(origin.x, origin.y, origin.z);
-        // The ridge: an ISO 60° profile, P/8 wide at its crest, widening toward the root. It starts a
-        // little inside the root so it fully divides whatever it is cut from or subtracted from.
-        const double tan30 = std::tan(M_PI / 6), inner = rootRadius - 0.05 * pitch;
-        const double crestHalf = pitch / 16, baseHalf = crestHalf + (crestRadius - inner) * tan30;
+        // The ridge: P/8 wide at its crest, widening toward the root along flanks leaning
+        // `flankDegrees` (ISO 60°: 30). It starts a little inside the root so it fully divides
+        // whatever it is cut from or subtracted from.
+        const double tanFlank = std::tan(flankDegrees * M_PI / 180), inner = rootRadius - 0.05 * pitch;
+        const double crestHalf = pitch / 16, baseHalf = crestHalf + (crestRadius - inner) * tanFlank;
         if (2 * baseHalf > 0.95 * pitch) throw Standard_Failure("the thread is too deep for its pitch");
         auto slab = [&](double radius) {
             return BRepPrimAPI_MakeCylinder(gp_Ax2(o.Translated(gp_Vec(z) * start), z, x), radius, length).Shape();
@@ -764,7 +766,7 @@ SSKShape *ssk_thread_tool(SSKVec3 origin, SSKVec3 axis, SSKVec3 reference, doubl
         // about the axis (2π ∫ r·width dr per turn), once per pitch of length over all the starts.
         // Between radii a and b, per pitch of length.
         auto ridgeBetween = [&](double a, double b) {
-            return 2 * M_PI * 2 * (crestHalf * (b * b - a * a) / 2 + tan30 * (crestRadius * (b * b - a * a) / 2 - (std::pow(b, 3) - std::pow(a, 3)) / 3));
+            return 2 * M_PI * 2 * (crestHalf * (b * b - a * a) / 2 + tanFlank * (crestRadius * (b * b - a * a) / 2 - (std::pow(b, 3) - std::pow(a, 3)) / 3));
         };
         const double expectedRidge = ridgeBetween(rootRadius, crestRadius) * length / pitch;
         auto commonOf = [](const TopoDS_Shape &a, const TopoDS_Shape &b, double fuzz) -> TopoDS_Shape {

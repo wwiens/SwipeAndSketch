@@ -96,8 +96,9 @@ SSKShape *ssk_shell(const SSKShape *shape, const int32_t *openFaces, int32_t fac
 SSKShape *ssk_extrude_outlines(SSKPlane plane, const double *xy, const int32_t *degrees, const int32_t *segmentCounts,
                                const int32_t *groups, const bool *filled, int32_t loopCount, double offset, double depth);
 /// The tool for a modeled screw thread about the axis through `origin` along `axis` (`reference` is
-/// any direction across it), from `start` to `end` along the axis. The thread has an ISO 60° profile
-/// of `pitch`, its ridge running from `rootRadius` to `crestRadius`. Internal (a nut, on a hole of
+/// any direction across it), from `start` to `end` along the axis. The thread's profile has flanks
+/// leaning `flankDegrees` (30 for ISO 60°, 45 for a printable 90° profile; 20–50) from a plane
+/// square to the axis, of `pitch`, its ridge running from `rootRadius` to `crestRadius`. Internal (a nut, on a hole of
 /// `surfaceRadius`): the ridge itself. External (a bolt, on a round boss of `surfaceRadius`): the
 /// grooves between its turns. Either way, subtract the result. `starts` ridges (1–8) wind side by
 /// side a pitch apart, so each turn advances `starts` pitches.
@@ -108,7 +109,7 @@ SSKShape *ssk_extrude_outlines(SSKPlane plane, const double *xy, const int32_t *
 /// reaching a little into the face so the union joins.
 SSKShape *ssk_thread_tool(SSKVec3 origin, SSKVec3 axis, SSKVec3 reference, double start, double end, double pitch,
                           double crestRadius, double rootRadius, double surfaceRadius, bool internal, bool leftHanded, int32_t starts,
-                          bool raised, double clipStart, double clipEnd);
+                          bool raised, double clipStart, double clipEnd, double flankDegrees);
 /// Tests only: makes ssk_thread_tool on this thread try just its fallback attempt `attempt` (0 is
 /// the first), or every attempt in turn again when it is -1. Returns how many attempts there are.
 int32_t ssk_set_thread_attempt(int32_t attempt);
