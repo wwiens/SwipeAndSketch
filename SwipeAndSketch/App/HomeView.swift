@@ -36,6 +36,9 @@ struct HomeView: View {
     @StateObject private var thumbnails = TemplateThumbnails.shared
     @State private var showAbout = false
     @State private var showPurchases = false
+    @State private var showQuickStart = false
+    /// Start a Blank Project waits for the quick start to close before asking where to save.
+    @State private var blankAfterQuickStart = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -64,7 +67,16 @@ struct HomeView: View {
         .tint(violet)
         .sheet(isPresented: $showAbout) { AboutView { showAbout = false } }
         .sheet(isPresented: $showPurchases) { PurchasesView { showPurchases = false } }
-        .onAppear { recents.refresh(); recents.watchDocuments() }
+        .sheet(isPresented: $showQuickStart, onDismiss: {
+            if blankAfterQuickStart { blankAfterQuickStart = false; model.newBlankProject() }
+        }) {
+            QuickStartView(startBlank: { blankAfterQuickStart = true; showQuickStart = false }) { showQuickStart = false }
+                .presentationSizing(.form)
+        }
+        .onAppear {
+            recents.refresh(); recents.watchDocuments()
+            if QuickStartView.showsOnLaunch { showQuickStart = true }
+        }
         // Projects may have changed in Files meanwhile (the Files section here, or the Files app).
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in recents.refresh() }
         .onChange(of: model.section) { _, section in if section == .home { recents.refresh() } }
@@ -292,4 +304,137 @@ private struct FilesBrowser: UIViewControllerRepresentable {
     let controller: UIViewController
     func makeUIViewController(context: Context) -> UIViewController { controller }
     func updateUIViewController(_ controller: UIViewController, context: Context) { }
+}
+
+// MARK: Quick start
+
+/// The first-launch quick start (user decision, October 26, 2026): Apple Pencil is required, then
+/// a first part in four steps. Shown once over Home; About shows it again.
+struct QuickStartView: View {
+    /// Starts a blank project; nil where none can be started (from About), which shows Done instead.
+    var startBlank: (() -> Void)?
+    var onDone: () -> Void
+    @State private var page = 0
+
+    /// Set once the quick start has been seen, however it was closed.
+    static let seenKey = "quickStart.seen"
+
+    /// Whether Home shows it by itself: the first time only, and never under tests (Debug builds
+    /// show it with `--quick-start`).
+    static var showsOnLaunch: Bool {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--quick-start") { return true }
+        if arguments.contains(where: { $0.hasPrefix("--ui-testing") }) || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            return false
+        }
+        #endif
+        return !UserDefaults.standard.bool(forKey: seenKey)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Spacer()
+                if page == 0 {
+                    Button("Skip", action: onDone).font(.system(size: 16, weight: .medium)).accessibilityIdentifier("quickstart.skip")
+                }
+            }
+            .frame(height: 28)
+            .padding(.horizontal, 24).padding(.top, 18)
+            Group {
+                if page == 0 { pencilPage } else { firstPartPage }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .padding(.horizontal, 36)
+            footer.padding(.horizontal, 28).padding(.bottom, 26)
+        }
+        .background(card.ignoresSafeArea())
+        .tint(violet)
+        .onDisappear { UserDefaults.standard.set(true, forKey: Self.seenKey) }
+    }
+
+    private var pencilPage: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            SSIconGlyph(icon: .sketch, size: 40, color: paper)
+                .frame(width: 72, height: 72)
+                .background(violet, in: RoundedRectangle(cornerRadius: 20))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Apple Pencil required").font(.system(size: 30, weight: .bold, design: .rounded)).foregroundStyle(ink)
+                    .accessibilityAddTraits(.isHeader).accessibilityIdentifier("quickstart.title")
+                Text("Swipe & Sketch is built for Apple Pencil. It is how you draw and pick things on the canvas, so keep it at hand.")
+                    .font(.system(size: 17)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
+            }
+            VStack(alignment: .leading, spacing: 16) {
+                row(.sketch, "Apple Pencil", "Draws, selects, and drags shapes and faces. A tap selects; a quick double-tap picks a whole solid.")
+                row(.resetView, "Fingers", "Move around the model: one finger orbits, two fingers pan, and a pinch zooms. Fingers never draw.")
+                row(.select, "Either one", "Presses buttons and taps a size to type an exact value.")
+            }
+        }
+    }
+
+    private var firstPartPage: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Your first part").font(.system(size: 30, weight: .bold, design: .rounded)).foregroundStyle(ink)
+                    .accessibilityAddTraits(.isHeader).accessibilityIdentifier("quickstart.title")
+                Text("A block for your printer in four steps.").font(.system(size: 17)).foregroundStyle(muted)
+            }
+            VStack(alignment: .leading, spacing: 16) {
+                row(.sketch, "1. Sketch", "Tap Sketch in the dock at the bottom, then the plane lying flat at the origin.")
+                row(.rectangle, "2. Draw", "Drag a rectangle with Pencil. Tap a size beside it to type an exact one.")
+                row(.extrude, "3. Make it solid", "Tap Finish Sketch, tap inside the rectangle, then Extrude. Drag the arrow up and tap Done.")
+                row(.send, "4. Print it", "Open the project menu at the top and choose Send to Slicer or Export 3MF.")
+            }
+            Text("Stuck? Tap the help button beside the hint above the dock for help with what you are doing, or Controls at the bottom right for the whole guide.")
+                .font(.system(size: 14)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func row(_ icon: SSIcon, _ title: String, _ detail: String) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            SSIconTile(icon: icon).accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.system(size: 17, weight: .semibold)).foregroundStyle(ink)
+                Text(detail).font(.system(size: 15)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var footer: some View {
+        HStack(spacing: 12) {
+            // Which page this is.
+            HStack(spacing: 6) {
+                ForEach(0..<2) { index in
+                    Circle().fill(index == page ? violet : hairline).frame(width: 8, height: 8)
+                }
+            }
+            .accessibilityElement().accessibilityLabel("Page \(page + 1) of 2")
+            Spacer()
+            if page == 0 {
+                primaryButton("Next", id: "quickstart.next") { withAnimation(.easeInOut(duration: 0.2)) { page = 1 } }
+            } else {
+                Button("Back") { withAnimation(.easeInOut(duration: 0.2)) { page = 0 } }
+                    .font(.system(size: 16, weight: .medium)).accessibilityIdentifier("quickstart.back")
+                if let startBlank {
+                    Button("Look Around", action: onDone).font(.system(size: 16, weight: .medium)).padding(.leading, 8)
+                        .accessibilityIdentifier("quickstart.done")
+                    primaryButton("Start a Blank Project", id: "quickstart.blank", action: startBlank)
+                } else {
+                    primaryButton("Done", id: "quickstart.done", action: onDone)
+                }
+            }
+        }
+    }
+
+    private func primaryButton(_ title: String, id: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title).font(.system(size: 17, weight: .semibold)).foregroundStyle(paper)
+                .padding(.horizontal, 22).frame(height: 46)
+                .background(violet, in: Capsule())
+        }
+        .buttonStyle(.plain).accessibilityIdentifier(id)
+    }
 }

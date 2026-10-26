@@ -9,6 +9,7 @@ private let violet = Color("ss-violet")
 /// rebuild it against a modified Open CASCADE (Docs/Kernel.md, README.md).
 struct AboutView: View {
     var onDone: () -> Void
+    @State private var showQuickStart = false
 
     static let repository = URL(string: "https://github.com/wwiens/SwipeAndSketch")
     static let openCascade = URL(string: "https://dev.opencascade.org")
@@ -38,6 +39,8 @@ struct AboutView: View {
                     Text("Apple Intelligence, for the assistant. Modeling works without it, and without a connection; the walkthroughs in help and purchases need one.")
                 }
                 Section("Help and privacy") {
+                    Button { showQuickStart = true } label: { Text("Quick Start").foregroundStyle(violet) }
+                        .accessibilityIdentifier("about.quickStart")
                     if let support = Self.support {
                         Link(destination: support) { Text("Contact Support").foregroundStyle(violet) }
                             .accessibilityIdentifier("about.support")
@@ -64,6 +67,7 @@ struct AboutView: View {
                 }
             }
             .navigationTitle("About").navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $showQuickStart) { QuickStartView(startBlank: nil) { showQuickStart = false }.presentationSizing(.form) }
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done", action: onDone) } }
         }
     }

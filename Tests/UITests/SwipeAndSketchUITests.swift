@@ -113,6 +113,48 @@ import XCTest
         XCTAssertTrue(app.buttons["home.recent.Gridfinity Bin 3×1×6"].exists)
         XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'home.recent.Raspberry'")).firstMatch.exists)
     }
+    func testQuickStartShowsPencilThenAFirstPartAndComesBackFromAbout() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--quick-start"]
+        app.launch()
+        let title = app.staticTexts["quickstart.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 20))
+        XCTAssertEqual(title.label, "Apple Pencil required")
+        app.buttons["quickstart.next"].tap()
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Your first part"), object: title)], timeout: 5), .completed)
+        XCTAssertTrue(app.buttons["quickstart.blank"].exists)
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "Quick start, first part"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["quickstart.back"].tap()
+        XCTAssertTrue(app.buttons["quickstart.next"].waitForExistence(timeout: 5))
+        app.buttons["quickstart.next"].tap()
+        app.buttons["quickstart.done"].tap()
+        XCTAssertTrue(app.buttons["home.blank"].waitForExistence(timeout: 5))
+        XCTAssertFalse(title.exists, "Look Around closes it")
+        // About shows it again, ending with Done.
+        app.buttons["home.about"].tap()
+        app.buttons["about.quickStart"].tap()
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        app.buttons["quickstart.next"].tap()
+        XCTAssertFalse(app.buttons["quickstart.blank"].exists, "From About there is no project to start")
+        app.buttons["quickstart.done"].tap()
+        XCTAssertFalse(title.waitForExistence(timeout: 2))
+    }
+
+    func testQuickStartStartsABlankProject() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--quick-start"]
+        app.launch()
+        XCTAssertTrue(app.buttons["quickstart.next"].waitForExistence(timeout: 20))
+        app.buttons["quickstart.next"].tap()
+        app.buttons["quickstart.blank"].tap()
+        // The quick start closes first, then the save sheet asks where the project goes.
+        XCTAssertTrue(app.buttons["DOCPicker.actionButton"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.textFields.firstMatch.value as? String, "Untitled Project")
+    }
+
     func testTemplatesWaitForUnlockWhenViewOnly() {
         continueAfterFailure = false
         let app = XCUIApplication()
