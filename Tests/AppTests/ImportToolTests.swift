@@ -1,5 +1,6 @@
 import XCTest
 import SceneKit
+import UniformTypeIdentifiers
 import simd
 @testable import SwipeAndSketch
 
@@ -81,5 +82,15 @@ import simd
         importFile(session, url)
         XCTAssertTrue(session.workspace.bodies.isEmpty)
         XCTAssertTrue(session.saveError?.hasPrefix("Import failed.") ?? false)
+    }
+
+    /// The picker offers declared (not made-up) types for every extension, so the files can be chosen.
+    func testImportOffersADeclaredTypeForEveryExtension() {
+        for (mesh, extensions) in [(false, ["step", "stp"]), (true, ["stl", "3mf"])] {
+            let types = WorkspaceView.importTypes(mesh: mesh)
+            for ext in extensions {
+                XCTAssertTrue(types.contains { !$0.isDynamic && ($0.tags[.filenameExtension] ?? []).contains(ext) }, ext)
+            }
+        }
     }
 }

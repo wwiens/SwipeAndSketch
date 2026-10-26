@@ -180,7 +180,7 @@ struct WorkspaceView: View {
         .sheet(item: $session.exportItem) { item in ShareSheet(url: item.url).ignoresSafeArea() }
         .sheet(item: $session.printSheet) { mode in PrintSheet(session: session, mode: mode) }
         .fileImporter(isPresented: Binding(get: { importingSTEP || importingMesh }, set: { if !$0 { importingSTEP = false; importingMesh = false } }),
-                      allowedContentTypes: (importingMesh ? ["stl", "3mf"] : ["step", "stp"]).compactMap { UTType(filenameExtension: $0) }) { result in
+                      allowedContentTypes: Self.importTypes(mesh: importingMesh)) { result in
             switch result {
             case .success(let url): if ["stl", "3mf"].contains(url.pathExtension.lowercased()) { session.importMesh(from: url) } else { session.importSTEP(from: url) }
             case .failure(let error): session.saveError = "Import failed. \(error.localizedDescription)"
@@ -1135,6 +1135,18 @@ struct WorkspaceView: View {
             .disabled(!session.canChangeRows)
         default: EmptyView()
         }
+    }
+
+    /// The file types Import STEP (or Import Mesh) offers: whatever this iPad calls the extensions,
+    /// plus the app's own declarations (Info.plist), so the files are never greyed out in the picker.
+    static func importTypes(mesh: Bool) -> [UTType] {
+        let extensions = mesh ? ["stl", "3mf"] : ["step", "stp"]
+        let declared = (mesh ? ["stl", "3mf"] : ["step"]).compactMap { UTType("noventix.SwipeAndSketch.\($0)") }
+        var types: [UTType] = []
+        for type in extensions.compactMap({ UTType(filenameExtension: $0, conformingTo: .data) }) + declared where !types.contains(type) {
+            types.append(type)
+        }
+        return types
     }
 
     /// "1 sketch · 2 solids": sketch objects (not shapes) and solids.

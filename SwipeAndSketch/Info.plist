@@ -16,6 +16,36 @@
             <key>public.mime-type</key><string>application/vnd.swipesketch.project+json</string>
         </dict>
     </dict></array>
+    <key>UTImportedTypeDeclarations</key><array>
+        <dict>
+            <key>UTTypeIdentifier</key><string>noventix.SwipeAndSketch.step</string>
+            <key>UTTypeDescription</key><string>STEP Model</string>
+            <key>UTTypeConformsTo</key><array><string>public.data</string><string>public.3d-content</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>step</string><string>stp</string></array>
+                <key>public.mime-type</key><string>model/step</string>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>noventix.SwipeAndSketch.stl</string>
+            <key>UTTypeDescription</key><string>STL Mesh</string>
+            <key>UTTypeConformsTo</key><array><string>public.data</string><string>public.3d-content</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>stl</string></array>
+                <key>public.mime-type</key><string>model/stl</string>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>noventix.SwipeAndSketch.3mf</string>
+            <key>UTTypeDescription</key><string>3MF Model</string>
+            <key>UTTypeConformsTo</key><array><string>public.data</string><string>public.3d-content</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>3mf</string></array>
+                <key>public.mime-type</key><string>model/3mf</string>
+            </dict>
+        </dict>
+    </array>
+    <key>UILaunchScreen</key><dict><key>UIColorName</key><string>ss-canvas</string></dict>
     <key>LSSupportsOpeningDocumentsInPlace</key><true/>
     <key>UIFileSharingEnabled</key><true/>
     <key>UISupportsDocumentBrowser</key><true/>
