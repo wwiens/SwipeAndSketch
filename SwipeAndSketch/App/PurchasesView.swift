@@ -15,6 +15,8 @@ struct PurchasesView: View {
     @ObservedObject private var license = LicenseStore.shared
     @Environment(\.purchase) private var purchase
     @State private var redeeming = false
+    /// The AI Assistant is not sold on an iPad that cannot run either model.
+    private let assistantRuns = AssistantEngine.deviceCanRunAssistant
 
     /// The trial offer opens by itself only once per launch.
     static var offeredThisLaunch = false
@@ -33,9 +35,12 @@ struct PurchasesView: View {
                 if license.access.canStartTrial {
                     Section("Free trial") {
                         item(.trial, title: "7-Day Free Trial",
-                             detail: "Every tool, including the AI Assistant, free for 7 days. No payment and no subscription. "
-                                + "When the 7 days are over, your models stay yours: you can still open, view, measure, section, and export them, "
-                                + "but changing them needs Unlock (\(price(.unlock))), and the AI Assistant needs its own purchase (\(price(.assistant))).",
+                             detail: license.access.ownsUnlock
+                                ? "The AI Assistant free for 7 days. No payment and no subscription. "
+                                    + "Afterwards it needs its own purchase (\(price(.assistant)))."
+                                : "Every tool, including the AI Assistant, free for 7 days. No payment and no subscription. "
+                                    + "When the 7 days are over, your models stay yours: you can still open, view, measure, section, and export them, "
+                                    + "but changing them needs Unlock (\(price(.unlock))), and the AI Assistant needs its own purchase (\(price(.assistant))).",
                              action: "Start Free Trial")
                     }
                 }
@@ -44,10 +49,12 @@ struct PurchasesView: View {
                          detail: "Edit your models and use every modeling tool, for good. The AI Assistant is a separate purchase.",
                          owned: license.access.ownsUnlock)
                     item(.assistant, title: "AI Assistant",
-                         detail: license.access.ownsUnlock || license.access.ownsAssistant
-                            ? "Ask about your model and have the assistant change it, for good."
-                            : "Ask about your model and have the assistant change it. Available once Swipe & Sketch is unlocked.",
-                         owned: license.access.ownsAssistant, enabled: license.access.canBuyAssistant)
+                         detail: !assistantRuns && !license.access.ownsAssistant
+                            ? "This iPad does not support Apple Intelligence, so the AI Assistant cannot run on it."
+                            : license.access.ownsUnlock || license.access.ownsAssistant
+                                ? "Ask about your model and have the assistant change it, for good. Needs Apple Intelligence."
+                                : "Ask about your model and have the assistant change it. Needs Apple Intelligence; available once Swipe & Sketch is unlocked.",
+                         owned: license.access.ownsAssistant, enabled: license.access.canBuyAssistant && assistantRuns)
                 }
                 Section {
                     Button("Restore Purchases") { Task { await license.restore() } }

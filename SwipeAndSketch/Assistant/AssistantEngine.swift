@@ -69,6 +69,16 @@ struct AssistantFailure: Error, LocalizedError, Equatable {
         }
     }
 
+    /// Whether this iPad could ever run the assistant: false only when neither model is offered on
+    /// it at all (not when Apple Intelligence is off or a model is still downloading).
+    static var deviceCanRunAssistant: Bool {
+        if case .unavailable(.deviceNotEligible) = SystemLanguageModel.default.availability {
+            guard PrivateCloudEntitlement.isPresent else { return false }
+            if case .unavailable(.deviceNotEligible) = PrivateCloudComputeLanguageModel().availability { return false }
+        }
+        return true
+    }
+
     /// Backends to try for a choice, best first.
     static func backends(for choice: AssistantModelChoice) -> [AssistantBackend] {
         switch choice {

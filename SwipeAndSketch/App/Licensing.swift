@@ -117,6 +117,8 @@ struct LicenseAccess: Equatable, Sendable {
 
     func product(_ id: ProductID) -> Product? { products[id] }
 
+    private static let notAnswering = "The App Store is not answering right now."
+
     func loadProducts() async {
         guard fixed == nil, !isLoadingProducts else { return }
         isLoadingProducts = true
@@ -124,9 +126,11 @@ struct LicenseAccess: Equatable, Sendable {
         do {
             let loaded = try await Product.products(for: ProductID.allCases.map(\.rawValue))
             products = Dictionary(uniqueKeysWithValues: loaded.compactMap { product in ProductID(rawValue: product.id).map { ($0, product) } })
-            if products.isEmpty { message = "The App Store is not answering right now. Check your connection and try again." }
+            if products.isEmpty { message = Self.notAnswering + " Check your connection and try again." }
+            // An earlier failure to reach the App Store is over.
+            else if message?.hasPrefix(Self.notAnswering) == true { message = nil }
         } catch {
-            message = "The App Store is not answering right now. \(error.localizedDescription)"
+            message = Self.notAnswering + " \(error.localizedDescription)"
         }
     }
 

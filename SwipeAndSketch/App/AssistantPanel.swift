@@ -133,7 +133,9 @@ struct AssistantPanel: View {
     private var locked: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(license.access.ownsUnlock
-                 ? "The free trial of the AI Assistant has ended. Buy AI Assistant to keep asking about and changing your models."
+                 ? license.access.trialStart == nil
+                    ? "Start the free 7-day trial of the AI Assistant, or buy it to ask about and change your models."
+                    : "The free trial of the AI Assistant has ended. Buy AI Assistant to keep asking about and changing your models."
                  : license.access.trialStart == nil
                     ? "Start the free 7-day trial to use the AI Assistant."
                     : "The free trial has ended. The AI Assistant comes back with Unlock and the AI Assistant purchase.")
