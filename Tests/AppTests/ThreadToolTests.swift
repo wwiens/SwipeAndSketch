@@ -39,6 +39,29 @@ import simd
         return try XCTUnwrap((0..<solid.faceCount).first { solid.faceCylinder($0) != nil })
     }
 
+    /// Changing the thread's settings quickly (menu taps faster than a build) never runs two builds
+    /// on the solid at once: overlapping Open CASCADE booleans on one shape crashed in the simulator
+    /// (REC-005). Only the latest settings are built, and the preview follows them.
+    func testQuickThreadChangesBuildOneAtATimeAndEndOnTheLatest() async throws {
+        let (session, _) = try drilledScene()
+        session.chooseTool(.thread)
+        session.beginThread(bodyID: session.workspace.bodies[0].id, face: try holeWall(session))
+        let sizes = ["M8", "M10", "M12", "M10", "M8"]
+        for round in 0..<12 {
+            session.chooseThreadSize(sizes[round % sizes.count])
+            session.setThreadStarts(round % 3 == 0 ? 2 : 1)
+            session.setThreadLeftHanded(round % 2 == 0)
+            try await Task.sleep(for: .milliseconds(40))
+        }
+        session.chooseThreadSize("M10")
+        await session.threadPreviewSettled()
+        XCTAssertLessThanOrEqual(ModelingSession.mostThreadBuildsAtOnce, 1)
+        XCTAssertEqual(session.threadDraft?.spec.size, "M10")
+        let preview = try XCTUnwrap(session.threadPreview)
+        let thread = try XCTUnwrap(preview.bodies[0].cuts.last?.thread)
+        XCTAssertEqual(thread.size, "M10", "The preview is of the latest settings")
+    }
+
     func testThreadToolCutsAnM8NutThreadInTheHole() async throws {
         let (session, controller) = try drilledScene()
         session.chooseTool(.thread)

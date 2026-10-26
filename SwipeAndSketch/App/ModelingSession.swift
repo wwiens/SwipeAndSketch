@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 import Combine
 import simd
 
@@ -1070,6 +1071,8 @@ struct DimensionEdit: Identifiable {
     @Published private(set) var isBuildingText = false
     @Published private(set) var textError: String?
     private var textGeneration = 0
+    /// The text build running, which the next waits for: Open CASCADE builds on one solid must not overlap.
+    private var textBuild: Task<Void, Never>?
     /// The last text's settings, for the next.
     private var lastText = (text: "Text", font: TextFonts.defaultFont, height: 6.0, depth: 0.8)
     @Published private(set) var threadDraft: ThreadDraft?
@@ -1082,6 +1085,9 @@ struct DimensionEdit: Identifiable {
     @Published private(set) var isMakingMatingPart = false
     /// Bumped with each change, so a preview that finishes late for an older draft is dropped.
     private var threadGeneration = 0
+    /// The thread build running, which the next waits for: overlapping Open CASCADE booleans on one
+    /// solid crashed in the simulator (REC-005), and quick menu changes would start many at once.
+    private var threadBuild: Task<Void, Never>?
     @Published private(set) var pegDraft: PegDraft?
     @Published private(set) var pegPreview: Workspace?
     /// Solids the pending peg sockets, in document order.
@@ -5581,7 +5587,11 @@ struct DimensionEdit: Identifiable {
         next.bodies[index] = next.bodies[index].placing(operation, replacing: draft.replacing)
         let body = next.bodies[index]
         isBuildingText = true
-        Task { [weak self] in
+        let previous = textBuild
+        textBuild = Task { [weak self] in
+            // One build at a time, and only the latest text: a newer one makes this one moot.
+            await previous?.value
+            guard generation == self?.textGeneration else { return }
             let builds = await Task.detached(priority: .userInitiated) { body.isValid && (try? SolidKernel.solid(for: body)) != nil }.value
             guard let self, generation == self.textGeneration else { return }
             self.isBuildingText = false
@@ -5762,8 +5772,14 @@ struct DimensionEdit: Identifiable {
         let replaced = draft.replacing.flatMap { body.cuts.indices.contains($0) ? body.cuts.remove(at: $0) : nil }
         let base = workspace, step = draft.replacing
         isBuildingThread = true
-        Task { [weak self, body] in
+        let previous = threadBuild
+        threadBuild = Task { [weak self, body] in
+            // One build at a time, and only the latest settings: a newer change makes this one moot.
+            await previous?.value
+            guard generation == self?.threadGeneration else { return }
             let (threaded, wall) = await Task.detached(priority: .userInitiated) {
+                Self.threadBuilds.withLock { $0.now += 1; $0.most = max($0.most, $0.now) }
+                defer { Self.threadBuilds.withLock { $0.now -= 1 } }
                 var threaded = body.threading(spec, at: step)
                 if let step, let replaced { threaded?.cuts[step].id = replaced.id }
                 return (threaded, (try? SolidKernel.solid(for: body)).flatMap { body.wallBehindThread(spec, in: $0) })
@@ -5780,6 +5796,10 @@ struct DimensionEdit: Identifiable {
             self.threadPreview = next
         }
     }
+
+    /// Thread builds running now, and the most at once (tests).
+    nonisolated private static let threadBuilds = OSAllocatedUnfairLock(initialState: (now: 0, most: 0))
+    static var mostThreadBuildsAtOnce: Int { threadBuilds.withLock { $0.most } }
 
     /// Waits for the thread preview being built (tests).
     func threadPreviewSettled() async {
