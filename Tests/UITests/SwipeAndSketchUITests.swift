@@ -771,7 +771,7 @@ import XCTest
         let detail = app.staticTexts["hint.detail"]
         XCTAssertTrue(detail.waitForExistence(timeout: 5))
         XCTAssertTrue(detail.label.hasPrefix("Solid selected."), detail.label)
-        XCTAssertTrue(detail.label.hasSuffix("keep the original."), "The whole hint")
+        XCTAssertTrue(detail.label.hasSuffix("Double-tap another solid to pick it too."), "The whole hint")
         XCTAssertTrue(app.staticTexts["help.summary"].exists, "A plain-language overview")
         let overview = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         overview.name = "Help card overview"; overview.lifetime = .keepAlways; add(overview)
