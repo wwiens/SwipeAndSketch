@@ -321,6 +321,9 @@ import SwiftUI
         XCTAssertTrue(Licenses.openCascadeException.hasPrefix("Open CASCADE exception (version 1.0)"))
         XCTAssertEqual(AboutView.repository?.absoluteString, "https://github.com/wwiens/SwipeAndSketch")
         XCTAssertEqual(AboutView.version, "Version 1.0 (1)")
+        // App Review asks for the privacy policy inside the app as well as in the store.
+        XCTAssertEqual(AboutView.privacy?.absoluteString, "https://swipesketch.com/privacy/")
+        XCTAssertEqual(AboutView.support?.absoluteString, "https://swipesketch.com/support/")
 
         let host = UIHostingController(rootView: AboutView {})
         host.view.frame = CGRect(x: 0, y: 0, width: 600, height: 900)

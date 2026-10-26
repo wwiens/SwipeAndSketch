@@ -12,6 +12,8 @@ struct AboutView: View {
 
     static let repository = URL(string: "https://github.com/wwiens/SwipeAndSketch")
     static let openCascade = URL(string: "https://dev.opencascade.org")
+    static let privacy = URL(string: "https://swipesketch.com/privacy/")
+    static let support = URL(string: "https://swipesketch.com/support/")
 
     static var version: String {
         let info = Bundle.main.infoDictionary
@@ -33,7 +35,17 @@ struct AboutView: View {
                 }
                 Section("What you need") {
                     Text("Apple Pencil. Swipe & Sketch draws, selects, and edits geometry with Apple Pencil only; fingers move the view and press buttons.")
-                    Text("Apple Intelligence, for the assistant. Everything else works without it, and without a connection.")
+                    Text("Apple Intelligence, for the assistant. Modeling works without it, and without a connection; the walkthroughs in help and purchases need one.")
+                }
+                Section("Help and privacy") {
+                    if let support = Self.support {
+                        Link(destination: support) { Text("Contact Support").foregroundStyle(violet) }
+                            .accessibilityIdentifier("about.support")
+                    }
+                    if let privacy = Self.privacy {
+                        Link(destination: privacy) { Text("Privacy Notice").foregroundStyle(violet) }
+                            .accessibilityIdentifier("about.privacy")
+                    }
                 }
                 Section("Open CASCADE Technology") {
                     Text("Swipe & Sketch uses Open CASCADE Technology, the modeling kernel behind its solids, licensed under the GNU Lesser General Public License version 2.1 with the Open CASCADE exception.")
