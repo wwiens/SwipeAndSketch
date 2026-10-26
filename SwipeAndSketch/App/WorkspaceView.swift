@@ -196,7 +196,8 @@ struct WorkspaceView: View {
                 .accessibilityIdentifier("rename.confirm")
         } message: { Text("Leave it empty to go back to its number.") }
         .background {
-            // Keyboard shortcuts for a hardware keyboard: copy, paste, and duplicate the selection.
+            // Keyboard shortcuts for a hardware keyboard: copy, paste, and duplicate the selection
+            // (⌘Z and ⇧⌘Z are on the Undo and Redo buttons).
             Group {
                 Button("Copy") { session.copy() }.keyboardShortcut("c", modifiers: .command).disabled(!session.canCopy)
                 Button("Paste") { session.paste() }.keyboardShortcut("v", modifiers: .command).disabled(!session.canPaste)
@@ -1565,7 +1566,9 @@ struct WorkspaceView: View {
         ZStack(alignment: .bottom) {
             HStack(alignment: .bottom, spacing: 6) {
                 squareButton(.undo, label: "Undo", enabled: session.history.canUndo && !session.isEditingBlocked) { session.undo() }
+                    .keyboardShortcut("z", modifiers: .command)
                 squareButton(.redo, label: "Redo", enabled: session.history.canRedo && !session.isEditingBlocked) { session.redo() }
+                    .keyboardShortcut("z", modifiers: [.command, .shift])
                 Spacer()
                 squareButton(.help, label: "Controls") { session.showHelp = true }
             }
