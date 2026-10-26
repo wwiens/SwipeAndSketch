@@ -2281,7 +2281,7 @@ struct DimensionEdit: Identifiable {
         if isDraggingPivot { return "Drag the center onto a corner, an edge, or a circle or face center, of this solid or another, a sketch point, or the origin. Lift Pencil to turn about it there." }
         if isMultipleSelection {
             if pickedBodies.count > 1 {
-                return "\(pickedSummary) picked. Drag an arrow to move them all or an arc to turn them. Double-tap another solid to add it, or a picked one to take it out. Combine, Transform, Color, Duplicate, Export, and Delete take them all."
+                return "\(pickedSummary) picked. Drag an arrow to move them all or an arc to turn them. Double-tap another solid to add it, or a picked one to take it out. Combine, Transform, Color, Export, and Delete take them all."
             }
             if pickedEdges.count > 1 {
                 return "\(pickedSummary) picked. Tap more edges of this solid to add them, or a picked one to take it out. Fillet or Chamfer takes them all."
