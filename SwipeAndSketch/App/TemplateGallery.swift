@@ -152,6 +152,8 @@ struct TemplateSetup: View {
     var onCreate: (Project, String) -> Void
     @State private var values: TemplateValues
     @StateObject private var preview = TemplatePreview()
+    @ObservedObject private var license = LicenseStore.shared
+    @State private var showPurchases = false
     private let unit = LengthUnit(rawValue: UserDefaults.standard.string(forKey: "lengthUnit") ?? "") ?? .millimeters
 
     init(template: ProjectTemplate, onCreate: @escaping (Project, String) -> Void) {
@@ -175,6 +177,7 @@ struct TemplateSetup: View {
         .navigationTitle(template.title).navigationBarTitleDisplayMode(.inline)
         .onAppear { preview.update(template, values) }
         .onChange(of: values) { _, values in preview.update(template, values) }
+        .sheet(isPresented: $showPurchases) { PurchasesView { showPurchases = false } }
     }
 
     @ViewBuilder private var status: some View {
@@ -203,6 +206,11 @@ struct TemplateSetup: View {
                     }
                     Text("Once made, these are ordinary solids: change them with any tool.")
                         .font(.system(size: 13)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
+                    if !license.access.canEdit {
+                        // A template is a model made for you, so it needs editing like any other.
+                        Text("Making a template needs the free trial or Unlock.")
+                            .font(.system(size: 13, weight: .medium)).foregroundStyle(violet).fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 .padding(20)
             }
@@ -212,7 +220,7 @@ struct TemplateSetup: View {
                     .disabled(values == template.defaults).accessibilityIdentifier("templates.defaults")
                 Spacer()
                 Button(action: create) {
-                    Text("Create Project").font(.system(size: 17, weight: .semibold)).foregroundStyle(paper)
+                    Text(license.access.canEdit ? "Create Project" : "See Purchases").font(.system(size: 17, weight: .semibold)).foregroundStyle(paper)
                         .padding(.horizontal, 22).padding(.vertical, 12)
                         .background(preview.isReady ? violet : muted.opacity(0.5), in: Capsule())
                 }
@@ -228,6 +236,7 @@ struct TemplateSetup: View {
     }
 
     private func create() {
+        guard license.access.canEdit else { showPurchases = true; return }
         guard let workspace = preview.workspace, preview.isReady else { return }
         var project = Project(workspace: workspace)
         project.preview = ModelPicture.image(parts: preview.parts, side: CGFloat(ProjectPreview.side))?.pngData()

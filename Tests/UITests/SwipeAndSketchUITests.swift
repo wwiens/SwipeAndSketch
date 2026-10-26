@@ -113,6 +113,28 @@ import XCTest
         XCTAssertTrue(app.buttons["home.recent.Gridfinity Bin 3×1×6"].exists)
         XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'home.recent.Raspberry'")).firstMatch.exists)
     }
+    func testTemplatesWaitForUnlockWhenViewOnly() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing-documents", "--reset-document-tests", "--license-ended"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["project.title"].waitForExistence(timeout: 20))
+        // The trial offer may open by itself; close it first.
+        if app.buttons["purchases.done"].waitForExistence(timeout: 3) { app.buttons["purchases.done"].tap() }
+        app.buttons["Project menu"].tap(); app.buttons["project.new"].tap()
+        let bin = app.buttons["templates.gridfinity.bin"]
+        XCTAssertTrue(bin.waitForExistence(timeout: 10))
+        bin.tap()
+        // A template is a model made for you: view-only sees Purchases instead of a new project.
+        let create = app.buttons["templates.create"]
+        XCTAssertTrue(create.waitForExistence(timeout: 10))
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: create)], timeout: 20), .completed)
+        XCTAssertEqual(create.label, "See Purchases")
+        create.tap()
+        XCTAssertTrue(app.staticTexts["purchases.status"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["DOCPicker.actionButton"].exists)
+    }
+
     func app(arguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing"] + arguments
