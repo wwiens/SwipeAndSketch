@@ -1461,8 +1461,13 @@ struct DimensionEdit: Identifiable {
     /// Keeps the picked items the canvas still shows (none hidden or deleted); the first left leads.
     private func keepShownPicks() {
         let kept = selectedItems.filter { item in
-            if let sketch = sketchID(of: item), workspace.sketch(sketch) == nil || workspace.isHidden(sketch: sketch) { return false }
-            return !profiles(for: item).isEmpty
+            switch item {
+            case .body(let id), .edge(let id, _):
+                return workspace.bodies.contains { $0.id == id } && !workspace.isHidden(body: id)
+            default:
+                if let sketch = sketchID(of: item), workspace.sketch(sketch) == nil || workspace.isHidden(sketch: sketch) { return false }
+                return !profiles(for: item).isEmpty
+            }
         }
         guard kept != selectedItems else { return }
         selection = kept.first
@@ -1818,8 +1823,12 @@ struct DimensionEdit: Identifiable {
 
     /// Renames a solid, sketch, or construction plane (one undo step). An empty name goes back to
     /// its number.
+    /// Renaming, recoloring, or deleting a row waits for the operation in progress: its preview
+    /// was built from the model as it was, so Done would put the old names and colors back.
+    var canChangeRows: Bool { !isEditingBlocked && !hasOperationInProgress }
+
     func rename(_ item: ModelSelection, to name: String) {
-        guard !isEditingBlocked else { return }
+        guard canChangeRows else { return }
         let next: Workspace?
         switch item {
         case .body(let id): next = workspace.renaming(body: id, to: name)
@@ -1834,14 +1843,14 @@ struct DimensionEdit: Identifiable {
     /// A solid's color (one undo step); gray is the default.
     /// Several solids colored at once (picked together), as one undo step.
     func setColor(_ color: BodyColor, of ids: [UUID]) {
-        guard !isEditingBlocked else { return }
+        guard canChangeRows else { return }
         var next = workspace
         for index in next.bodies.indices where ids.contains(next.bodies[index].id) { next.bodies[index].color = color == .gray ? nil : color }
         commit(next)
     }
 
     func setColor(_ color: BodyColor, of id: UUID) {
-        guard !isEditingBlocked, let index = workspace.bodies.firstIndex(where: { $0.id == id }) else { return }
+        guard canChangeRows, let index = workspace.bodies.firstIndex(where: { $0.id == id }) else { return }
         var next = workspace
         next.bodies[index].color = color == .gray ? nil : color
         commit(next)
@@ -2045,14 +2054,16 @@ struct DimensionEdit: Identifiable {
     /// An operation is picking or previewing; its picks and preview are built on the model as it is.
     var hasOperationInProgress: Bool {
         projectionDraft != nil || splitDraft != nil || mirrorDraft != nil || patternDraft != nil || scaleDraft != nil || deleteFaceDraft != nil || unionDraft != nil ||
-            subtractDraft != nil || alignDraft != nil || revolveDraft != nil || offsetDraft != nil || sketchMirrorDraft != nil || section != nil || planeDraft != nil || isExtruding || isRevolving || isFinishing || isShelling || isPlacingHole || isPlacingPeg || isThreading || isPlacingText || !measureItems.isEmpty
+            subtractDraft != nil || alignDraft != nil || revolveDraft != nil || offsetDraft != nil || sketchMirrorDraft != nil || section != nil || planeDraft != nil || isExtruding || isRevolving || isFinishing || isShelling || isPlacingHole || isPlacingPeg || isThreading || isPlacingText || !measureItems.isEmpty ||
+            primitiveDraft != nil || constructionDraft != nil || shapeToolDraft != nil
     }
 
     /// Hiding or showing waits for the operation in progress (it would end it).
     var canToggleVisibility: Bool { !isEditingBlocked && !hasOperationInProgress }
 
     var canSelectItems: Bool {
-        (tool == .measure ? !isViewingBlocked : !isEditingBlocked) && (tool == .measure || projectionDraft != nil || splitDraft != nil || mirrorDraft != nil || patternDraft != nil || scaleDraft != nil || unionDraft != nil || subtractDraft != nil || alignDraft != nil || revolveDraft != nil || !isExtruding && !isRevolving && !isFinishing && !isShelling && !isPlacingHole && !isPlacingPeg && !isThreading && !isPlacingText && planeDraft == nil && tool != .deleteFace)
+        (tool == .measure ? !isViewingBlocked : !isEditingBlocked) && (tool == .measure || projectionDraft != nil || splitDraft != nil || mirrorDraft != nil || patternDraft != nil || scaleDraft != nil || unionDraft != nil || subtractDraft != nil || alignDraft != nil || revolveDraft != nil || !isExtruding && !isRevolving && !isFinishing && !isShelling && !isPlacingHole && !isPlacingPeg && !isThreading && !isPlacingText && planeDraft == nil && tool != .deleteFace &&
+            primitiveDraft == nil && constructionDraft == nil && shapeToolDraft == nil)
     }
 
     /// Selects a row of the Items list, exactly like tapping it on the canvas, including sketches
@@ -6665,6 +6676,15 @@ struct DimensionEdit: Identifiable {
         case .face, .edge, nil: false
         default: true
         }
+    }
+
+    /// A row's Delete: that item alone, whatever else is selected.
+    func deleteItem(_ item: ModelSelection) {
+        guard canChangeRows else { return }
+        cancelTransient()
+        selection = item
+        extraSelection = []
+        deleteSelection()
     }
 
     func deleteSelection() {

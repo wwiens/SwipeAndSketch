@@ -72,6 +72,17 @@ import simd
         session.pickShapeRegion(regions[0])
         session.pickShapeRegion(regions[1])
         XCTAssertNotNil(session.shapeToolPreview)
+        // The Model Tree waits while the loft is being made: its eyes and rows would end the tool's picks.
+        XCTAssertTrue(session.hasOperationInProgress)
+        XCTAssertFalse(session.canToggleVisibility)
+        XCTAssertFalse(session.canSelectItems)
+        session.toggleHidden(.sketch(try XCTUnwrap(session.workspace.sketches.first).id))
+        XCTAssertNotNil(session.shapeToolPreview, "The picks stay")
+        // Renaming waits too: Done would bring back the name the preview was built with.
+        XCTAssertFalse(session.canChangeRows)
+        let before = session.workspace
+        session.rename(.sketch(try XCTUnwrap(session.workspace.sketches.first).id), to: "Base")
+        XCTAssertEqual(session.workspace, before)
         attach(controller, "Loft from a square to a circle")
         session.confirmShapeTool()
         let loft = try XCTUnwrap(session.workspace.bodies.first)

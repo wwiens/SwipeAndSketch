@@ -1097,11 +1097,12 @@ struct WorkspaceView: View {
         switch item.selection {
         case .body, .sketch, .plane:
             Button { beginRename(item.selection) } label: { Label { Text("Rename…") } icon: { SSIconGlyph(icon: .rename, size: 20, color: ink) } }
-                .accessibilityIdentifier("item.rename")
+                .disabled(!session.canChangeRows).accessibilityIdentifier("item.rename")
         default: EmptyView()
         }
         if case .body(let id) = item.selection, let body = session.workspace.bodies.first(where: { $0.id == id }) {
             Menu { colorMenu(id, current: body.color ?? .gray) } label: { Label { Text("Color") } icon: { SSIconGlyph(icon: .color, size: 20, color: ink) } }
+                .disabled(!session.canChangeRows)
         }
         switch item.selection {
         case .body, .group:
@@ -1127,10 +1128,10 @@ struct WorkspaceView: View {
         }
         switch item.selection {
         case .body, .sketch, .plane:
-            Button(role: .destructive) {
-                session.selectItem(item.selection)
-                session.deleteSelection()
-            } label: { Label { Text("Delete") } icon: { SSIconGlyph(icon: .delete, size: 20, color: coral) } }
+            Button(role: .destructive) { session.deleteItem(item.selection) } label: {
+                Label { Text("Delete") } icon: { SSIconGlyph(icon: .delete, size: 20, color: coral) }
+            }
+            .disabled(!session.canChangeRows)
         default: EmptyView()
         }
     }

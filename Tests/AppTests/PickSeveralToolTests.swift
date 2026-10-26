@@ -50,6 +50,19 @@ import simd
         XCTAssertEqual(session.workspace.bodies.count, 2, "As one undo step")
     }
 
+    /// Hiding or showing something else keeps the solids picked; hiding one of them takes only it out.
+    func testPickedSolidsStayPickedWhenOtherItemsAreHidden() throws {
+        let (session, _, big, small) = try twoBoxes()
+        let other = try XCTUnwrap(session.newGroup())
+        let holder = try XCTUnwrap(session.newGroup(containing: .body(small)))
+        session.pickBody(small, after: [.body(big)])
+        XCTAssertEqual(session.selectedItems, [.body(big), .body(small)])
+        session.toggleHidden(.group(other))
+        XCTAssertEqual(session.selectedItems, [.body(big), .body(small)], "An unrelated group's eye leaves the picks")
+        session.toggleHidden(.group(holder))
+        XCTAssertEqual(session.selectedItems, [.body(big)], "The hidden solid leaves the picks")
+    }
+
     func testTappingMoreEdgesOfASolidFilletsThemAll() throws {
         let (session, controller) = boxScene()
         tap(controller, SIMD3(30, -20, 10))
