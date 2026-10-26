@@ -199,7 +199,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                 tips: ["Tap Rectangle again to switch between Corners and Center.", "A rectangle drawn from its center stays centered when you resize it."])
         case .circle:
             HelpOverview(
-                summary: "Draw a circle from its center. Arc and Slot share this tile.",
+                summary: "Draw a circle from its center. Arc, Slot, and the other shapes are in the same Shapes group.",
                 steps: ["Touch Pencil where the center goes.", "Drag out to the size you want and lift.", "Tap the diameter to type an exact size."],
                 tips: ["A circle inside another shape makes a hole in it when you extrude.", "Drag the center to move the circle, or its edge to resize it."])
         case .arc:
@@ -236,12 +236,12 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .offset:
             HelpOverview(
                 summary: "Offset draws a copy of an outline a set distance away: a lip for a lid, a wall around a shape, a gasket.",
-                steps: ["Choose Trim, then Offset.", "Tap a shape, or one line of an outline (the lines joined to it come too).", "Tap the distance to type it, then Done."],
+                steps: ["Choose Modify, then Offset.", "Tap a shape, or one line of an outline (the lines joined to it come too).", "Tap the distance to type it, then Done."],
                 tips: ["Flip offsets the other way; Both Sides makes a wall around the outline.", "Rounded rounds the outside corners."])
         case .sketchMirror:
             HelpOverview(
                 summary: "Mirror copies shapes across a line in the same sketch, for symmetric parts.",
-                steps: ["Choose Trim, then Mirror (or select a shape first).", "Tap the shapes to copy, then Mirror Line and the line to copy across.", "Tap Done."],
+                steps: ["Choose Modify, then Mirror (or select a shape first).", "Tap the shapes to copy, then Mirror Line and the line to copy across.", "Tap Done."],
                 tips: ["Draw a construction line down the middle to mirror across."])
         case .moveShape:
             HelpOverview(
@@ -461,7 +461,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .deleteFace:
             HelpOverview(
                 summary: "Delete Face takes faces off a solid and closes the gap, so a fillet, chamfer, hole, or boss disappears.",
-                steps: ["Select a face and tap Delete Face, or choose Fillet, then Delete Face.", "Tap more faces of the same feature, such as a hole's floor.", "Tap Done, or tap empty space."],
+                steps: ["Select a face and tap Delete Face, or choose Modify, then Delete Face.", "Tap more faces of the same feature, such as a hole's floor.", "Tap Done, or tap empty space."],
                 tips: ["For a round hole, tap its wall and choose Delete Hole instead: the whole hole goes in one tap, as if it had never been made, with a thread in it and any fillet or chamfer on its rim.",
                        "The faces around the gap grow to close it. If they cannot meet, pick the rest of the feature too.",
                        "To remove a whole solid, double-tap it and use the trash can."])
