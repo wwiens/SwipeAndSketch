@@ -1513,7 +1513,7 @@ struct DimensionEdit: Identifiable {
             return [ModelItem(selection: .sketch(sketch.id), name: sketchNames[sketch.id] ?? "Sketch", icon: .sketch, indent: indent,
                               isHidden: sketch.isHidden, isHiddenByGroup: byGroup)] +
                 workspace.shapes(in: sketch.id).map {
-                    ModelItem(selection: .shape($0.id), name: shapeNames[$0.id] ?? $0.kind.title, icon: Self.icon(for: $0.kind), indent: indent + 1,
+                    ModelItem(selection: .shape($0.id), name: shapeNames[$0.id] ?? $0.kind.title, icon: $0.isSpline ? .spline : Self.icon(for: $0.kind), indent: indent + 1,
                               isHiddenByGroup: byGroup || sketch.isHidden)
                 }
         }

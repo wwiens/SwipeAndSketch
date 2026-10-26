@@ -29,6 +29,9 @@ import simd
         XCTAssertLessThan(spline.points?.count ?? 99, 20)
         XCTAssertEqual(spline.plane.point(spline.start).x, -30, accuracy: 1.5)
         attach(controller, "A spline drawn freehand")
+        // Its Model Tree row shows the Spline icon, not Project's.
+        let row = session.itemGroups.flatMap(\.items).first { $0.selection == .shape(spline.id) }
+        XCTAssertEqual(row?.icon, .spline)
 
         session.chooseTool(.select)
         session.select(.shape(spline.id))
