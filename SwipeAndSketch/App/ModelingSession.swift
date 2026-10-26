@@ -15,6 +15,8 @@ enum ModelingTool: String, CaseIterable {
     case peg, fitTest
     /// A modeled screw thread on a hole or round boss.
     case thread
+    /// A container's neck threaded, with a lid already screwed on (Joints ▸ Screw Lid).
+    case screwLid
     /// Letters embossed onto or debossed into a face, placed like a hole.
     case text
     /// Keep only where solids overlap (Combine ▸ Intersect).
@@ -97,6 +99,7 @@ enum ModelingTool: String, CaseIterable {
         case .peg: .peg
         case .fitTest: .fitTest
         case .thread: .thread
+        case .screwLid: .thread
         case .text: .text
         case .box: .box
         case .cylinder: .cylinder
@@ -659,6 +662,13 @@ struct PegDraft: Equatable {
 
 /// A thread being set up on a hole or round boss. Its preview is built in the background (a long
 /// thread takes about a second), and Done waits for it.
+/// Screw Lid in progress: the neck's face and the lid's settings.
+struct ScrewLidDraft: Equatable {
+    var bodyID: UUID
+    var face: Int
+    var spec: ScrewLidSpec
+}
+
 struct ThreadDraft: Equatable {
     var bodyID: UUID
     var face: Int
@@ -1077,6 +1087,14 @@ struct DimensionEdit: Identifiable {
     private var lastText = (text: "Text", font: TextFonts.defaultFont, height: 6.0, depth: 0.8)
     @Published private(set) var threadDraft: ThreadDraft?
     @Published private(set) var threadPreview: Workspace?
+    @Published private(set) var screwLidDraft: ScrewLidDraft?
+    /// The model with the neck threaded and the lid added, and the lid's id there.
+    @Published private(set) var screwLidPreview: Workspace?
+    private(set) var screwLidLid: UUID?
+    @Published private(set) var screwLidError: String?
+    @Published private(set) var isBuildingScrewLid = false
+    private var screwLidGeneration = 0
+    private var screwLidBuild: Task<Void, Never>?
     @Published private(set) var isBuildingThread = false
     @Published private(set) var threadError: String?
     /// The thinnest wall a cut thread leaves behind it, when under a millimeter (0 when it cuts through).
@@ -1146,13 +1164,20 @@ struct DimensionEdit: Identifiable {
     func canEditDimension(_ target: DimensionTarget) -> Bool { target == .sectionOffset ? !isViewingBlocked : !isEditingBlocked }
     var projectName: String { document?.fileURL.deletingPathExtension().lastPathComponent ?? "Untitled Project" }
     var workspace: Workspace { history.workspace }
-    var displayWorkspace: Workspace { assistantPreview ?? editPreview ?? finishPreview ?? shellPreview ?? shapeToolPreview ?? primitivePreview ?? holePreview ?? pegPreview ?? threadPreview ?? textPreview ?? splitPreview ?? mirrorPreview ?? patternPreview ?? scalePreview ?? deleteFacePreview ?? sketchMirrorPreview ?? unionPreview ?? subtractPreview ?? alignPreview ?? revolvePreview ?? operationPreview ?? workspace }
+    var displayWorkspace: Workspace { assistantPreview ?? editPreview ?? finishPreview ?? shellPreview ?? shapeToolPreview ?? primitivePreview ?? holePreview ?? pegPreview ?? threadPreview ?? screwLidPreview ?? textPreview ?? splitPreview ?? mirrorPreview ?? patternPreview ?? scalePreview ?? deleteFacePreview ?? sketchMirrorPreview ?? unionPreview ?? subtractPreview ?? alignPreview ?? revolvePreview ?? operationPreview ?? workspace }
     var isShelling: Bool { shellDraft != nil }
     var isPlacingHole: Bool { holeDraft != nil }
     var isPlacingPeg: Bool { pegDraft != nil }
     var isThreading: Bool { threadDraft != nil }
     var isPlacingText: Bool { textDraft != nil }
     /// The selected face is a hole's wall or a round boss's side, which can take a thread.
+    /// A selected round boss (not a hole) can take a screw lid.
+    var canScrewLidSelectedFace: Bool {
+        guard canThreadSelectedFace, let face = selectedFace, let body = workspace.bodies.first(where: { $0.id == face.bodyID }),
+              let solid = try? SolidKernel.solid(for: body) else { return false }
+        return solid.cylinderSide(face.face) == 1
+    }
+
     var canThreadSelectedFace: Bool {
         guard let face = selectedFace, face.plane == nil, !isEditingBlocked,
               let body = workspace.bodies.first(where: { $0.id == face.bodyID }), let solid = try? SolidKernel.solid(for: body) else { return false }
@@ -2064,7 +2089,7 @@ struct DimensionEdit: Identifiable {
     var hasOperationInProgress: Bool {
         projectionDraft != nil || splitDraft != nil || mirrorDraft != nil || patternDraft != nil || scaleDraft != nil || deleteFaceDraft != nil || unionDraft != nil ||
             subtractDraft != nil || alignDraft != nil || revolveDraft != nil || offsetDraft != nil || sketchMirrorDraft != nil || section != nil || planeDraft != nil || isExtruding || isRevolving || isFinishing || isShelling || isPlacingHole || isPlacingPeg || isThreading || isPlacingText || !measureItems.isEmpty ||
-            primitiveDraft != nil || constructionDraft != nil || shapeToolDraft != nil
+            primitiveDraft != nil || constructionDraft != nil || shapeToolDraft != nil || screwLidDraft != nil
     }
 
     /// Hiding or showing waits for the operation in progress (it would end it).
@@ -2072,7 +2097,7 @@ struct DimensionEdit: Identifiable {
 
     var canSelectItems: Bool {
         (tool == .measure ? !isViewingBlocked : !isEditingBlocked) && (tool == .measure || projectionDraft != nil || splitDraft != nil || mirrorDraft != nil || patternDraft != nil || scaleDraft != nil || unionDraft != nil || subtractDraft != nil || alignDraft != nil || revolveDraft != nil || !isExtruding && !isRevolving && !isFinishing && !isShelling && !isPlacingHole && !isPlacingPeg && !isThreading && !isPlacingText && planeDraft == nil && tool != .deleteFace &&
-            primitiveDraft == nil && constructionDraft == nil && shapeToolDraft == nil)
+            primitiveDraft == nil && constructionDraft == nil && shapeToolDraft == nil && screwLidDraft == nil)
     }
 
     /// Selects a row of the Items list, exactly like tapping it on the canvas, including sketches
@@ -2231,6 +2256,12 @@ struct DimensionEdit: Identifiable {
             if isBuildingText { return "Building the letters…" }
             return (draft.depth > 0 ? "Raised" : "Sunk") + " text. Type it below, pick a font, or tap the height or depth. Tap elsewhere on the face to move it, or Done." +
                 (draft.replacing != nil ? " Cancel leaves the text as it was." : "")
+        }
+        if let draft = screwLidDraft {
+            if let screwLidError { return screwLidError }
+            if isBuildingScrewLid { return "Building the thread and the lid…" }
+            let s = draft.spec
+            return "A \(s.starts)-start, \(lengthText(s.pitch)) thread that closes in \(ThreadSpec.mm(s.turns)) \(s.turns == 1 ? "turn" : "turns"), and a \(s.ribbed ? "ribbed" : "smooth") lid screwed on (check it with Section). Done adds both."
         }
         if let draft = threadDraft {
             if let threadError { return threadError }
@@ -2400,6 +2431,7 @@ struct DimensionEdit: Identifiable {
             "Tap the flat face the peg stands on, such as a box's rim (hide the lid first to reach it)."
         case .fitTest: return ""
         case .thread: return "Tap the inside of a hole, or the side of a round boss, to thread it."
+        case .screwLid: return "Tap the outside of a container's round neck. It gets a thread and a lid screwed onto it."
         case .text: return sketchMode?.face != nil ? guidePrefix + "Tap where the text goes on the face." : "Select a flat face first, then choose Text."
         case .offsetPlane: return "Tap a flat face, sketch region, or plane to offset from."
         case .planeAngle:
@@ -2545,6 +2577,15 @@ struct DimensionEdit: Identifiable {
             endSketchMode()
             selection = nil
             tool = value
+            return
+        }
+        if value == .screwLid {
+            // A selected round boss (a container's neck) gets its lid at once.
+            if let face = selectedFace, canScrewLidSelectedFace { beginScrewLid(bodyID: face.bodyID, face: face.face); return }
+            cancelTransient()
+            endSketchMode()
+            selection = nil
+            tool = .screwLid
             return
         }
         if value == .thread {
@@ -3838,6 +3879,7 @@ struct DimensionEdit: Identifiable {
         clearShapeTool()
         clearPegDraft()
         clearThread()
+        clearScrewLid()
         clearTextDraft()
         clearUnion()
         clearSubtract()
@@ -5819,6 +5861,102 @@ struct DimensionEdit: Identifiable {
     /// Thread builds running now, and the most at once (tests).
     nonisolated private static let threadBuilds = OSAllocatedUnfairLock(initialState: (now: 0, most: 0))
     static var mostThreadBuildsAtOnce: Int { threadBuilds.withLock { $0.most } }
+
+    // MARK: Screw Lid (October 26, 2026)
+
+    /// Starts Screw Lid on a round boss: the neck's thread and its lid, at the usual settings.
+    func beginScrewLid(bodyID: UUID, face: Int) {
+        guard !isEditingBlocked, workspace.bodies.contains(where: { $0.id == bodyID }) else { return }
+        cancelTransient()
+        endSketchMode()
+        selection = nil
+        tool = .screwLid
+        updateScrewLid(ScrewLidDraft(bodyID: bodyID, face: face, spec: ScrewLidSpec(clearance: fitClearance)))
+    }
+
+    func setScrewLidPitch(_ pitch: Double) { changeScrewLid { $0.pitch = pitch } }
+    func setScrewLidStarts(_ starts: Int) { changeScrewLid { $0.starts = starts } }
+    func setScrewLidTurns(_ turns: Double) { changeScrewLid { $0.turns = turns } }
+    func setScrewLidTop(_ top: Double) { changeScrewLid { $0.top = top } }
+    /// The lid's whole height, or nil for the thread plus the top plus a millimeter.
+    func setScrewLidHeight(_ height: Double?) { changeScrewLid { $0.height = height } }
+    func setScrewLidRibbed(_ ribbed: Bool) { changeScrewLid { $0.ribbed = ribbed } }
+    func setScrewLidClearance(_ clearance: Double) { changeScrewLid { $0.clearance = clearance } }
+
+    private func changeScrewLid(_ change: (inout ScrewLidSpec) -> Void) {
+        guard var draft = screwLidDraft else { return }
+        change(&draft.spec)
+        guard draft.spec != screwLidDraft?.spec else { return }
+        updateScrewLid(draft)
+    }
+
+    /// The thread the neck takes now, without building it (for the bar's height choices).
+    var screwLidThread: ThreadSpec? {
+        guard let draft = screwLidDraft, let body = workspace.bodies.first(where: { $0.id == draft.bodyID }) else { return nil }
+        return try? ScrewLid.thread(on: body, face: draft.face, draft.spec).thread
+    }
+
+    /// Builds the threaded neck and its lid off the main thread, one build at a time, newest wins.
+    private func updateScrewLid(_ draft: ScrewLidDraft) {
+        screwLidDraft = draft
+        screwLidPreview = nil
+        screwLidLid = nil
+        screwLidError = nil
+        screwLidGeneration += 1
+        let generation = screwLidGeneration
+        guard let index = workspace.bodies.firstIndex(where: { $0.id == draft.bodyID }) else { return }
+        let body = workspace.bodies[index], base = workspace
+        isBuildingScrewLid = true
+        let previous = screwLidBuild
+        screwLidBuild = Task { [weak self] in
+            await previous?.value
+            guard generation == self?.screwLidGeneration else { return }
+            let result = await Task.detached(priority: .userInitiated) { Result { try ScrewLid.make(on: body, face: draft.face, draft.spec) } }.value
+            guard let self, generation == self.screwLidGeneration else { return }
+            self.isBuildingScrewLid = false
+            switch result {
+            case .success(let made):
+                var next = base
+                next.bodies[index] = made.jar
+                var lid = made.lid
+                lid.name = "Lid"
+                next.bodies.append(lid)
+                self.screwLidLid = lid.id
+                self.screwLidPreview = next
+            case .failure(let error):
+                self.screwLidError = (error as? ScrewLid.Failure)?.message ?? error.localizedDescription
+            }
+        }
+    }
+
+    func confirmScrewLid() {
+        guard screwLidDraft != nil, let preview = screwLidPreview, let lid = screwLidLid, !isBuildingScrewLid, !isEditingBlocked else { return }
+        commit(preview)
+        clearScrewLid()
+        selection = .body(lid)
+        status = "Added a screw lid"
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    func cancelScrewLid() {
+        clearScrewLid()
+        dimensionEdit = nil
+    }
+
+    private func clearScrewLid() {
+        if tool == .screwLid { tool = .select }
+        screwLidGeneration += 1
+        if screwLidDraft != nil { screwLidDraft = nil }
+        if screwLidPreview != nil { screwLidPreview = nil }
+        screwLidLid = nil
+        if isBuildingScrewLid { isBuildingScrewLid = false }
+        screwLidError = nil
+    }
+
+    /// Waits for the screw lid being built (tests).
+    func screwLidSettled() async {
+        while isBuildingScrewLid { try? await Task.sleep(for: .milliseconds(20)) }
+    }
 
     /// Waits for the thread preview being built (tests).
     func threadPreviewSettled() async {

@@ -1815,6 +1815,11 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             if session.threadDraft == nil, let hit = solidFace(at: point), hit.plane == nil { session.beginThread(bodyID: hit.bodyID, face: hit.face) }
             return
         }
+        if session.tool == .screwLid {
+            // Another round face moves the lid there.
+            if let hit = solidFace(at: point), hit.plane == nil { session.beginScrewLid(bodyID: hit.bodyID, face: hit.face) }
+            return
+        }
         if session.tool == .peg {
             // Off a face: a tap on a flat face sketches on it with the Peg tool ready, as Sketch would.
             if let face = solidFace(at: point), face.plane != nil {

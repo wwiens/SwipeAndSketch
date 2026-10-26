@@ -9,6 +9,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
     case extrude, extrudeFace, cut, join, revolve, fillet, chamfer, shell
     case union, subtract, intersect, split, align, mirror, pattern, scale, deleteFace, section, offsetPlane, midplane, project, measure, assistant
     case peg, fitTest, thread, matingPart, text
+    case screwLid
     case sweep
     case loft
     case rib
@@ -70,6 +71,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .peg: "Peg & Socket"
         case .fitTest: "Fit Test"
         case .thread: "Thread"
+        case .screwLid: "Screw Lid"
         case .matingPart: "Matching Part"
         case .text: "Text"
         case .split: "Split Body"
@@ -134,7 +136,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .intersect: .intersect
         case .peg: .peg
         case .fitTest: .fitTest
-        case .thread, .matingPart: .thread
+        case .thread, .matingPart, .screwLid: .thread
         case .text: .text
         case .split: .split
         case .align: .align
@@ -499,6 +501,16 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                        "Sunk text on a face that prints facing up comes out crisper than raised text on a side.",
                        "The letters are saved with the project, so they rebuild the same on any iPad.",
                        "To change text later, tap a letter and choose Edit Text."])
+        case .screwLid:
+            HelpOverview(
+                summary: "Make a container and its lid screw together in one step: the neck gets a raised thread, and a lid comes with it, already screwed on.",
+                steps: ["Make the container first, such as a shelled cylinder with an open top.",
+                        "Choose Joints, then Screw Lid, and tap the outside of the neck. Or select that face and tap Screw Lid above the dock.",
+                        "Pitch, Starts, and Turns set the thread: two starts close the lid in about a turn. Top, Height, and Grip set the lid.",
+                        "Tap Done. The container and the lid are separate solids; move the lid aside to print them both."],
+                tips: ["Check the fit with Section before printing: the lid's ridges sit between the neck's with the clearance all round.",
+                       "The thread uses the printable 45° profile, so the container prints upright and the lid upside down without supports.",
+                       "Print a short ring and collar first if you are unsure of your printer's clearance."])
         case .thread:
             HelpOverview(
                 summary: "Make a real screw thread in a hole (like a nut) or on a round boss (like a bolt), ready to print: cut into the face, or raised onto it.",
@@ -614,6 +626,7 @@ extension ModelingSession {
         if holeDraft != nil { return .hole }
         if pegDraft != nil { return .peg }
         if threadDraft != nil { return .thread }
+        if screwLidDraft != nil { return .screwLid }
         if textDraft != nil { return .text }
         if let finishDraft { return finishDraft.kind == .chamfer ? .chamfer : .fillet }
         if tool == .offsetPlane { return .offsetPlane }
@@ -691,6 +704,7 @@ extension ModelingSession {
         case .rib: return .rib
         case .loft: return .loft
         case .sweep: return .sweep
+        case .screwLid: return .screwLid
         }
     }
 }

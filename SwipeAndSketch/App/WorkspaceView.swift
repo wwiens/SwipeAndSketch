@@ -59,7 +59,7 @@ struct WorkspaceView: View {
     private var sketching: Bool { (session.sketchMode != nil || session.isPickingPlane) && !session.isExtruding && !session.isRevolving && !session.isFinishing }
     /// An operation is being set up: its own controls replace the dock until Done or Cancel.
     private var operationActive: Bool {
-        session.isExtruding || session.isRevolving || session.isFinishing || session.isShelling || session.holeDraft != nil || session.primitiveDraft != nil || session.pegDraft != nil || session.threadDraft != nil || session.textDraft != nil || session.tool.isPlaneTool || session.tool.isConstructionTool || session.tool.isShapeTool ||
+        session.isExtruding || session.isRevolving || session.isFinishing || session.isShelling || session.holeDraft != nil || session.primitiveDraft != nil || session.pegDraft != nil || session.threadDraft != nil || session.screwLidDraft != nil || session.textDraft != nil || session.tool.isPlaneTool || session.tool.isConstructionTool || session.tool.isShapeTool ||
             session.projectionDraft != nil || session.splitDraft != nil || session.mirrorDraft != nil || session.patternDraft != nil || session.unionDraft != nil || session.subtractDraft != nil ||
             session.alignDraft != nil || session.isMeasuring || session.scaleDraft != nil || session.deleteFaceDraft != nil || session.section != nil ||
             session.offsetDraft != nil || session.sketchMirrorDraft != nil
@@ -637,6 +637,9 @@ struct WorkspaceView: View {
                 matingMenu
             } else if session.canThreadSelectedFace {
                 stripButton("Thread", icon: .thread, id: "selection.thread") { session.beginThread(bodyID: face.bodyID, face: face.face) }
+                if session.canScrewLidSelectedFace {
+                    stripButton("Screw Lid", icon: .thread, id: "selection.screwLid") { session.beginScrewLid(bodyID: face.bodyID, face: face.face) }
+                }
             }
         } else {
             AnyView(flatFaceMoreActions)
@@ -1524,6 +1527,8 @@ struct WorkspaceView: View {
             }
         } else if let draft = session.threadDraft {
             threadBar(draft)
+        } else if let draft = session.screwLidDraft {
+            screwLidBar(draft)
         } else if session.pegDraft != nil {
             VStack(spacing: 8) {
                 HStack(spacing: 10) {
@@ -1801,6 +1806,71 @@ struct WorkspaceView: View {
         })
     }
 
+    /// Screw Lid's controls (October 26, 2026): the thread's pitch, starts, and turns to close, the
+    /// lid's top, height, and grip, and the clearance; then Cancel and Done.
+    private func screwLidBar(_ draft: ScrewLidDraft) -> AnyView {
+        let spec = draft.spec
+        let row = HStack(spacing: 10) {
+            screwLidMenu("Pitch", session.lengthText(spec.pitch), id: "screwLid.pitch",
+                         [2.0, 2.5, 3, 4, 5].map { ($0, session.lengthText($0), abs($0 - spec.pitch) < 1e-9) }, set: session.setScrewLidPitch)
+            screwLidMenu("Starts", "\(spec.starts)", id: "screwLid.starts",
+                         [1, 2, 3, 4].map { ($0, "\($0)", $0 == spec.starts) }, set: session.setScrewLidStarts)
+            screwLidMenu("Turns", ThreadSpec.mm(spec.turns), id: "screwLid.turns",
+                         [0.75, 1, 1.25, 1.5, 2].map { ($0, ThreadSpec.mm($0), abs($0 - spec.turns) < 1e-9) }, set: session.setScrewLidTurns)
+            screwLidMenu("Top", session.lengthText(spec.top), id: "screwLid.top",
+                         [1.2, 1.6, 2, 2.5, 3].map { ($0, session.lengthText($0), abs($0 - spec.top) < 1e-9) }, set: session.setScrewLidTop)
+            screwLidHeightMenu(spec)
+            screwLidMenu("Grip", spec.ribbed ? "Ribbed" : "Smooth", id: "screwLid.grip",
+                         [true, false].map { ($0, $0 ? "Ribbed" : "Smooth", $0 == spec.ribbed) }, set: session.setScrewLidRibbed)
+            clearanceMenu(spec.clearance, allowsNone: false, id: "screwLid.clearance") { value in session.setScrewLidClearance(value ?? spec.clearance) }
+            if session.isBuildingScrewLid { ProgressView().controlSize(.small).padding(.trailing, 6) }
+        }
+        .padding(6)
+        return AnyView(VStack(spacing: 8) {
+            ViewThatFits(in: .horizontal) {
+                row
+                ScrollView(.horizontal, showsIndicators: false) { row }
+            }
+            .background(white.opacity(0.94), in: RoundedRectangle(cornerRadius: 10))
+            .padding(.horizontal, 12)
+            HStack(spacing: 8) {
+                actionButton("Cancel", icon: .exit, id: "screwLid.cancel") { session.cancelScrewLid() }
+                actionButton("Done", icon: .done, id: "screwLid.confirm") { session.confirmScrewLid() }
+                    .disabled(session.screwLidPreview == nil || session.isBuildingScrewLid)
+            }
+        })
+    }
+
+    /// One of Screw Lid's menus: (value, label, in use) choices.
+    private func screwLidMenu<T: Hashable>(_ title: String, _ current: String, id: String, _ choices: [(T, String, Bool)],
+                                           set: @escaping (T) -> Void) -> AnyView {
+        AnyView(Menu {
+            ForEach(choices, id: \.0) { choice in
+                Button(choice.2 ? "\(choice.1) (in use)" : choice.1) { set(choice.0) }
+            }
+        } label: {
+            Text("\(title): \(current)").font(.system(size: 15, weight: .medium)).padding(.horizontal, 8)
+        }
+        .accessibilityIdentifier(id))
+    }
+
+    /// The lid's height: just over its thread, or taller (a deeper skirt down the neck).
+    private func screwLidHeightMenu(_ spec: ScrewLidSpec) -> AnyView {
+        let threaded = session.screwLidThread?.threadedLength ?? 0
+        let auto = threaded + spec.top + 1
+        let taller = [3.0, 6, 10].map { ((auto + $0 - 1) * 10).rounded() / 10 }
+        return AnyView(Menu {
+            Button(spec.height == nil ? "Just Over the Thread (in use)" : "Just Over the Thread") { session.setScrewLidHeight(nil) }
+            ForEach(taller, id: \.self) { height in
+                let inUse = spec.height.map { abs($0 - height) < 1e-9 } ?? false
+                Button(inUse ? "\(session.lengthText(height)) (in use)" : session.lengthText(height)) { session.setScrewLidHeight(height) }
+            }
+        } label: {
+            Text("Height: \(session.lengthText(spec.height ?? auto))").font(.system(size: 15, weight: .medium)).padding(.horizontal, 8)
+        }
+        .accessibilityIdentifier("screwLid.height"))
+    }
+
     /// Opens the keypad for a thread value just above the bar.
     private func openThreadKeypad(_ target: DimensionTarget) {
         session.openDimension(target, at: CGPoint(x: threadBarFrame.midX - 55, y: threadBarFrame.minY - 20))
@@ -2006,7 +2076,7 @@ struct WorkspaceView: View {
                     Text("With no tool chosen, drag endpoints to change lines, rectangle corners or edges to resize, or a circle's circumference to change its diameter. Drag the circle center to reposition it.")
                 }
                 Section("Touch") { Text("One finger orbits. Two fingers pan. Pinch to zoom. Fingers never draw or drag sketch geometry. The view cube rotates with the camera: tap any face to look straight at it and choose the plane for new sketches. Opposite faces share the same sketch plane. Double-tap the cube to reset and frame the model in 3D. During extrusion, the cube changes the view while keeping the extrusion's sketch plane.") }
-                Section("Toolbar") { Text("Tools live in the dock at the bottom, in the order a part is made. While modeling: Sketch, Project, and Planes (Offset Plane, Midplane, Plane at Angle, 3-Point Plane, Tangent Plane, Axis) to build on; Create (Extrude, Revolve, Loft, Sweep, Rib, Box, Cylinder, Sphere, Torus) to make solids; Modify (Fillet, Chamfer, Shell, Draft, Delete Face, Split Body) to change one; Combine (Union, Subtract, Intersect) to join or cut solids with each other; Transform (Align, Scale, Mirror, Pattern) to move, resize, and copy; and Joints (Peg & Socket, Thread, Fit Test) for parts that fit together. A tile with ▴ pops up its tools above it and shows the one in use. Tap Sketch and the dock switches to sketch tools until you tap Finish Sketch: Line, Rectangle, Shapes (Circle, Arc, Slot, Ellipse, Polygon, Spline, Point), Features on a face (Hole, Peg & Socket, Text), Modify (Trim, Extend, Fillet, Offset, Mirror), Dimension, and Project. The rail at the top left opens the Model Tree and the Assistant, then Measure, Section, X-ray, and Snap; the view cube is at the top right. There is no Select tool: with no tool chosen, a tap selects; tap the active tool again to put it down. What you can do with the selection appears in the strip just above the dock, grouped the same way: for a solid, its volume, Shell, Split Body, Combine (Union, Subtract, Intersect) when there are other solids, Transform (Align, Scale, Mirror, Pattern), Matching Part for a thread, Edit for a hole, thread, text, or peg, Color, and the trash can for Delete, which removes whole items only (Duplicate is in the Model Tree and on ⌘D); a face, edge, region, sketch, or plane offers what suits it. While an operation is being set up, its own controls and Done replace the dock. A hand resting on the dock while the Pencil draws presses nothing.") }
+                Section("Toolbar") { Text("Tools live in the dock at the bottom, in the order a part is made. While modeling: Sketch, Project, and Planes (Offset Plane, Midplane, Plane at Angle, 3-Point Plane, Tangent Plane, Axis) to build on; Create (Extrude, Revolve, Loft, Sweep, Rib, Box, Cylinder, Sphere, Torus) to make solids; Modify (Fillet, Chamfer, Shell, Draft, Delete Face, Split Body) to change one; Combine (Union, Subtract, Intersect) to join or cut solids with each other; Transform (Align, Scale, Mirror, Pattern) to move, resize, and copy; and Joints (Peg & Socket, Thread, Screw Lid, Fit Test) for parts that fit together. A tile with ▴ pops up its tools above it and shows the one in use. Tap Sketch and the dock switches to sketch tools until you tap Finish Sketch: Line, Rectangle, Shapes (Circle, Arc, Slot, Ellipse, Polygon, Spline, Point), Features on a face (Hole, Peg & Socket, Text), Modify (Trim, Extend, Fillet, Offset, Mirror), Dimension, and Project. The rail at the top left opens the Model Tree and the Assistant, then Measure, Section, X-ray, and Snap; the view cube is at the top right. There is no Select tool: with no tool chosen, a tap selects; tap the active tool again to put it down. What you can do with the selection appears in the strip just above the dock, grouped the same way: for a solid, its volume, Shell, Split Body, Combine (Union, Subtract, Intersect) when there are other solids, Transform (Align, Scale, Mirror, Pattern), Matching Part for a thread, Edit for a hole, thread, text, or peg, Color, and the trash can for Delete, which removes whole items only (Duplicate is in the Model Tree and on ⌘D); a face, edge, region, sketch, or plane offers what suits it. While an operation is being set up, its own controls and Done replace the dock. A hand resting on the dock while the Pencil draws presses nothing.") }
                 Section("Sketches") { Text("Tap Sketch, then one of the three planes at the origin (or a flat face) to start a new sketch; the view turns to face it and the origin is marked. Everything you draw until you leave belongs to that sketch, and the Model Tree lists each sketch with its shapes. Purple dots also mark where other sketches and solid edges cross the plane. Leaving a sketch selects all of it: drag an arrow to move it or an arc to turn it, tap the value to type an exact distance or angle, and turn on Create Copy to make copies instead. A selected solid (double-tap one of its faces) moves, turns, and copies the same way, with everything done to it. Hide or Show any sketch or solid from the Model Tree.") }
                 Section("Regions") { Text("Shapes in a sketch divide each other where they cross: two overlapping rectangles make three regions, and a line across a rectangle makes two. Tap inside a region to select it. An outline inside a region, such as a circle in a rectangle, is a hole in it, and the circle is a region of its own. A selected shape (just drawn, or picked from the Model Tree) extrudes all of itself.") }
                 Section("Picking Several") { Text("With a region or a whole sketch selected, tap more regions, or the lines of more sketches, on the same plane to pick them too; tap a picked one to take it out. Extrude or Revolve then takes them all in one step. With a solid selected, double-tap another solid to add it: the widget moves them all, and Combine, Transform, Color, Export, and Delete take them all. With an edge selected, tap more edges of the same solid, then Fillet or Chamfer rounds or bevels them all. Inside an open sketch, tap more regions the same way. Tap empty space to start over.") }
@@ -2041,6 +2111,7 @@ struct WorkspaceView: View {
                 Section("Pattern") { Text("Tap Transform in the dock, then Pattern (or select a solid or sketch and choose Transform ▾ → Pattern above it). Tap the solids and sketches to copy. Linear: drag one of the gizmo arrows to lay copies out along it, and others for a grid; Extent spreads the copies across the distance, Spacing is the gap between neighbors. The quantity (− and +, or tap it to type it) counts the original and applies to the last arrow dragged. Circular: drag the gizmo center onto a corner, edge, circle center, or face center of any solid, a sketch point, or the origin (on a circle or edge the gizmo turns to follow it), then turn a ring; Rotated copies turn with the pattern, Fixed ones keep their orientation. Tap a value to type it. Done adds the copies as ordinary, independent solids and sketches in one undo step; a pattern makes at most 100.") }
                 Section("Joints and Fit Clearance") { Text("Printed parts that go together need a small gap. Set Fit Clearance in the project menu once for your printer: Tight (0.1 mm), Standard (0.2 mm), Loose (0.3 mm), or Custom. To find yours, choose Add a Fit Test Print in the same menu (or Joints ▸ Fit Test). Joints ▸ Peg & Socket (or Features ▸ Peg & Socket while sketching on a face) puts a round peg on a flat face, and every solid it pushes into gets a matching socket, even a hidden one, so hide a lid to reach the rim under it. Tap a peg later and choose Edit Peg to change it; its sockets follow. Subtract's Clearance leaves that gap around the tools, so a part shaped like them fits; choose Keep: Tools to keep the part.") }
                 Section("Threads") { Text("Choose Joints ▸ Thread and tap the inside of a hole (a nut's thread) or the side of a round boss (a bolt's thread), or select that face and tap Thread above the dock. A size is picked from the face: a hole near an M-size's tap-drill diameter, a boss near its diameter, or a custom thread fitted to the face. The Size menu lists metric M2 to M36 and inch #4 to 3/4 (UNC and UNF) and says how each fits the face; Pitch offers the fine pitches, or tap the diameter or pitch to type your own, such as a 3 mm pitch for a jar lid. Cut grooves the thread into the face; Raised adds its ridges onto it, so a thin wall keeps its thickness, and fades them out at their ends. The same menu picks the profile: ISO 60° for hardware, or Printable 45° (shallower, printing without supports either way up), the default for raised threads and custom threads of 20 mm and more. Length threads part of the face, and more starts close a lid in fewer turns. Holes open up and bosses slim down by the clearance. Left-hand turns the thread the other way. Lead-in (on unless you turn it off) bevels the open ends so the thread starts straight. The preview takes a moment to build; Done adds the thread as one step, and Edit Thread (tap the thread) changes it later. A matching part made before keeps its own thread, so make it again after an edit. Then tap the thread and choose Matching Part above the dock for the nut or cap (on a bolt's thread) or bolt or plug (in a hole's) that screws onto it: it appears already screwed on, with the same size, hand, and clearance. Move it aside, or export with Arrange on Plate, to print the parts separately.") }
+                Section("Screw Lid") { Text("Joints ▸ Screw Lid (or Screw Lid above a selected round boss) makes a container and its lid screw together: tap the outside of the neck, such as a shelled cylinder's. The neck gets a raised thread in the printable 45° profile and a lid comes with it, already screwed on, as a solid of its own. Pitch, Starts (two close it in about a turn), and Turns set the thread; Top, Height, and Grip (Ribbed or Smooth) set the lid; Clearance starts from Fit Clearance. Check the fit with Section, then Done adds both in one step. Move the lid aside to print the parts separately, the lid upside down.") }
                 Section("Measure") { Text("Tap Measure in the rail at the top left; a selected item becomes the first one measured. Tap a corner, edge, face, or sketch item to read its size: length, radius, area, or for a solid (double-tap a face) its volume and size. Tap a second item for the distance between them, its parts across, back, and up, and the angle between them. The results replace the dock; Done ends Measure. A selected edge, face, or solid also shows its size in the strip above the dock.") }
                 Section("Section View") { Text("Tap Section at the top left to cut the solids open along a plane and look inside; the cut faces are coral. Choose Top, Front, or Right, drag the arrow to move the cut, Flip for the other half, Done to finish. Nothing changes.") }
                 Section("X-ray") { Text("Tap X-ray in the rail at the top left to see every solid through, or long-press a solid or group in the Model Tree and choose X-ray to see only it through. With one solid X-rayed, a tap goes through it to a part inside. X-ray changes nothing and is not saved.") }
@@ -2145,7 +2216,7 @@ enum ToolGroup: String, CaseIterable {
         case .create: [.extrude, .revolve, .loft, .sweep, .rib, .box, .cylinder, .sphere, .torus]
         case .edges: [.fillet, .chamfer, .shell, .draft, .deleteFace, .split]
         case .combine: [.union, .subtract, .intersect]
-        case .fit: [.peg, .thread, .fitTest]
+        case .fit: [.peg, .thread, .screwLid, .fitTest]
         case .faceFeatures: [.hole, .peg, .text]
         case .transform: [.align, .scale, .mirror, .pattern]
         case .planes: [.offsetPlane, .midplane, .planeAngle, .plane3Point, .planeTangent, .axis]

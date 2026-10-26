@@ -291,6 +291,48 @@ import simd
         return (session, controller)
     }
 
+    /// Screw Lid: the tube's outside gets a thread and a lid already screwed on, as one undo step.
+    func testScrewLidThreadsATubeAndAddsALid() async throws {
+        let (session, controller) = try tubeScene()
+        let body = session.workspace.bodies[0]
+        let solid = try SolidKernel.solid(for: body)
+        let outside = try XCTUnwrap((0..<solid.faceCount).first { solid.cylinderSide($0) == 1 })
+        let inside = try XCTUnwrap((0..<solid.faceCount).first { solid.cylinderSide($0) == -1 })
+        session.chooseTool(.screwLid)
+        XCTAssertEqual(session.tool, .screwLid)
+        XCTAssertTrue(session.hint.contains("round neck"), session.hint)
+        // The inside is a hole: refused with the reason.
+        session.beginScrewLid(bodyID: body.id, face: inside)
+        await session.screwLidSettled()
+        XCTAssertNil(session.screwLidPreview)
+        XCTAssertTrue(session.hint.contains("this is a hole"), session.hint)
+
+        session.beginScrewLid(bodyID: body.id, face: outside)
+        XCTAssertEqual(session.helpTopic, .screwLid)
+        await session.screwLidSettled()
+        let preview = try XCTUnwrap(session.screwLidPreview)
+        XCTAssertEqual(preview.bodies.count, 2)
+        XCTAssertTrue(session.hint.contains("2-start") && session.hint.contains("ribbed"), session.hint)
+        session.setScrewLidRibbed(false)
+        session.setScrewLidTurns(1.5)
+        await session.screwLidSettled()
+        XCTAssertEqual(session.screwLidThread?.threadedLength ?? 0, 9, accuracy: 1e-9, "1½ turns of a 6 mm lead")
+        XCTAssertNotNil(session.screwLidPreview)
+        session.requestCamera(.home)
+        controller.refresh()
+        attach(controller, "A tube with a screw lid")
+        session.confirmScrewLid()
+        XCTAssertEqual(session.workspace.bodies.count, 2)
+        let lid = try XCTUnwrap(session.workspace.bodies.last)
+        XCTAssertEqual(session.selection, .body(lid.id))
+        XCTAssertEqual(session.workspace.bodyNames[lid.id], "Lid")
+        XCTAssertEqual(session.workspace.bodies[0].cuts.last?.thread?.isRaised, true)
+        XCTAssertEqual(session.tool, .select)
+        session.undo()
+        XCTAssertEqual(session.workspace.bodies.count, 1, "One undo step")
+        XCTAssertNil(session.workspace.bodies[0].cuts.last?.thread)
+    }
+
     func testRaisedThreadKeepsAThinNeckWholeAndTakesACap() async throws {
         let (session, controller) = try tubeScene()
         let body = session.workspace.bodies[0]

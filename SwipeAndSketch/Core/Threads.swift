@@ -740,7 +740,7 @@ extension SolidBody {
     /// flush with a bolt's tip; a cap's ceiling rests on it; a bolt's or plug's head sits on the
     /// face the hole opens onto. Against a closed end (a boss's base, a blind hole's floor) the part
     /// stops half a millimeter short.
-    func matingPart(_ kind: ThreadMate, forThreadAt index: Int) -> SolidBody? {
+    func matingPart(_ kind: ThreadMate, forThreadAt index: Int, cap shape: CapShape? = nil) -> SolidBody? {
         guard cuts.indices.contains(index), let spec = cuts[index].thread, let ends = spec.ends, spec.hasOpenEnd,
               kind.isInternal != spec.isInternal else { return nil }
         let origin = worldPoint(spec.origin), axis = simd_normalize(worldPoint(spec.origin + spec.axis) - origin)
@@ -752,7 +752,7 @@ extension SolidBody {
         let faceLength = ends.end - ends.start, through = ends.startOpen && ends.endOpen
         let pitch = spec.pitch, diameter = spec.majorDiameter
         let shortOfFloor = through ? 0 : min(0.5, faceLength / 4)
-        let engagement = kind == .nut ? min(faceLength, max(0.8 * diameter, 3 * pitch)) : faceLength - shortOfFloor
+        let engagement = kind == .nut ? min(faceLength, max(0.8 * diameter, 3 * pitch)) : shape?.skirt ?? faceLength - shortOfFloor
         guard engagement >= pitch else { return nil }
         let flats = max(ThreadMate.acrossFlats[spec.size] ?? (1.5 * diameter + 1).rounded(), 2 * spec.crestRadius + 2.4)
         let finish = min(max(0.08 * diameter, 1.6), 3)
@@ -779,9 +779,12 @@ extension SolidBody {
         switch kind {
         case .nut, .cap:
             // A body from `engagement` inside the mouth, bored at the minor diameter for its thread.
-            guard let outline = kind == .nut ? hexagon(at: -engagement) : circle(2 * (spec.crestRadius + finish), at: -engagement),
+            let wall = shape?.wall ?? finish, outer = 2 * (spec.crestRadius + wall)
+            let capOutline = shape?.ribbed == true ? plane(at: -engagement).flatMap { CapShape.ribbed(outer, at: $0.1, on: $0.0) }
+                : circle(outer, at: -engagement)
+            guard let outline = kind == .nut ? hexagon(at: -engagement) : capOutline,
                   let bore = circle(spec.minorDiameter, at: -engagement) else { return nil }
-            part = SolidBody(profile: outline, depth: engagement + (kind == .cap ? finish : 0))
+            part = SolidBody(profile: outline, depth: engagement + (kind == .cap ? shape?.top ?? finish : 0))
             part.cuts.append(ExtrusionCut(profile: bore, depth: engagement, throughAll: kind == .nut))
         case .bolt, .plug:
             // A head on the mouth's face and a shank at the major diameter down into the hole.
@@ -826,6 +829,115 @@ extension SolidBody {
         thread.ends = ThreadEnds(start: low - start, end: high - start, startOpen: lowOpen, endOpen: highOpen)
         // A lead-in like the original's (on unless it was turned off).
         thread.leadIn = spec.leadIn == true && (lowOpen || highOpen) ? true : nil
+        thread.taperedEnds = nil
         return part.threading(thread)
+    }
+}
+
+/// A cap's own shape, where Matching Part's defaults will not do (Screw Lid): its wall beyond the
+/// thread's crest, its top, how far its skirt reaches down the neck, and a ribbed grip.
+struct CapShape: Equatable, Sendable {
+    var wall: Double
+    var top: Double
+    var skirt: Double
+    var ribbed: Bool
+
+    /// A round outline `diameter` across with ribs standing 0.8 mm out of it about every 4 mm, for
+    /// a grip: one outline, so the lid is one extrusion however many ribs it has.
+    static func ribbed(_ diameter: Double, at center: Point2, on plane: SketchPlane) -> SketchProfile? {
+        let radius = diameter / 2, height = 0.8, width = 1.6
+        let count = max(12, Int((2 * .pi * radius / 4).rounded()))
+        let half = width / 2 / radius, step = 2 * .pi / Double(count)
+        var points: [Point2] = []
+        func at(_ angle: Double, _ r: Double) -> Point2 { center + Point2(x: r * cos(angle), y: r * sin(angle)) }
+        for i in 0..<count {
+            let middle = Double(i) * step
+            points += [at(middle - half, radius), at(middle - half, radius + height), at(middle + half, radius + height), at(middle + half, radius)]
+            // The circle between this rib and the next, in a few straight pieces.
+            for k in 1..<4 { points.append(at(middle + half + (step - 2 * half) * Double(k) / 4, radius)) }
+        }
+        let sides = points.indices.map { SketchShape(kind: .line, plane: plane, start: points[$0], end: points[($0 + 1) % points.count]) }
+        return Geometry.profiles(in: sides, on: plane).first { $0.outline.count >= points.count / 2 }
+    }
+}
+
+// MARK: Screw Lid
+
+/// Screw Lid (October 26, 2026): what to put on a container's round neck. A raised thread in the
+/// printable profile goes on the neck, and a lid comes with it, already screwed on.
+struct ScrewLidSpec: Equatable, Sendable {
+    var pitch = 3.0
+    /// Two starts close a lid in about a turn.
+    var starts = 2
+    /// How far the lid turns to close: the thread is this many leads long.
+    var turns = 1.0
+    var clearance: Double
+    /// The lid's top, and its whole height (nil: the thread plus the top plus a millimeter).
+    var top = 2.0
+    var height: Double?
+    var wall = 2.0
+    var ribbed = true
+
+    static let pitchRange = 1.0...6.0
+    static let turnsRange = 0.5...4.0
+    static let topRange = 0.8...10.0
+}
+
+enum ScrewLid {
+    struct Result {
+        var jar: SolidBody
+        var lid: SolidBody
+        var thread: ThreadSpec
+    }
+
+    struct Failure: LocalizedError, Equatable {
+        var message: String
+        var errorDescription: String? { message }
+    }
+
+    /// The thread the neck at `face` of `body` takes, and the lid's height range, before building.
+    static func thread(on body: SolidBody, face: Int, _ spec: ScrewLidSpec) throws -> (thread: ThreadSpec, neck: Double) {
+        guard let solid = try? SolidKernel.solid(for: body), var thread = body.threadSpec(onFace: face, of: solid, clearance: spec.clearance) else {
+            throw Failure(message: "Tap the outside of a round neck, such as a jar's.")
+        }
+        guard !thread.isInternal else { throw Failure(message: "A screw lid goes over a round neck; this is a hole.") }
+        guard let ends = thread.ends, thread.hasOpenEnd else { throw Failure(message: "The neck needs an open end, its rim, for the lid to go on.") }
+        guard ScrewLidSpec.pitchRange.contains(spec.pitch) else { throw Failure(message: "The pitch must be 1–6 mm.") }
+        guard ThreadSpec.startsRange.contains(spec.starts) else { throw Failure(message: "A lid's thread has 1 to 4 starts.") }
+        guard ScrewLidSpec.turnsRange.contains(spec.turns) else { throw Failure(message: "A lid closes in ½ to 4 turns.") }
+        thread = thread.made(raised: true).with(profile: .printable)
+        thread = thread.with(size: nil, diameter: thread.surfaceDiameter + ThreadProfile.printable.diameterLoss * spec.pitch, pitch: spec.pitch)
+        thread.starts = spec.starts > 1 ? spec.starts : nil
+        let neck = ends.end - ends.start
+        let threaded = spec.turns * thread.lead
+        guard threaded <= neck - 0.5 else {
+            throw Failure(message: "The neck is \(ThreadSpec.mm(neck)) mm tall: \(ThreadSpec.mm(spec.turns)) turns of this thread need \(ThreadSpec.mm(threaded + 0.5)) mm. Choose fewer turns, starts, or a smaller pitch.")
+        }
+        guard thread.isValid, thread.fit.isUsable,
+              let short = thread.shortened(to: threaded, atEnd: body.threadEntryIsAtEnd(thread)) else {
+            throw Failure(message: "That thread does not fit this neck; try another pitch.")
+        }
+        return (short, neck)
+    }
+
+    /// The neck threaded and its lid, already screwed on, or why not.
+    static func make(on body: SolidBody, face: Int, _ spec: ScrewLidSpec) throws -> Result {
+        let (thread, neck) = try self.thread(on: body, face: face, spec)
+        guard ScrewLidSpec.topRange.contains(spec.top) else { throw Failure(message: "The lid's top must be 0.8–10 mm thick.") }
+        let threaded = thread.threadedLength
+        let height = spec.height ?? threaded + spec.top + 1
+        let skirt = height - spec.top
+        guard skirt >= threaded - 0.5 else {
+            throw Failure(message: "The lid must be at least \(ThreadSpec.mm(threaded - 0.5 + spec.top)) mm tall to cover its thread.")
+        }
+        guard skirt <= neck - 0.5 else {
+            throw Failure(message: "The lid can be at most \(ThreadSpec.mm(neck - 0.5 + spec.top)) mm tall: the neck is \(ThreadSpec.mm(neck)) mm.")
+        }
+        guard let jar = body.threading(thread) else { throw Failure(message: "The thread could not be built on this neck; try another pitch.") }
+        guard let lid = jar.matingPart(.cap, forThreadAt: jar.cuts.count - 1,
+                                       cap: CapShape(wall: spec.wall, top: spec.top, skirt: skirt, ribbed: spec.ribbed)) else {
+            throw Failure(message: "The lid could not be built; try another height or pitch.")
+        }
+        return Result(jar: jar, lid: lid, thread: thread)
     }
 }

@@ -892,6 +892,28 @@ struct AddConstructionTool: Tool {
     }
 }
 
+struct AddScrewLidTool: Tool {
+    let context: AssistantContext
+    let name = "add_screw_lid"
+    let description = "Makes a container and its lid screw together: the body's round neck gets a raised, printable thread, and a lid (a new body) is added already screwed on. Two starts close it in about a turn."
+    @Generable struct Arguments {
+        var body: String
+        @Guide(description: "boss for the body's round neck, a face number, or selected") var face: String
+        @Guide(description: "Thread pitch in mm, 1–6; omit for 3") var pitch: Double?
+        @Guide(description: "1–4 starts; omit for 2") var starts: Int?
+        @Guide(description: "Turns to close, 0.5–4; omit for 1") var turns: Double?
+        @Guide(description: "The lid's top thickness in mm; omit for 2") var top: Double?
+        @Guide(description: "The lid's whole height in mm; omit for just over the thread") var height: Double?
+        @Guide(description: "False for a smooth lid; omit for a ribbed grip") var ribbed: Bool?
+    }
+    func call(arguments: Arguments) async throws -> String {
+        await context.run("Making a screw lid for \(arguments.body)") { bench in
+            try bench.screwLid(body: arguments.body, face: arguments.face, pitch: arguments.pitch, starts: arguments.starts, turns: arguments.turns,
+                               top: arguments.top, height: arguments.height, ribbed: arguments.ribbed, clearance: Fit.preferredClearance)
+        }
+    }
+}
+
 struct ExtendLineTool: Tool {
     let context: AssistantContext
     let name = "extend_line"
@@ -957,7 +979,7 @@ extension AssistantContext {
          FilletEdgesTool(context: self), ChamferEdgesTool(context: self), ShellTool(context: self), AddHoleTool(context: self), AddPegTool(context: self), AddThreadTool(context: self), AddMatingPartTool(context: self), AddTextTool(context: self), FitTestTool(context: self),
          MoveItemsTool(context: self), SetDimensionTool(context: self), DeleteItemsTool(context: self), SetVisibilityTool(context: self), CombineTool(context: self),
          MirrorTool(context: self), PatternTool(context: self), AddPlaneTool(context: self), RevolveTool(context: self), RoundSketchCornersTool(context: self), MeasureTool(context: self),
-         ScaleItemsTool(context: self), DeleteFacesTool(context: self), DeleteHoleTool(context: self), EditFinishTool(context: self), EditFeatureTool(context: self), AddPrimitiveTool(context: self), AddConstructionTool(context: self), ShapeOperationTool(context: self), ResizeFaceTool(context: self), OffsetSketchTool(context: self), ExtendLineTool(context: self), RenameItemTool(context: self), GroupItemsTool(context: self), UngroupTool(context: self),
+         ScaleItemsTool(context: self), DeleteFacesTool(context: self), DeleteHoleTool(context: self), EditFinishTool(context: self), EditFeatureTool(context: self), AddPrimitiveTool(context: self), AddConstructionTool(context: self), ShapeOperationTool(context: self), ResizeFaceTool(context: self), OffsetSketchTool(context: self), ExtendLineTool(context: self), AddScrewLidTool(context: self), RenameItemTool(context: self), GroupItemsTool(context: self), UngroupTool(context: self),
          SetColorTool(context: self)]
     }
     /// The everyday tools, which fit the on-device model's smaller context.

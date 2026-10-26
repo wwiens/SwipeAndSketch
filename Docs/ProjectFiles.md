@@ -195,6 +195,8 @@ Still format version 1; every new key is optional and omitted when unset, so fil
 
 Thread profiles (October 26, 2026): a thread entry may carry `"profile": "printable"`, a 90° profile (flanks leaning 45°, 0.3 pitch deep: the minor diameter is the major less 0.6 pitch) instead of ISO 60°, which is the default and is never written; and a raised thread `"taperedEnds": true`, its ridges fading out over a quarter of the lead where they meet the solid (and at an open end without a lead-in). Threads without them build as before.
 
+Screw Lid (October 26, 2026) adds no data of its own either: the neck's thread is an ordinary raised thread entry, and the lid an ordinary solid with its own cut thread.
+
 Editing after Done (October 24, 2026) adds no data of its own: Edit Hole, Edit Thread, and Edit Text replace their entry in the solid's `cuts` list in place, keeping its `id`, so the entries after it still apply after it. Edit Peg does the same for each solid's peg entries (a separate peg's solid stays where it was in the list).
 
 Tier 2 basics (October 24, 2026):

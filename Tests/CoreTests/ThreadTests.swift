@@ -663,6 +663,65 @@ final class ThreadTests: XCTestCase {
         XCTAssertNil(isoSaved["taperedEnds"])
     }
 
+    /// Screw Lid (October 26, 2026): a jar's neck gets a two-start printable thread a turn long and
+    /// a ribbed lid already screwed on, as two ordinary solids.
+    func testScrewLidThreadsTheNeckAndScrewsOnALid() throws {
+        let neck = try jarNeck()
+        let (_, solid) = try roundFace(neck, side: 1)
+        let face = try XCTUnwrap((0..<solid.faceCount).first { ssk_face_cylinder_side(solid.handle, Int32($0)) == 1 })
+        let spec = ScrewLidSpec(clearance: 0.2)
+        let result = try ScrewLid.make(on: neck, face: face, spec)
+        let thread = result.thread
+        XCTAssertEqual(thread.shape, .printable)
+        XCTAssertTrue(thread.isRaised)
+        XCTAssertEqual(thread.startCount, 2)
+        XCTAssertEqual(thread.threadedLength, 6, accuracy: 1e-9, "One turn of a 2-start, 3 mm pitch thread")
+        XCTAssertEqual(thread.majorDiameter, 60 + 0.6 * 3, accuracy: 1e-9, "The neck is its minor diameter")
+
+        let jar = try SolidKernel.solid(for: result.jar), lid = try SolidKernel.solid(for: result.lid)
+        XCTAssertTrue(jar.isValidSolid && lid.isValidSolid)
+        XCTAssertGreaterThan(jar.volume, solid.volume, "Ridges added; the neck's wall is whole")
+        // The lid: its top 2 mm above the rim, its skirt the thread plus a millimeter long, ribs outside.
+        XCTAssertEqual(lid.bounds.max.z, 24 + 2, accuracy: 1e-6)
+        XCTAssertEqual(lid.bounds.min.z, 24 - 7, accuracy: 1e-6)
+        // The neck thread's crest (clearance already taken off) plus the 2 mm wall.
+        let crestToWall = thread.crestRadius + 2
+        XCTAssertEqual(lid.bounds.max.x, crestToWall + 0.8, accuracy: 0.15, "Ribs stand 0.8 mm out")
+        XCTAssertEqual(result.lid.cuts.last?.thread?.shape, .printable, "The lid's thread matches")
+        XCTAssertFalse(result.lid.cuts.last?.thread?.isRaised ?? true)
+        // Screwed on: they do not touch; half a lead off, the ridges collide.
+        XCTAssertLessThan(try overlap(result.jar, result.lid), 1e-3)
+        let offStep = try XCTUnwrap(result.lid.transformed(by: RigidTransform(translation: .init(0, 0, -thread.pitch / 2))))
+        XCTAssertGreaterThan(try overlap(result.jar, offStep), 0.5)
+
+        // Smooth, shorter, and refused when it cannot fit.
+        var smooth = spec
+        smooth.ribbed = false
+        smooth.height = 8
+        let plain = try SolidKernel.solid(for: try ScrewLid.make(on: neck, face: face, smooth).lid)
+        XCTAssertEqual(plain.bounds.max.x, crestToWall, accuracy: 0.05)
+        XCTAssertEqual(plain.bounds.min.z, 24 + 2 - 8, accuracy: 1e-6)
+        var tall = spec
+        tall.turns = 4
+        XCTAssertThrowsError(try ScrewLid.make(on: neck, face: face, tall)) { error in
+            XCTAssertTrue((error as? ScrewLid.Failure)?.message.hasPrefix("The neck is 20 mm tall") == true, "\(error)")
+        }
+        var short = spec
+        short.height = 4
+        XCTAssertThrowsError(try ScrewLid.make(on: neck, face: face, short), "Too short to cover the thread")
+        let hole = try XCTUnwrap((0..<solid.faceCount).first { ssk_face_cylinder_side(solid.handle, Int32($0)) == -1 })
+        XCTAssertThrowsError(try ScrewLid.make(on: neck, face: hole, spec), "The inside of the neck is a hole")
+    }
+
+    func testAssistantMakesAScrewLid() throws {
+        var bench = AssistantWorkbench(workspace: Workspace(bodies: [try jarNeck()]))
+        let change = try bench.screwLid(body: "Body 01", face: "boss", pitch: 2.5, starts: nil, turns: nil, top: nil, height: nil, ribbed: false, clearance: 0.2)
+        XCTAssertTrue(change.contains("2-start, 45°") && change.contains("smooth lid"), change)
+        XCTAssertEqual(bench.workspace.bodies.count, 2)
+        XCTAssertEqual(bench.workspace.bodyNames[bench.workspace.bodies[1].id], "Lid")
+        XCTAssertThrowsError(try bench.screwLid(body: "Body 01", face: "boss", pitch: 9, starts: nil, turns: nil, top: nil, height: nil, ribbed: nil, clearance: 0.2))
+    }
+
     func testARaisedNeckTakesACapThatScrewsOnInStep() throws {
         let neck = try jarNeck()
         let (cut, _) = try roundFace(neck, side: 1)

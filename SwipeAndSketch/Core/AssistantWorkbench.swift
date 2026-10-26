@@ -2062,6 +2062,41 @@ struct AssistantWorkbench {
         return change + "."
     }
 
+    /// Screw Lid: a container's round neck gets a raised printable thread, and a lid is added
+    /// already screwed on. `face` is "boss" (the first round boss), a face number, or selected.
+    @discardableResult mutating func screwLid(body bodyName: String, face spec: String, pitch: Double?, starts: Int?, turns: Double?,
+                                              top: Double?, height: Double?, ribbed: Bool?, clearance: Double) throws -> String {
+        let body = try body(named: bodyName), solid = try buildable(body)
+        let text = spec.trimmingCharacters(in: .whitespaces).lowercased()
+        let index: Int
+        if ["boss", "neck", "round", "outside"].contains(text) {
+            guard let found = (0..<solid.faceCount).first(where: { ssk_face_cylinder_side(solid.handle, Int32($0)) == 1 }) else {
+                throw Failure("\(self.bodyName(body.id)) has no round neck for a lid.")
+            }
+            index = found
+        } else {
+            index = try face(spec, of: body)
+        }
+        var lidSpec = ScrewLidSpec(clearance: clearance)
+        if let pitch { lidSpec.pitch = pitch }
+        if let starts { lidSpec.starts = starts }
+        if let turns { lidSpec.turns = turns }
+        if let top { lidSpec.top = top }
+        lidSpec.height = height
+        if let ribbed { lidSpec.ribbed = ribbed }
+        let made: ScrewLid.Result
+        do { made = try ScrewLid.make(on: body, face: index, lidSpec) } catch let error as ScrewLid.Failure { throw Failure(error.message) }
+        var next = workspace
+        guard let bodyIndex = next.bodies.firstIndex(where: { $0.id == body.id }) else { throw Failure("That body no longer exists.") }
+        next.bodies[bodyIndex] = made.jar
+        var lid = made.lid
+        lid.name = "Lid"
+        next.bodies.append(lid)
+        let change = "Threaded the neck of \(self.bodyName(body.id)) (\(made.thread.title), closing in \(Self.mm(lidSpec.turns)) turns) and added a \(lidSpec.ribbed ? "ribbed" : "smooth") lid screwed onto it"
+        try keep(next, change: change, checking: [made.jar.id, lid.id], focus: .body(lid.id))
+        return change + "."
+    }
+
     @discardableResult mutating func addPlane(from planeName: String, face: String?, offset: Double) throws -> String {
         let (_, reference, label) = try plane(planeName, face: face)
         guard offset.isFinite, abs(offset) <= 10_000 else { throw Failure("Offset must be within ±10000 mm.") }
