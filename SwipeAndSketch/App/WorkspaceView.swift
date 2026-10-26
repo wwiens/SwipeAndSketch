@@ -949,39 +949,37 @@ struct WorkspaceView: View {
     /// the eye hides or shows everything in it, and rows dropped on it move into it.
     private func groupRow(_ item: ModelItem, id: UUID) -> AnyView {
         let picking = session.isSelectingRows, picked = session.isPicked(item.selection)
+        let selected = !picking && session.isHighlighted(item)
         return AnyView(HStack(spacing: 4) {
-            if picking {
-                // The arrow still folds; the rest of the row picks the group.
-                Button { session.toggleGroupCollapsed(id) } label: {
-                    SSIconGlyph(icon: .disclosure, size: 16, color: muted).rotationEffect(.degrees(item.isCollapsed ? 0 : 90))
-                        .frame(width: 30, height: 44).contentShape(Rectangle())
-                }
-                .buttonStyle(.plain).padding(.leading, CGFloat(item.indent) * 22)
-                .accessibilityLabel(item.isCollapsed ? "Expand \(item.name)" : "Collapse \(item.name)")
+            // The arrow folds the group away or shows its contents; the rest of the row selects the
+            // group (everything in it), or picks it in Select mode.
+            Button { session.toggleGroupCollapsed(id) } label: {
+                SSIconGlyph(icon: .disclosure, size: 16, color: muted).rotationEffect(.degrees(item.isCollapsed ? 0 : 90))
+                    .frame(width: 30, height: 44).contentShape(Rectangle())
             }
-            Button { picking ? session.togglePicked(item.selection) : session.toggleGroupCollapsed(id) } label: {
+            .buttonStyle(.plain).padding(.leading, CGFloat(item.indent) * 22)
+            .accessibilityLabel(item.isCollapsed ? "Expand \(item.name)" : "Collapse \(item.name)")
+            .accessibilityIdentifier("group.fold.\(item.name)")
+            Button { picking ? session.togglePicked(item.selection) : session.selectItem(item.selection) } label: {
                 HStack(spacing: 8) {
-                    if picking {
-                        checkmark(picked)
-                    } else {
-                        SSIconGlyph(icon: .disclosure, size: 16, color: muted)
-                            .rotationEffect(.degrees(item.isCollapsed ? 0 : 90))
-                    }
-                    SSIconGlyph(icon: .group, size: 22, color: ink)
+                    if picking { checkmark(picked) }
+                    SSIconGlyph(icon: .group, size: 22, color: selected ? paper : ink)
                     Text(item.name).font(.system(size: 16, weight: .medium)).lineLimit(1)
-                    Text("\(item.memberCount ?? 0)").font(.system(size: 13).monospacedDigit()).foregroundStyle(muted)
+                    Text("\(item.memberCount ?? 0)").font(.system(size: 13).monospacedDigit()).foregroundStyle(selected ? paper.opacity(0.8) : muted)
                     Spacer(minLength: 0)
                 }
-                .foregroundStyle(ink)
+                .foregroundStyle(selected ? paper : ink)
                 .opacity(item.isOffCanvas ? 0.45 : 1)
-                .padding(.leading, picking ? 2 : 6 + CGFloat(item.indent) * 22).padding(.trailing, 12).frame(height: 44)
-                .background(picking && picked ? lavender : .clear, in: RoundedRectangle(cornerRadius: 10))
+                .padding(.leading, 2).padding(.trailing, 12).frame(height: 44)
+                .background(selected ? violet : picking && picked ? lavender : .clear, in: RoundedRectangle(cornerRadius: 10))
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            // A hidden group, like a hidden item, is not on the canvas to select (it can still be picked).
+            .buttonStyle(.plain).disabled(!picking && item.isHidden == true)
             .accessibilityLabel("\(item.name), group of \(item.memberCount ?? 0)")
-            .accessibilityValue(picking ? (picked ? "Selected" : "") : item.isCollapsed ? "Collapsed" : "Expanded")
-            .accessibilityHint(picking ? "" : item.isCollapsed ? "Shows what is in it" : "Folds it away")
+            .accessibilityValue(picking ? (picked ? "Selected" : "") : selected ? "Selected" : item.isCollapsed ? "Collapsed" : "Expanded")
+            .accessibilityHint(picking ? "" : "Selects everything in it")
+            .accessibilityAddTraits(selected || picking && picked ? .isSelected : [])
             .accessibilityIdentifier("item.\(item.name)")
             .contextMenu { groupMenu(item, id: id) }
             eyeButton(item, hidden: item.isHidden == true)

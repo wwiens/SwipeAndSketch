@@ -30,6 +30,8 @@ import simd
         XCTAssertEqual(session.selectedMembers.bodies, [big, small])
         XCTAssertTrue(session.hint.contains("2 solids picked"), session.hint)
         XCTAssertEqual(session.helpTopic, .pickedSolids)
+        XCTAssertEqual(session.itemGroups.flatMap(\.items).filter(session.isHighlighted).map(\.selection), [.body(big), .body(small)],
+                       "Both rows are highlighted in the Model Tree")
         XCTAssertEqual(session.transformWidgetTarget, .items(bodies: [big, small], sketches: []), "The widget moves them all")
         attach(controller, "Two solids picked")
 

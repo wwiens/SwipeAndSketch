@@ -2037,10 +2037,12 @@ struct DimensionEdit: Identifiable {
             }
         }
         if isMultipleSelection {
-            // Each picked sketch, and each shape of a picked region.
+            // Each picked sketch, each shape of a picked region, and each picked solid (or the solid
+            // of picked edges).
             switch item.selection {
             case .sketch(let id): return selectedItems.contains(.sketch(id))
             case .shape(let id): return selectedItems.contains { profile(for: $0)?.sourceIDs.contains(id) == true }
+            case .body(let id): return pickedBodies.contains(id) || pickedEdges.contains { $0.bodyID == id }
             default: return false
             }
         }
@@ -2052,6 +2054,7 @@ struct DimensionEdit: Identifiable {
         case (.body(let id), .body(let selected)): return id == selected
         case (.body(let id), .face(let face)): return id == face.bodyID
         case (.body(let id), .edge(let bodyID, _)): return id == bodyID
+        case (.group(let id), .group(let selected)): return id == selected
         default: return false
         }
     }
@@ -2128,10 +2131,12 @@ struct DimensionEdit: Identifiable {
             tool = .select
             if sketchMode != nil { endSketchMode() }
         case .profile, .face, .edge: break
-        // A group's row folds it away or shows its contents; the group is never selected.
+        // A group's name selects everything in it, to move, transform, or export it as a unit
+        // (its arrow folds it away).
         case .group(let id):
-            toggleGroupCollapsed(id)
-            return
+            guard workspace.group(id) != nil else { return }
+            tool = .select
+            if sketchMode != nil { endSketchMode() }
         }
         select(item)
     }

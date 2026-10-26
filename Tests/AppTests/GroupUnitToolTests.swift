@@ -16,7 +16,11 @@ import simd
         session.confirmPrimitive()
         let group = try XCTUnwrap(session.newGroup(containing: .body(box)))
         session.move(.sketch(sketch), toGroup: group)
-        session.select(.group(group))
+        // As tapping the group's name in the Model Tree (its arrow folds it).
+        session.selectItem(.group(group))
+        XCTAssertEqual(session.selection, .group(group))
+        let row = try XCTUnwrap(session.itemGroups.flatMap(\.items).first { $0.selection == .group(group) })
+        XCTAssertTrue(session.isHighlighted(row))
         controller.refresh()
         return (session, controller, group)
     }
