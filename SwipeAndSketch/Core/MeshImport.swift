@@ -110,26 +110,35 @@ enum MeshImport {
         // Each build item places an object (or the objects it is made of); with no build, every object as it is.
         let items = parser.items.isEmpty ? parser.objects.keys.sorted().map { ($0, matrix_identity_double4x4) } : parser.items
         var meshes: [Mesh] = []
-        func add(_ id: String, _ transform: simd_double4x4, depth: Int) {
+        // Components can place an object many times over; the triangles are counted as they are
+        // placed, and the placements too, so a file whose components multiply stops early.
+        var total = 0, placements = 0
+        let tooMany = SolidKernel.Failure(message: "The model has more than \(maximumTriangles) triangles.")
+        func add(_ id: String, _ transform: simd_double4x4, depth: Int) throws {
             guard depth < 16, let object = parser.objects[id] else { return }
+            placements += 1
+            guard placements <= 10_000 else { throw tooMany }
             if !object.triangles.isEmpty {
+                total += object.triangles.count / 3
+                guard total <= maximumTriangles else { throw tooMany }
                 var triangles: [Double] = []
-                triangles.reserveCapacity(object.triangles.count * 9)
-                for index in object.triangles {
-                    guard object.vertices.indices.contains(index) else { continue }
-                    let p = transform * SIMD4(object.vertices[index], 1)
-                    triangles += [p.x * scale, p.y * scale, p.z * scale]
+                triangles.reserveCapacity(object.triangles.count * 3)
+                // A triangle naming a vertex the object does not have is left out whole.
+                for start in stride(from: 0, to: object.triangles.count - 2, by: 3) {
+                    let corners = object.triangles[start..<(start + 3)]
+                    guard corners.allSatisfy(object.vertices.indices.contains) else { continue }
+                    for index in corners {
+                        let p = transform * SIMD4(object.vertices[index], 1)
+                        triangles += [p.x * scale, p.y * scale, p.z * scale]
+                    }
                 }
                 let label = object.name.isEmpty ? "\(name) \(meshes.count + 1)" : object.name
                 meshes.append(Mesh(name: label, triangles: triangles))
             }
-            for component in object.components { add(component.id, transform * component.transform, depth: depth + 1) }
+            for component in object.components { try add(component.id, transform * component.transform, depth: depth + 1) }
         }
-        for (id, transform) in items { add(id, transform, depth: 0) }
+        for (id, transform) in items { try add(id, transform, depth: 0) }
         guard !meshes.isEmpty else { throw SolidKernel.Failure(message: "This 3MF file has no meshes in it.") }
-        guard meshes.reduce(0, { $0 + $1.count }) <= maximumTriangles else {
-            throw SolidKernel.Failure(message: "The model has more than \(maximumTriangles) triangles.")
-        }
         return meshes
     }
 
@@ -199,11 +208,14 @@ enum Zip {
             let raw = Data(bytes[start..<(start + compressed)])
             switch method {
             case 0: result[name] = raw
+            case 8 where size == 0: result[name] = Data()
+            case 8 where compressed == 0: continue
             case 8:
                 var output = Data(count: size)
                 let written = output.withUnsafeMutableBytes { out in
                     raw.withUnsafeBytes { input in
-                        compression_decode_buffer(out.bindMemory(to: UInt8.self).baseAddress!, size, input.bindMemory(to: UInt8.self).baseAddress!, compressed, nil, COMPRESSION_ZLIB)
+                        guard let out = out.bindMemory(to: UInt8.self).baseAddress, let input = input.bindMemory(to: UInt8.self).baseAddress else { return 0 }
+                        return compression_decode_buffer(out, size, input, compressed, nil, COMPRESSION_ZLIB)
                     }
                 }
                 if written == size { result[name] = output }

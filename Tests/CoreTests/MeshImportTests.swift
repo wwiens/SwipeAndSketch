@@ -58,4 +58,64 @@ final class MeshImportTests: XCTestCase {
         XCTAssertThrowsError(try MeshImport.read(try temporary(Data(text.utf8), "open.stl"), name: "open"))
         XCTAssertThrowsError(try MeshImport.read(try temporary(Data("not a mesh".utf8), "junk.stl"), name: "junk"))
     }
+
+    // MARK: Damaged 3MF files
+
+    /// A 3MF holding a tetrahedron (object 1) plus `extra` model XML, and any other entries.
+    func threeMF(triangles extraTriangles: String = "", objects: String = "", items: String = "<item objectid=\"1\"/>",
+                 entries: [(String, Data)] = []) -> Data {
+        let model = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources>
+        <object id="1" type="model"><mesh><vertices>
+        <vertex x="0" y="0" z="0"/><vertex x="10" y="0" z="0"/><vertex x="0" y="10" z="0"/><vertex x="0" y="0" z="10"/>
+        </vertices><triangles>
+        <triangle v1="0" v2="2" v3="1"/>\(extraTriangles)<triangle v1="0" v2="1" v3="3"/><triangle v1="0" v2="3" v3="2"/><triangle v1="1" v2="2" v3="3"/>
+        </triangles></mesh></object>\(objects)</resources><build>\(items)</build></model>
+        """
+        var zip = ZipWriter()
+        zip.add("3D/3dmodel.model", Data(model.utf8))
+        for (path, content) in entries { zip.add(path, content) }
+        return zip.finish()
+    }
+
+    /// Marks every empty entry of `data` as deflated (method 8), as some zip tools write them.
+    func deflatingEmptyEntries(_ data: Data) -> Data {
+        var bytes = [UInt8](data)
+        func u32(_ i: Int) -> Int { Int(bytes[i]) | Int(bytes[i + 1]) << 8 | Int(bytes[i + 2]) << 16 | Int(bytes[i + 3]) << 24 }
+        for i in 0..<(bytes.count - 30) {
+            if u32(i) == 0x0403_4b50, u32(i + 22) == 0 { bytes[i + 8] = 8 }        // local header, size 0
+            if u32(i) == 0x0201_4b50, u32(i + 24) == 0 { bytes[i + 10] = 8 }       // central header, size 0
+        }
+        return Data(bytes)
+    }
+
+    func testAnEmptyDeflatedEntryDoesNotStopTheImport() throws {
+        let data = deflatingEmptyEntries(threeMF(entries: [("Metadata/empty.txt", Data())]))
+        let files = try Zip.entries(data)
+        XCTAssertEqual(files["Metadata/empty.txt"], Data())
+        let result = try MeshImport.read(try temporary(data, "empty-entry.3mf"), name: "tetra")
+        XCTAssertEqual(try SolidKernel.solid(for: result.bodies[0]).volume, 1000.0 / 6, accuracy: 0.01)
+    }
+
+    func testATriangleWithAMissingVertexIsLeftOutWhole() throws {
+        // Leaving out only its bad corner would shift every later triangle by one corner.
+        let data = threeMF(triangles: "<triangle v1=\"0\" v2=\"99\" v3=\"1\"/>")
+        let result = try MeshImport.read(try temporary(data, "bad-index.3mf"), name: "tetra")
+        XCTAssertEqual(try SolidKernel.solid(for: result.bodies[0]).volume, 1000.0 / 6, accuracy: 0.01)
+    }
+
+    func testComponentsThatMultiplyStopEarly() throws {
+        // Ten levels each placing the one below ten times: 10¹⁰ tetrahedra if followed to the end.
+        var objects = ""
+        for level in 2...11 {
+            objects += "<object id=\"\(level)\" type=\"model\"><components>"
+            objects += String(repeating: "<component objectid=\"\(level - 1)\"/>", count: 10)
+            objects += "</components></object>"
+        }
+        let data = threeMF(objects: objects, items: "<item objectid=\"11\"/>")
+        let started = Date()
+        XCTAssertThrowsError(try MeshImport.threeMF(data, name: "many"))
+        XCTAssertLessThan(Date().timeIntervalSince(started), 5)
+    }
 }
