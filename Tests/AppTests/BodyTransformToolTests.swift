@@ -205,6 +205,120 @@ import simd
         XCTAssertNil(session.transformPivot)
     }
 
+    /// The box, selected, beside a second 40 × 40 × 20 box at x 60…100, with a line on Top from
+    /// under the second box out to (80, 60) and a circle centered at (0, 70).
+    func outsideScene() throws -> (ModelingSession, CanvasController, UUID) {
+        let (session, controller) = boxScene()
+        let id = session.workspace.bodies[0].id
+        session.addShape(.init(kind: .rectangle, plane: .top, start: .init(x: 60, y: -20), end: .init(x: 100, y: 20)))
+        session.beginExtrusion()
+        session.extrusionDepth = 20
+        session.confirmExtrusion()
+        XCTAssertEqual(session.workspace.bodies.count, 2, "The second box is a solid of its own")
+        session.addShape(.init(kind: .line, plane: .top, start: .init(x: 80, y: 0), end: .init(x: 80, y: 60)))
+        session.addShape(.init(kind: .circle, plane: .top, start: .init(x: 0, y: 70), end: .init(x: 5, y: 70)))
+        session.select(.body(id))
+        session.requestCamera(.reset)
+        controller.refresh()
+        XCTAssertNotNil(controller.transformWidget())
+        return (session, controller, id)
+    }
+
+    func testCenterGoesOntoAnotherSolidAndTurnsTheSelectedSolidAboutIt() throws {
+        let (session, controller, id) = try outsideScene()
+        let other = try XCTUnwrap(session.workspace.bodies.first { $0.id != id })
+        let points = controller.pivotSnaps().points
+        func offered(_ p: SIMD3<Double>) -> Bool { points.contains { simd_distance($0.point, p) < 1e-6 } }
+        XCTAssertTrue(offered(SIMD3(100, 20, 20)), "The other solid's corners")
+        XCTAssertTrue(offered(SIMD3(80, 0, 20)), "Its face centers")
+        XCTAssertTrue(offered(SIMD3(80, 60, 0)), "Sketch line ends")
+        XCTAssertTrue(offered(SIMD3(0, 70, 0)), "Circle centers")
+        XCTAssertFalse(offered(SIMD3(80, 0, 0)), "A line end under the other solid is hidden")
+        XCTAssertFalse(points.contains { $0.kind == .origin }, "The origin is hidden under the selected box")
+        XCTAssertEqual(points.filter { $0.kind == .center }.count, 1, "Only the selected solid's middle")
+
+        // Onto the other box's top front edge: the widget's x axis lies along it.
+        try movePivot(controller, to: SIMD3(70.2, -20, 20))
+        var pivot = try XCTUnwrap(session.transformPivot)
+        XCTAssertEqual(pivot.kind, .edge)
+        XCTAssertLessThan(simd_distance(pivot.center, SIMD3(70, -20, 20)), 1e-6)
+        XCTAssertEqual(abs(pivot.axes[0].x), 1, accuracy: 1e-9, "The x axis follows the other solid's edge")
+
+        // Onto its far corner, with the live label, then a quarter turn about it.
+        let before = session.workspace
+        var widget = try XCTUnwrap(controller.transformWidget())
+        let corner = controller.project(SIMD3(100, 20, 20))
+        controller.pencilBegan(at: widget.center)
+        XCTAssertTrue(session.isDraggingPivot)
+        controller.pencilMoved(to: CGPoint(x: (widget.center.x + corner.x) / 2, y: (widget.center.y + corner.y) / 2))
+        controller.pencilMoved(to: corner)
+        XCTAssertEqual(session.snapLabel, "Corner")
+        XCTAssertEqual(try XCTUnwrap(controller.transformWidget()).center.x, corner.x, accuracy: 0.5, "The widget follows the Pencil")
+        controller.refresh()
+        attach(controller, "Dragging the center onto another solid")
+        controller.pencilEnded(at: corner, cancelled: false)
+        controller.refresh()
+        pivot = try XCTUnwrap(session.transformPivot)
+        XCTAssertEqual(pivot.kind, .corner)
+        XCTAssertLessThan(simd_distance(pivot.center, SIMD3(100, 20, 20)), 1e-6)
+        XCTAssertEqual(session.workspace, before, "Placing the center changes nothing in the model")
+        XCTAssertEqual(session.selection, .body(id))
+
+        widget = try XCTUnwrap(controller.transformWidget())
+        let arc = try XCTUnwrap(widget.arcs.first { $0.axis == 2 })
+        drag(controller, from: arc.points[6], to: arc.points[12])
+        XCTAssertTrue(session.applyDimension(90, target: .transformAngle))
+        let turned = try bounds(try XCTUnwrap(session.workspace.bodies.first { $0.id == id }))
+        XCTAssertEqual(turned.min.x, 100, accuracy: 1e-6, "A quarter turn about the other box's corner at (100, 20)")
+        XCTAssertEqual(turned.max.x, 140, accuracy: 1e-6)
+        XCTAssertEqual(turned.min.y, -110, accuracy: 1e-6)
+        XCTAssertEqual(turned.max.y, -50, accuracy: 1e-6)
+        XCTAssertEqual(session.workspace.bodies.first { $0.id == other.id }, other, "The other solid stays put")
+        XCTAssertLessThan(simd_distance(try XCTUnwrap(session.transformPivot).center, SIMD3(100, 20, 20)), 1e-6, "The center stays on the corner")
+        attach(controller, "Turned about another solid's corner")
+        session.undo()
+        XCTAssertEqual(session.workspace, before, "The turn is one undo step")
+    }
+
+    func testCenterGoesOntoASketchCircleCenterAndTheOrigin() throws {
+        let (session, controller, id) = try outsideScene()
+        func box() throws -> (min: SIMD3<Double>, max: SIMD3<Double>) {
+            try bounds(try XCTUnwrap(session.workspace.bodies.first { $0.id == id }))
+        }
+        try movePivot(controller, to: SIMD3(0, 70, 0))
+        var pivot = try XCTUnwrap(session.transformPivot)
+        XCTAssertEqual(pivot.kind, .circleCenter)
+        XCTAssertLessThan(simd_distance(pivot.center, SIMD3(0, 70, 0)), 1e-6)
+        XCTAssertEqual(abs(pivot.axes[2].z), 1, accuracy: 1e-9, "The widget turns about the circle's axis")
+        var widget = try XCTUnwrap(controller.transformWidget())
+        let arc = try XCTUnwrap(widget.arcs.first { $0.axis == 2 })
+        drag(controller, from: arc.points[6], to: arc.points[12])
+        XCTAssertTrue(session.applyDimension(90, target: .transformAngle))
+        let turned = try box()
+        XCTAssertEqual(turned.min.x, 50, accuracy: 1e-6, "A quarter turn about the circle's center at (0, 70)")
+        XCTAssertEqual(turned.max.x, 90, accuracy: 1e-6)
+        XCTAssertEqual(turned.min.y, 40, accuracy: 1e-6)
+        XCTAssertEqual(turned.max.y, 100, accuracy: 1e-6)
+
+        // The box is out of the way, so the origin is in sight.
+        controller.refresh()
+        XCTAssertTrue(controller.pivotSnaps().points.contains { $0.kind == .origin })
+        try movePivot(controller, to: SIMD3(0, 0, 0))
+        pivot = try XCTUnwrap(session.transformPivot)
+        XCTAssertEqual(pivot.kind, .origin)
+        XCTAssertLessThan(simd_length(pivot.center), 1e-6)
+        let moved = session.workspace
+        widget = try XCTUnwrap(controller.transformWidget())
+        let up = try XCTUnwrap(widget.arrows.first { $0.axis == 2 })
+        let start = CGPoint(x: (up.base.x + up.tip.x) / 2, y: (up.base.y + up.tip.y) / 2)
+        drag(controller, from: start, to: CGPoint(x: start.x + up.direction.dx * 40, y: start.y + up.direction.dy * 40))
+        XCTAssertTrue(session.applyDimension(15, target: .transformDistance))
+        XCTAssertEqual(try box().min.z, 15, accuracy: 1e-6)
+        XCTAssertLessThan(simd_distance(try XCTUnwrap(session.transformPivot).center, SIMD3(0, 0, 15)), 1e-6, "The center moves with the solid")
+        session.undo()
+        XCTAssertEqual(session.workspace, moved, "The move is one undo step")
+    }
+
     func testSketchWidgetCenterDoesNotMove() throws {
         let session = ModelingSession(inMemory: true)
         session.addShape(.init(kind: .rectangle, plane: .top, start: .init(x: -30, y: -20), end: .init(x: 30, y: 20)))

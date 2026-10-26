@@ -3276,7 +3276,8 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         var arcs: [(axis: Int, points: [CGPoint])]
         /// How much each axis points toward the viewer (−1…1).
         var toward: [Double]
-        /// A solid's widget center can be dragged onto its corners and edges; a sketch's cannot.
+        /// A solid's widget center can be dragged onto its corners and edges, or onto other solids,
+        /// sketch points, and the origin; a sketch's cannot.
         var canPivot = false
 
         func handle(at point: CGPoint) -> TransformHandle? {
@@ -3344,13 +3345,24 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         return gizmo(center: draft.center, axes: draft.axes, canPivot: circular, moves: !circular, turns: circular)
     }
 
-    /// Where a selected solid's widget center can snap to: its
-    /// middle, corners, edge midpoints, and circle and face centers, and any point on an edge. Only
-    /// places not hidden behind a face are offered.
+    /// Where a selected solid's widget center can snap to: its middle, corners, edge midpoints, and
+    /// circle and face centers, and any point on an edge; the same places on the other visible
+    /// solids (but not their middles); sketch points; and the origin. Only places not hidden behind
+    /// a face are offered.
     func pivotSnaps() -> (points: [TransformPivot], edges: [[SIMD3<Double>]]) {
         guard case .body(let id) = session.transformWidgetTarget,
               let body = session.workspace.bodies.first(where: { $0.id == id }) else { return ([], []) }
-        return pivotSnaps(of: body)
+        // Its own snaps come first, so a corner it shares with another solid is its own.
+        var snaps = pivotSnaps(of: body)
+        for other in session.workspace.visible.bodies where other.id != id {
+            let more = pivotSnaps(of: other)
+            // Dropped on `.center` the widget goes back to this solid's middle, so another's is left out.
+            snaps.points += more.points.filter { $0.kind != .center }
+            snaps.edges += more.edges
+        }
+        let points = [TransformPivot(kind: .origin, point: .zero)] + sketchPointSnaps()
+        snaps.points += zip(points, shownPoints(points.map(\.point))).filter(\.1).map(\.0)
+        return snaps
     }
 
     private func pivotSnaps(of body: SolidBody) -> (points: [TransformPivot], edges: [[SIMD3<Double>]]) {
@@ -3513,6 +3525,13 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             points += snaps.points
             edges += snaps.edges
         }
+        return (points + sketchPointSnaps(), edges)
+    }
+
+    /// The visible sketches' line and arc ends, rectangle corners, points, and circle, arc,
+    /// slot-end, and ellipse centers (a circle's axis is its plane's normal).
+    private func sketchPointSnaps() -> [TransformPivot] {
+        var points: [TransformPivot] = []
         for shape in session.workspace.visible.shapes {
             let normal = shape.plane.normalAxis
             switch shape.kind {
@@ -3528,7 +3547,7 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             case .curve: break
             }
         }
-        return (points, edges)
+        return points
     }
 
     private func pivotSnap(at point: CGPoint, in snaps: (points: [TransformPivot], edges: [[SIMD3<Double>]])) -> TransformPivot? {

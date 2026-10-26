@@ -205,11 +205,11 @@ extension Workspace {
 }
 
 /// Where a solid's Move/Rotate widget sits and turns about once its center is dragged onto the
-/// solid: a corner, any point on an edge, an edge's midpoint, a circle's
-/// center, a face's center, or back to the middle of the solid.
+/// solid (or another solid): a corner, any point on an edge, an edge's midpoint, a circle's
+/// center, a face's center, or back to the middle of the solid; or a sketch point or the origin.
 struct TransformPivot: Equatable, Sendable {
     enum Kind: Equatable, Sendable {
-        /// Pattern's gizmo center can also go to the origin or a sketch point (an end or center).
+        /// The widget and Pattern's gizmo center can also go to the origin or a sketch point (an end or center).
         case center, corner, midpoint, edge, circleCenter, faceCenter, origin, point
         var title: String {
             switch self {

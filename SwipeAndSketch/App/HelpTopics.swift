@@ -301,7 +301,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
             HelpOverview(
                 summary: "The whole solid is selected. Move it, turn it, or copy it.",
                 steps: ["Drag an arrow to move it, or an arc to turn it.", "Tap a value to type an exact distance or angle."],
-                tips: ["Drag the center dot onto a corner or edge to turn about that spot.", "Turn on Create Copy to keep the original.", "The actions above the dock work on this solid."])
+                tips: ["Drag the center dot onto a corner or edge to turn about that spot. It can also go to another solid, a sketch point, or the origin.", "Turn on Create Copy to keep the original.", "The actions above the dock work on this solid."])
         case .face:
             HelpOverview(
                 summary: "A face is selected. You can change its size, push or pull it, sketch on it, or take it off.",

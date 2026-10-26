@@ -371,7 +371,8 @@ struct TransformRecord: Equatable {
     }
 }
 
-/// A solid's widget center placed on the solid, and the widget's axes there.
+/// A solid's widget center placed on the solid (or on another solid, a sketch point, or the
+/// origin), and the widget's axes there. It moves with the solid.
 struct PlacedPivot: Equatable {
     var bodyID: UUID
     /// The solid as it was when the center was placed; any other change to it lapses the pivot.
@@ -2277,7 +2278,7 @@ struct DimensionEdit: Identifiable {
         if isPickingPlane { return "Draw on the grid, or tap one of the planes at the origin or a flat face to sketch on it." }
         if selectedConstructionPlane != nil { return "Construction plane selected. Tap Sketch to draw on it, or Offset Plane for a parallel plane." }
         if transformDrag?.copy == true { return "Copying. Lift Pencil to place the copy." }
-        if isDraggingPivot { return "Drag the center onto a corner, an edge, or a circle or face center. Lift Pencil to turn about it there." }
+        if isDraggingPivot { return "Drag the center onto a corner, an edge, or a circle or face center, of this solid or another, a sketch point, or the origin. Lift Pencil to turn about it there." }
         if isMultipleSelection {
             if pickedBodies.count > 1 {
                 return "\(pickedSummary) picked. Drag an arrow to move them all or an arc to turn them. Double-tap another solid to add it, or a picked one to take it out. Combine, Transform, Color, Duplicate, Export, and Delete take them all."
@@ -4404,8 +4405,9 @@ struct DimensionEdit: Identifiable {
         return pivot
     }
 
-    /// Pencil down on a solid's widget center: drag it to a corner, an edge, or a center to move or
-    /// turn about there. Sketches keep their widget at their middle.
+    /// Pencil down on a solid's widget center: drag it to a corner, an edge, or a center (of this
+    /// solid or another), a sketch point, or the origin to move or turn about there. Sketches keep
+    /// their widget at their middle.
     @discardableResult func beginPivotDrag() -> Bool {
         guard case .body(let id) = transformWidgetTarget, transformDrag == nil, !isEditingBlocked,
               let body = workspace.bodies.first(where: { $0.id == id }) else { return false }
