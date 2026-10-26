@@ -1,17 +1,17 @@
 # Swipe & Sketch
 
-Swipe & Sketch is an iPad CAD app for designing 3D-printable parts with Apple Pencil. You sketch lines, circles, rectangles, arcs, and slots on a plane or a face, dimension them, and turn them into solids with extrude, revolve, fillet, chamfer, shell, holes, threads, and boolean tools. Then you export 3MF or STL, or send the model straight to your slicer. Solids are built by the [Open CASCADE Technology](https://dev.opencascade.org) modeling kernel. An optional AI assistant, running on Apple Foundation Models, can answer questions about a model and change it.
+Swipe & Sketch is an iPad CAD app for designing 3D-printable parts with Apple Pencil. You sketch lines, rectangles, circles, arcs, slots, ellipses, polygons, and splines on a plane or a face, dimension them, and turn them into solids with extrude, revolve, loft, sweep, fillet, chamfer, shell, holes, threads, and boolean tools, or start from a template (Gridfinity, electronics mounts and cases, enclosures) or an imported STEP, STL, or 3MF file. Then you export 3MF or STL, or send the model straight to your slicer. Solids are built by the [Open CASCADE Technology](https://dev.opencascade.org) modeling kernel. An optional AI assistant, running on Apple Foundation Models, can answer questions about a model and change it.
 
 ![A shaded solid in Swipe & Sketch](Docs/ShadedSolid.png)
 
-There are no accounts. The only network service is the optional assistant's use of Apple's Private Cloud Compute.
+There are no accounts. The app reaches the network only for the optional assistant's use of Apple's Private Cloud Compute, the walkthroughs the help card plays from swipesketch.com, and App Store purchases.
 
 ## Status
 
 - Version 1.0, in preparation for the App Store.
 - iPad only, iPadOS 27 or later.
 - **Apple Pencil is required.** The Pencil draws, selects, and drags geometry. Fingers move the view and press buttons. There is no finger-drawing mode.
-- The assistant needs Apple Intelligence. Everything else works offline.
+- The assistant needs Apple Intelligence. Modeling works offline; the help card's walkthroughs and purchases need a connection.
 
 ## Building
 

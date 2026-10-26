@@ -848,10 +848,10 @@ struct DimensionEdit: Identifiable {
             if selection != oldValue, !extraSelection.isEmpty { extraSelection = [] }
         }
     }
-    /// More sketch regions and whole sketches picked along with `selection` (user decision, October
-    /// 23, 2026): outside a sketch, with a region or sketch selected, a Pencil tap on another one on
-    /// the same plane adds it and a tap on a picked one takes it out. Extrude and Revolve take them
-    /// all at once. Any other change of selection ends it.
+    /// More items picked along with `selection`: sketch regions and whole sketches on the same plane
+    /// (a tap adds one, a tap on a picked one takes it out; Extrude and Revolve take them all),
+    /// regions inside an open sketch, whole solids (a double-tap adds one), or edges of one solid
+    /// (Fillet and Chamfer take them all). Any other change of selection ends it.
     @Published private(set) var extraSelection: [ModelSelection] = []
     @Published var preview: SketchShape?
     @Published var extrusionDepth = 0.0 { didSet { updateCutPreview() } }
