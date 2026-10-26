@@ -180,6 +180,80 @@ import SwiftUI
         try await waitUntil { again.projects.map(\.name) == ["Lid"] }
     }
 
+    func testRecentProjectsFollowMovedFilesAndDropDeletedOnes() async throws {
+        let root = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let documents = root.appendingPathComponent("Documents"), elsewhere = root.appendingPathComponent("Elsewhere")
+        let cloud = root.appendingPathComponent("Mobile Documents/com~apple~CloudDocs")
+        for folder in [documents, elsewhere.appendingPathComponent("Archive"), cloud] {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        }
+        defer { try? FileManager.default.removeItem(at: root) }
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "RecentProjectsTests-\(UUID().uuidString)"))
+        let local = documents.appendingPathComponent("Bracket.swipesketch")
+        let lid = elsewhere.appendingPathComponent("Lid.swipesketch")
+        let hinge = cloud.appendingPathComponent("Hinge.swipesketch")
+        let clip = cloud.appendingPathComponent("Clip.swipesketch")
+        var project = Project()
+        project.preview = UIGraphicsImageRenderer(size: CGSize(width: 4, height: 4)).pngData { $0.fill(CGRect(x: 0, y: 0, width: 4, height: 4)) }
+        for url in [local, lid, hinge, clip] { try ProjectCodec.create(project, at: url) }
+        let recents = RecentProjects(defaults: defaults, documents: documents, cache: root.appendingPathComponent("Pictures"))
+        for url in [local, lid, hinge, clip] { recents.record(url, project: project) }
+        try await waitUntil { recents.projects.count == 4 }
+
+        // Files moves a deleted project into Recently Deleted (a .Trash folder), where the bookmark still finds it.
+        let trash = documents.appendingPathComponent(".Trash")
+        try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: local, to: trash.appendingPathComponent(local.lastPathComponent))
+        XCTAssertTrue(RecentProjects.isTrashed(trash.appendingPathComponent(local.lastPathComponent)))
+        // A moved and renamed project stays, at its new place and name, with its picture.
+        let renamed = elsewhere.appendingPathComponent("Archive/Lid v2.swipesketch")
+        try FileManager.default.moveItem(at: lid, to: renamed)
+        // An iCloud file evicted to a placeholder stays; one deleted outright drops out.
+        try FileManager.default.removeItem(at: hinge)
+        try Data().write(to: cloud.appendingPathComponent(".Hinge.swipesketch.icloud"))
+        try FileManager.default.removeItem(at: clip)
+        recents.refresh()
+        try await waitUntil { recents.projects.count == 2 }
+        XCTAssertEqual(Set(recents.projects.map(\.name)), ["Lid v2", "Hinge"])
+        let moved = try XCTUnwrap(recents.projects.first { $0.name == "Lid v2" })
+        XCTAssertEqual(moved.id, RecentProjects.key(renamed))
+        XCTAssertEqual(moved.place, .elsewhere)
+        let placeholder = try XCTUnwrap(recents.projects.first { $0.name == "Hinge" })
+        XCTAssertEqual(placeholder.place, .iCloud)
+        XCTAssertEqual(placeholder.id, RecentProjects.key(hinge))
+        try await waitUntil { recents.pictures[moved.id] != nil }
+
+        // The stored entries changed too: a relaunch finds the same list without the deleted ones.
+        let again = RecentProjects(defaults: defaults, documents: documents, cache: root.appendingPathComponent("Pictures"))
+        again.refresh()
+        try await waitUntil { Set(again.projects.map(\.name)) == ["Lid v2", "Hinge"] && again.pictures[moved.id] != nil }
+        // Once the placeholder is gone too, the iCloud project was deleted.
+        try FileManager.default.removeItem(at: cloud.appendingPathComponent(".Hinge.swipesketch.icloud"))
+        again.refresh()
+        try await waitUntil { again.projects.map(\.name) == ["Lid v2"] }
+    }
+
+    func testRecentProjectsRefreshWhenDocumentsChange() async throws {
+        let root = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let documents = root.appendingPathComponent("Documents")
+        try FileManager.default.createDirectory(at: documents, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "RecentProjectsTests-\(UUID().uuidString)"))
+        let local = documents.appendingPathComponent("Bracket.swipesketch")
+        try ProjectCodec.create(Project(), at: local)
+        let recents = RecentProjects(defaults: defaults, documents: documents, cache: root.appendingPathComponent("Pictures"))
+        recents.record(local, project: Project())
+        try await waitUntil { recents.projects.count == 1 }
+        recents.watchDocuments()
+        // A coordinated delete, as Files makes, refreshes Home without being asked.
+        var coordinationError: NSError?
+        NSFileCoordinator().coordinate(writingItemAt: local, options: .forDeleting, error: &coordinationError) { url in
+            try? FileManager.default.removeItem(at: url)
+        }
+        XCTAssertNil(coordinationError)
+        try await waitUntil { recents.projects.isEmpty }
+    }
+
     private func waitUntil(_ condition: @MainActor () -> Bool) async throws {
         for _ in 0..<100 where !condition() { try await Task.sleep(for: .milliseconds(50)) }
         XCTAssertTrue(condition())

@@ -64,9 +64,10 @@ struct HomeView: View {
         .tint(violet)
         .sheet(isPresented: $showAbout) { AboutView { showAbout = false } }
         .sheet(isPresented: $showPurchases) { PurchasesView { showPurchases = false } }
-        .onAppear { recents.refresh() }
-        // Projects may have changed in Files meanwhile.
+        .onAppear { recents.refresh(); recents.watchDocuments() }
+        // Projects may have changed in Files meanwhile (the Files section here, or the Files app).
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in recents.refresh() }
+        .onChange(of: model.section) { _, section in if section == .home { recents.refresh() } }
         .task { thumbnails.load(TemplateCatalog.all) }
     }
 

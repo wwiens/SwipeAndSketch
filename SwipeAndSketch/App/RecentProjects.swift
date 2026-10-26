@@ -23,7 +23,9 @@ struct RecentProject: Identifiable, Equatable, Sendable {
 /// The projects Home lists (October 22, 2026): those opened here, kept as bookmarks so files in
 /// iCloud Drive and other places reopen, plus every project in the app's own Documents folder.
 /// Each opened project's picture is kept in Caches when it closes, so the list shows pictures
-/// without reading (or downloading) the files. Moved or deleted files drop out quietly.
+/// without reading (or downloading) the files. Moved or renamed files are followed to their new
+/// place; deleted ones (gone, or in Recently Deleted) drop out quietly, while iCloud files not yet
+/// downloaded or briefly out of reach stay (October 25, 2026).
 @MainActor final class RecentProjects: ObservableObject {
     static let shared = RecentProjects()
     @Published private(set) var projects: [RecentProject] = []
@@ -45,6 +47,7 @@ struct RecentProject: Identifiable, Equatable, Sendable {
     /// Projects in Documents removed from Home; they come back when opened again.
     private var dismissed: Set<String>
     private var refreshing: Task<Void, Never>?
+    private var watcher: FolderWatcher?
 
     init(defaults: UserDefaults = .standard, documents: URL = .documentsDirectory,
          cache: URL = .cachesDirectory.appendingPathComponent("RecentPictures", isDirectory: true)) {
@@ -54,6 +57,8 @@ struct RecentProject: Identifiable, Equatable, Sendable {
         stored = (defaults.data(forKey: "recentProjects")).flatMap { try? JSONDecoder().decode([Stored].self, from: $0) } ?? []
         dismissed = Set(defaults.stringArray(forKey: "recentProjects.dismissed") ?? [])
     }
+
+    deinit { if let watcher { NSFileCoordinator.removeFilePresenter(watcher) } }
 
     nonisolated static func key(_ url: URL) -> String { url.standardizedFileURL.resolvingSymlinksInPath().path }
 
@@ -90,6 +95,14 @@ struct RecentProject: Identifiable, Equatable, Sendable {
         save()
     }
 
+    /// Refreshes when something in Documents is deleted, moved, or added, even by Files beside the app.
+    func watchDocuments() {
+        guard watcher == nil else { return }
+        let watcher = FolderWatcher(documents) { [weak self] in self?.refresh() }
+        NSFileCoordinator.addFilePresenter(watcher)
+        self.watcher = watcher
+    }
+
     /// Finds the projects again: resolves the bookmarks and looks through Documents, off the main thread.
     func refresh() {
         refreshing?.cancel()
@@ -101,8 +114,17 @@ struct RecentProject: Identifiable, Equatable, Sendable {
             guard !Task.isCancelled else { return }
             projects = found.projects
             if !found.forgotten.isEmpty || !found.moved.isEmpty {
+                for entry in self.stored where found.forgotten.contains(entry.path) {
+                    try? FileManager.default.removeItem(at: pictureURL(entry.picture))
+                    pictures[entry.path] = nil
+                }
                 self.stored.removeAll { found.forgotten.contains($0.path) }
-                for index in self.stored.indices { if let path = found.moved[self.stored[index].path] { self.stored[index].path = path } }
+                for index in self.stored.indices {
+                    guard let move = found.moved[self.stored[index].path] else { continue }
+                    if let picture = pictures.removeValue(forKey: self.stored[index].path) { pictures[move.path] = picture }
+                    self.stored[index].path = move.path
+                    if let bookmark = move.bookmark { self.stored[index].bookmark = bookmark }
+                }
                 save()
             }
             let wanted = found.projects.filter { pictures[$0.id] == nil }
@@ -126,26 +148,81 @@ struct RecentProject: Identifiable, Equatable, Sendable {
         }
     }
 
-    private nonisolated static func find(stored: [Stored], dismissed: Set<String>, documents: URL) -> (projects: [RecentProject], forgotten: Set<String>, moved: [String: String]) {
+    /// Where a stored project's file is now. `gone` only when it was really deleted: the bookmark
+    /// cannot find it and nothing stands in its place, or it is in a Recently Deleted (`.Trash`) folder.
+    enum Whereabouts: Equatable, Sendable {
+        /// Found, possibly moved or renamed; `bookmark` is set when the old one should be replaced.
+        case at(URL, bookmark: Data?)
+        /// Not reachable just now (an iCloud file not downloaded yet, a provider that is away): kept, at
+        /// what its bookmark found or else its last place.
+        case unreachable(URL?)
+        case gone
+    }
+
+    nonisolated static func whereabouts(path: String, bookmark: Data, documents: URL) -> Whereabouts {
+        let fileManager = FileManager.default
+        var stale = false
+        let url: URL
+        do {
+            url = try URL(resolvingBookmarkData: bookmark, bookmarkDataIsStale: &stale)
+        } catch let error as CocoaError where error.code == .fileNoSuchFile || error.code == .fileReadNoSuchFile {
+            // An iCloud file evicted to a placeholder no longer resolves, but is still there to download.
+            return hasCloudPlaceholder(URL(fileURLWithPath: path)) ? .unreachable(nil) : .gone
+        } catch {
+            return .unreachable(nil)
+        }
+        if isTrashed(url) { return .gone }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        if fileManager.fileExists(atPath: url.path) || hasCloudPlaceholder(url) {
+            let renewed = stale || key(url) != path ? try? url.bookmarkData() : nil
+            return .at(url, bookmark: renewed)
+        }
+        // Outside the app's own folders, a file whose security scope did not open may only look missing.
+        let own = key(url).hasPrefix(key(documents.deletingLastPathComponent()) + "/")
+        return scoped || own ? .gone : .unreachable(url)
+    }
+
+    /// In a Recently Deleted folder: Files moves a deleted project into the `.Trash` folder of its
+    /// app's Documents or of iCloud Drive, where its bookmark still finds it.
+    nonisolated static func isTrashed(_ url: URL) -> Bool {
+        if url.standardizedFileURL.pathComponents.contains(".Trash") { return true }
+        if let trash = try? FileManager.default.url(for: .trashDirectory, in: .userDomainMask, appropriateFor: url, create: false) {
+            return key(url).hasPrefix(key(trash) + "/")
+        }
+        return false
+    }
+
+    /// An iCloud file not downloaded yet may be stood in for by a hidden `.Name.ext.icloud` file.
+    nonisolated static func hasCloudPlaceholder(_ url: URL) -> Bool {
+        let placeholder = url.deletingLastPathComponent().appendingPathComponent("." + url.lastPathComponent + ".icloud")
+        return FileManager.default.fileExists(atPath: placeholder.path)
+    }
+
+    private nonisolated static func find(stored: [Stored], dismissed: Set<String>, documents: URL) -> (projects: [RecentProject], forgotten: Set<String>, moved: [String: (path: String, bookmark: Data?)]) {
         let fileManager = FileManager.default
         let base = key(documents)
         var byPath: [String: RecentProject] = [:]
         var forgotten = Set<String>()
         // A bookmark follows its file when it moves; the entry then takes the new path.
-        var moved: [String: String] = [:]
+        var moved: [String: (path: String, bookmark: Data?)] = [:]
         func place(_ path: String) -> RecentProject.Place {
             if path.hasPrefix(base + "/") { return .iPad }
             return path.contains("/Mobile Documents/") ? .iCloud : .elsewhere
         }
         for entry in stored {
-            var stale = false
-            guard let url = try? URL(resolvingBookmarkData: entry.bookmark, bookmarkDataIsStale: &stale) else { forgotten.insert(entry.path); continue }
+            let url: URL
+            switch whereabouts(path: entry.path, bookmark: entry.bookmark, documents: documents) {
+            case .gone: forgotten.insert(entry.path); continue
+            case let .unreachable(found): url = found ?? URL(fileURLWithPath: entry.path)
+            case let .at(found, bookmark):
+                url = found
+                let path = key(found)
+                if path != entry.path || bookmark != nil { moved[entry.path] = (path, bookmark) }
+            }
             let path = key(url)
-            if path != entry.path { moved[entry.path] = path }
-            let where_ = place(path)
-            if where_ == .iPad, !fileManager.fileExists(atPath: path) { forgotten.insert(entry.path); continue }
             byPath[path] = RecentProject(id: path, url: url, name: url.deletingPathExtension().lastPathComponent, date: entry.opened,
-                                         place: where_, sketches: entry.sketches, solids: entry.solids)
+                                         place: place(path), sketches: entry.sketches, solids: entry.solids)
         }
         let keys: [URLResourceKey] = [.contentModificationDateKey, .isDirectoryKey]
         if let files = fileManager.enumerator(at: documents, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles, .skipsPackageDescendants]) {
@@ -171,5 +248,39 @@ struct RecentProject: Identifiable, Equatable, Sendable {
     private func save() {
         defaults.set(try? JSONEncoder().encode(stored), forKey: "recentProjects")
         defaults.set(Array(dismissed), forKey: "recentProjects.dismissed")
+    }
+}
+
+/// Tells Home when Files (here or beside the app) deletes, moves, or adds something in Documents.
+/// Several changes in a row make one refresh.
+private final class FolderWatcher: NSObject, NSFilePresenter, @unchecked Sendable {
+    let presentedItemURL: URL?
+    let presentedItemOperationQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.maxConcurrentOperationCount = 1
+        return queue
+    }()
+    private let changed: @MainActor () -> Void
+    private var pending: DispatchWorkItem?
+
+    init(_ folder: URL, changed: @escaping @MainActor () -> Void) {
+        presentedItemURL = folder
+        self.changed = changed
+    }
+
+    private func changeSoon() {
+        pending?.cancel()
+        let changed = changed
+        let work = DispatchWorkItem { MainActor.assumeIsolated { changed() } }
+        pending = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+    }
+
+    func presentedSubitemDidAppear(at url: URL) { changeSoon() }
+    func presentedSubitemDidChange(at url: URL) { changeSoon() }
+    func presentedSubitem(at oldURL: URL, didMoveTo newURL: URL) { changeSoon() }
+    func accommodatePresentedSubitemDeletion(at url: URL, completionHandler: @escaping @Sendable (Error?) -> Void) {
+        completionHandler(nil)
+        changeSoon()
     }
 }
