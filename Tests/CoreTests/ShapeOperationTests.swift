@@ -66,6 +66,26 @@ final class ShapeOperationTests: XCTestCase {
 }
 
 extension ShapeOperationTests {
+    /// The assistant's Rib, like the canvas tool, grows only into solids that are shown.
+    func testAssistantRibReachesShownSolidsOnly() throws {
+        var bracket = try box(0, -10, 40, 10, depth: 4)
+        let wall = SketchShape(kind: .rectangle, plane: .top, start: .init(x: 0, y: -10), end: .init(x: 4, y: 10))
+        bracket.cuts.append(ExtrusionCut(profile: try XCTUnwrap(Geometry.profiles(in: [wall], on: .top).first), depth: 30, operation: .join))
+        var bench = AssistantWorkbench(workspace: Workspace(bodies: [bracket]))
+        _ = try bench.addShapes([.init(kind: .line, point: [4, 0, 24], end: [34, 0, 4])], on: .world(.front))
+        var hidden = bench.workspace
+        hidden.bodies[0].hidden = true
+        var shown = bench.workspace
+        bench = AssistantWorkbench(workspace: hidden)
+        XCTAssertThrowsError(try bench.rib(line: "Line 01", thickness: 3), "The hidden bracket takes no rib")
+        bench = AssistantWorkbench(workspace: shown)
+        let change = try bench.rib(line: "Line 01", thickness: 3)
+        XCTAssertTrue(change.contains("3 mm rib"), change)
+        XCTAssertEqual(bench.workspace.bodies[0].cuts.last?.operation, .rib)
+        shown = bench.workspace
+        XCTAssertGreaterThan(try volume(shown.bodies[0]), try volume(bracket))
+    }
+
     func testAssistantDraftsAndLofts() throws {
         var bench = AssistantWorkbench(workspace: Workspace(bodies: [try box(-10, -10, 10, 10, depth: 20)]))
         let draft = try bench.draft(body: "Body 01", faces: ["front", "back"], from: "bottom", angle: 4)

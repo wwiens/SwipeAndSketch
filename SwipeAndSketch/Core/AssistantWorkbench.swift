@@ -1868,7 +1868,8 @@ struct AssistantWorkbench {
         }
         guard RibSpec.thicknessRange.contains(thickness) else { throw Failure("A rib is 0.1–100 mm thick.") }
         let a = line.plane.point(line.start), b = line.plane.point(line.end)
-        for index in workspace.bodies.indices {
+        // Hidden solids are left alone, as by the Rib tool on the canvas.
+        for index in workspace.bodies.indices where !workspace.isHidden(workspace.bodies[index]) {
             guard let ribbed = Ribs.ribbing(workspace.bodies[index], from: a, to: b, normal: line.plane.normalAxis, thickness: thickness) else { continue }
             var next = workspace
             next.bodies[index] = ribbed
