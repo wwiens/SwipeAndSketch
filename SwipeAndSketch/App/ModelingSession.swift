@@ -4078,6 +4078,8 @@ struct DimensionEdit: Identifiable {
     }
 
     func confirmExtrusion() {
+        // Done waits while the file is busy or locked; the preview stays for later.
+        guard !isEditingBlocked else { return }
         if isCutting || isJoining { confirmOperation(); return }
         guard isExtruding, !extrusionProfiles.isEmpty else { return }
         let bodies = newExtrusionBodies()
@@ -4283,7 +4285,7 @@ struct DimensionEdit: Identifiable {
     }
 
     func confirmRevolve() {
-        guard canConfirmRevolve, let draft = revolveDraft, let spec = draft.spec else { return }
+        guard canConfirmRevolve, let draft = revolveDraft, let spec = draft.spec, !isEditingBlocked else { return }
         let picked: UUID
         switch draft.mode {
         case .newBody:
@@ -5160,7 +5162,7 @@ struct DimensionEdit: Identifiable {
     }
 
     func confirmShell() {
-        guard let draft = shellDraft, draftError == nil, let preview = shellPreview else { return }
+        guard let draft = shellDraft, draftError == nil, let preview = shellPreview, !isEditingBlocked else { return }
         lastShellThickness = draft.thickness
         commit(preview)
         clearShellDraft()
@@ -5321,7 +5323,7 @@ struct DimensionEdit: Identifiable {
     }
 
     func confirmHole() {
-        guard let draft = holeDraft, draftError == nil, let preview = holePreview else { return }
+        guard let draft = holeDraft, draftError == nil, let preview = holePreview, !isEditingBlocked else { return }
         commit(preview)
         clearHoleDraft()
         if draft.replacing != nil {
@@ -6249,7 +6251,7 @@ struct DimensionEdit: Identifiable {
     }
 
     func confirmFinish() {
-        guard let draft = finishDraft, finishError == nil, let preview = finishPreview else { return }
+        guard let draft = finishDraft, finishError == nil, let preview = finishPreview, !isEditingBlocked else { return }
         lastFinishSize[draft.kind] = draft.size
         commit(preview)
         clearFinishDraft()
@@ -6752,6 +6754,10 @@ struct DimensionEdit: Identifiable {
         guard let preview = assistantPreview, !isAssistantWorking, !isProjectBusy else { return false }
         guard !isReadOnly else {
             saveError = "This file cannot be changed right now, so the assistant's changes are still under review. Resolve the file first, or Discard them."
+            return false
+        }
+        guard !isLicenseLocked else {
+            saveError = "Editing is locked, so the assistant's changes are still under review. Unlock in Purchases to keep them, or Discard them."
             return false
         }
         assistantPreview = nil

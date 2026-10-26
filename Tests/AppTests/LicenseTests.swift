@@ -93,4 +93,26 @@ import XCTest
         session.isLicenseLocked = false
         XCTAssertFalse(session.isEditingBlocked)
     }
+
+    /// The trial ending while the assistant's changes are under review keeps them under review, rather
+    /// than dropping them while the panel says Kept.
+    func testAssistantChangesWaitWhenTheLicenseLocksDuringReview() throws {
+        let session = ModelingSession(inMemory: true)
+        let before = session.workspace
+        var changed = before
+        changed.shapes.append(SketchShape(kind: .circle, plane: .top, start: .init(x: 40, y: 0), end: .init(x: 45, y: 0)))
+        session.showAssistantPreview(changed, focus: nil)
+        XCTAssertTrue(session.isReviewingAssistant)
+
+        session.isLicenseLocked = true
+        XCTAssertFalse(session.keepAssistantChanges())
+        XCTAssertTrue(session.isReviewingAssistant, "The changes stay under review")
+        XCTAssertEqual(session.workspace, before)
+        XCTAssertNotNil(session.saveError)
+
+        session.isLicenseLocked = false
+        session.saveError = nil
+        XCTAssertTrue(session.keepAssistantChanges())
+        XCTAssertEqual(session.workspace.shapes.count, before.shapes.count + 1)
+    }
 }

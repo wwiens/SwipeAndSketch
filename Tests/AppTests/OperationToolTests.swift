@@ -512,6 +512,22 @@ import simd
         XCTAssertEqual(try volume(session), 48_000 - removed, accuracy: 1e-3)
     }
 
+    /// Done while the project is busy (saving, exporting) keeps the hole's preview instead of
+    /// clearing it unmade; it goes in once the project is free.
+    func testHoleDoneWaitsWhileEditingIsBlocked() throws {
+        let (session, controller) = try holeScene()
+        tap(controller, SIMD3(0.3, -0.2, 20))
+        XCTAssertNotNil(session.holeDraft)
+        session.isProjectBusy = true
+        session.confirmHole()
+        XCTAssertNotNil(session.holeDraft, "The hole waits")
+        XCTAssertEqual(try volume(session), 48_000, accuracy: 1e-3)
+        session.isProjectBusy = false
+        session.confirmHole()
+        XCTAssertNil(session.holeDraft)
+        XCTAssertLessThan(try volume(session), 48_000)
+    }
+
     func testInsertHoleIsBlindAndEditable() throws {
         let (session, controller) = try holeScene()
         tap(controller, SIMD3(15.2, 9.8, 20))
