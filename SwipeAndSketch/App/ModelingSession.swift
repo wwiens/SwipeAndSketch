@@ -6518,22 +6518,29 @@ struct DimensionEdit: Identifiable {
             guard tool == .offsetPlane, planeDraft?.references.isEmpty == false else { return false }
             setPlaneOffset(value)
         case .draftAngle:
-            guard tool == .draft, var draft = shapeToolDraft else { return false }
+            guard tool == .draft, let previous = shapeToolDraft else { return false }
             guard DraftSpec.angleRange.contains(abs(value)) else { dimensionError = "Enter an angle from 0.01° to 60° (negative leans outward)."; return false }
+            var draft = previous
             draft.angle = value
             updateShapeTool(draft)
-            guard shapeToolPreview != nil else { dimensionError = shapeToolDraft?.error ?? "Those faces cannot lean that far."; return false }
+            guard shapeToolPreview != nil else {
+                // The angle is refused; the last one that built stays, with its preview.
+                dimensionError = shapeToolDraft?.error ?? "Those faces cannot lean that far."
+                updateShapeTool(previous)
+                return false
+            }
         case .ribThickness:
             guard tool == .rib, var draft = shapeToolDraft else { return false }
             guard RibSpec.thicknessRange.contains(value) else { dimensionError = "Enter a thickness from \(lengthText(0.1)) to \(lengthText(100))."; return false }
             draft.thickness = value
             updateShapeTool(draft)
         case .constructionAngle:
-            guard tool == .planeAngle, var draft = constructionDraft, draft.line != nil else { return false }
+            guard tool == .planeAngle, let previous = constructionDraft, previous.line != nil else { return false }
             guard abs(value) <= 360 else { dimensionError = "Enter an angle from −360° to 360°."; return false }
+            var draft = previous
             draft.angle = value
             updateConstruction(draft)
-            guard constructionPreview != nil else { dimensionError = "That plane cannot be made."; return false }
+            guard constructionPreview != nil else { dimensionError = "That plane cannot be made."; updateConstruction(previous); return false }
         case .alignOffset, .alignAngle:
             guard alignPreview != nil, let previous = alignDraft else { return false }
             if target == .alignOffset { setAlignOffset(value) } else { setAlignAngle(value) }

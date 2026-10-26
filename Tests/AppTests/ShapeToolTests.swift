@@ -30,6 +30,26 @@ import simd
         XCTAssertEqual(session.workspace.bodies[0], body, "One undo step")
     }
 
+    /// An angle the faces cannot take is refused, and the last one that built stays with its preview.
+    func testARefusedDraftAngleKeepsTheLastOne() throws {
+        let (session, _) = boxScene()
+        let body = session.workspace.bodies[0]
+        session.chooseTool(.draft)
+        session.pickDraftNeutral(bodyID: body.id, point: [0, 0, 0], outward: [0, 0, -1])
+        // Front and back of the 40 mm deep box: at 60° inward each moves 34.6 mm over 20 mm, so they cross.
+        session.toggleDraftFace(bodyID: body.id, point: [0, -20, 10])
+        session.toggleDraftFace(bodyID: body.id, point: [0, 20, 10])
+        XCTAssertTrue(session.applyDimension(5, target: .draftAngle))
+        XCTAssertNotNil(session.shapeToolPreview)
+        XCTAssertFalse(session.applyDimension(60, target: .draftAngle))
+        XCTAssertNotNil(session.dimensionError)
+        XCTAssertEqual(session.shapeToolDraft?.angle, 5)
+        XCTAssertNil(session.shapeToolDraft?.error)
+        XCTAssertNotNil(session.shapeToolPreview, "Done still makes the 5° draft")
+        session.confirmShapeTool()
+        XCTAssertEqual(session.workspace.bodies[0].cuts.last?.operation, .draft)
+    }
+
     func testARibFillsTheCornerOfABracket() throws {
         let (session, _) = boxScene()
         // A wall standing on the box's left end: an L bracket.
