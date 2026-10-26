@@ -6677,10 +6677,11 @@ struct DimensionEdit: Identifiable {
         if !cancelled, let next { commit(next) }
     }
 
-    /// Whether the selection is a whole item Delete can remove (not a face or edge of a solid).
+    /// Whether the selection is a whole item Delete can remove (not a face or edge of a solid, nor a
+    /// group, whose menu says whether its contents go too).
     var canDeleteSelection: Bool {
         switch selection {
-        case .face, .edge, nil: false
+        case .face, .edge, .group, nil: false
         default: true
         }
     }

@@ -23,6 +23,8 @@ import simd
 
     func testTheWidgetMovesEverythingInTheGroupAsOneStep() throws {
         let (session, controller, group) = try groupedScene()
+        // No trash for a group: its menu says whether the contents go too.
+        XCTAssertFalse(session.canDeleteSelection)
         let before = session.workspace
         XCTAssertEqual(session.transformWidgetTarget, .group(group))
         XCTAssertNotNil(controller.transformWidget())
