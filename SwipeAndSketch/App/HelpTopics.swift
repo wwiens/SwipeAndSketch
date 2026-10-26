@@ -5,7 +5,7 @@ import Foundation
 enum HelpTopic: String, CaseIterable, Identifiable {
     case gettingStarted, sketchPlane, sketching, line, rectangle, circle, arc, slot, trim, sketchFillet, dimension, hole
     case ellipse, point, polygon, construction, extend, offset, sketchMirror, moveShape
-    case editShape, keypad, sketchObject, pickedSketches, solid, face, edge, constructionPlane
+    case editShape, keypad, sketchObject, pickedSketches, pickedSolids, pickedEdges, solid, face, edge, constructionPlane
     case extrude, extrudeFace, cut, join, revolve, fillet, chamfer, shell
     case union, subtract, intersect, split, align, mirror, pattern, scale, deleteFace, section, offsetPlane, midplane, project, measure, assistant
     case peg, fitTest, thread, matingPart, text
@@ -50,6 +50,8 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .keypad: "Typing a Value"
         case .sketchObject: "Moving a Sketch"
         case .pickedSketches: "Picking Several Sketches"
+        case .pickedSolids: "Picking Several Solids"
+        case .pickedEdges: "Picking Several Edges"
         case .solid: "Moving a Solid"
         case .face: "Working with a Face"
         case .edge: "Working with an Edge"
@@ -118,9 +120,9 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .sketchFillet: .sketchFillet
         case .dimension, .editShape, .keypad: .dimension
         case .hole: .hole
-        case .solid: .solid
+        case .solid, .pickedSolids: .solid
         case .face, .extrude, .extrudeFace: .extrude
-        case .edge, .fillet: .fillet
+        case .edge, .fillet, .pickedEdges: .fillet
         case .constructionPlane: .plane
         case .cut: .cut
         case .join: .merge
@@ -297,6 +299,21 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                         "Tap a picked one to take it out again.", "Tap Extrude (or Revolve) above the dock, drag the double-arrow into the solid, and tap Done."],
                 tips: ["The strip above the dock says how many are picked.", "Everything picked is cut, joined, or made in one step you can undo.",
                        "Tap empty space to start over. Something on another plane, or a solid or face, starts a new selection."])
+        case .pickedSolids:
+            HelpOverview(
+                summary: "Several whole solids are picked, to move, combine, color, or export them together.",
+                steps: ["With a solid selected, double-tap another solid to add it.", "Double-tap a picked one to take it out again.",
+                        "Drag an arrow or an arc to move or turn them all, or use the actions above the dock."],
+                tips: ["Combine joins, cuts, or intersects them: with Subtract, the first picked is cut by the rest.",
+                       "Transform, Color, Export, and Delete take them all, as one step you can undo.",
+                       "Tap empty space to start over."])
+        case .pickedEdges:
+            HelpOverview(
+                summary: "Several edges of one solid are picked, to round or bevel them all at once.",
+                steps: ["With an edge selected, tap more edges of the same solid to add them.", "Tap a picked edge to take it out again.",
+                        "Tap Fillet or Chamfer above the dock, set the size, and tap Done."],
+                tips: ["Every picked edge gets the same size, in one step you can undo.",
+                       "An edge of another solid, a face, or empty space starts over."])
         case .solid:
             HelpOverview(
                 summary: "The whole solid is selected. Move it, turn it, or copy it.",
@@ -608,7 +625,7 @@ extension ModelingSession {
         if splitDraft != nil { return .split }
         if isPickingPlane { return .sketchPlane }
         if selectedConstructionPlane != nil { return .constructionPlane }
-        if isMultipleSelection { return .pickedSketches }
+        if isMultipleSelection { return pickedBodies.count > 1 ? .pickedSolids : pickedEdges.count > 1 ? .pickedEdges : .pickedSketches }
         if selectedSketch != nil { return .sketchObject }
         if selectedBody != nil, tool == .select { return .solid }
         if selectedGroup != nil, tool == .select { return .modelGroup }

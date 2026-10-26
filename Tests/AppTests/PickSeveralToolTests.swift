@@ -29,6 +29,7 @@ import simd
         XCTAssertEqual(session.pickedSummary, "2 solids")
         XCTAssertEqual(session.selectedMembers.bodies, [big, small])
         XCTAssertTrue(session.hint.contains("2 solids picked"), session.hint)
+        XCTAssertEqual(session.helpTopic, .pickedSolids)
         XCTAssertEqual(session.transformWidgetTarget, .items(bodies: [big, small], sketches: []), "The widget moves them all")
         attach(controller, "Two solids picked")
 
@@ -70,6 +71,7 @@ import simd
         tap(controller, SIMD3(0, -20, 20))
         XCTAssertEqual(session.pickedEdges.count, 2)
         XCTAssertEqual(session.pickedSummary, "2 edges")
+        XCTAssertEqual(session.helpTopic, .pickedEdges)
         session.finishSelectedEdge(.fillet)
         XCTAssertEqual(session.finishDraft?.edges.count, 2)
         session.cancelFinish()
