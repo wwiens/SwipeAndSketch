@@ -4,7 +4,8 @@ import Foundation
 /// from the board's lower-left corner (the long side along x).
 struct BoardFootprint: Sendable {
     var title: String
-    /// For project and group names.
+    /// For project and group names ("Case for Raspberry Pi"): another maker's board is named only
+    /// after "for", as their trademark rules ask (October 26, 2026).
     var shortTitle: String
     var width: Double
     var length: Double
@@ -19,10 +20,10 @@ struct BoardFootprint: Sendable {
     static let piModelB = BoardFootprint(title: "Raspberry Pi 5 / 4 / 3 Model B", shortTitle: "Raspberry Pi", width: 85, length: 56,
                                          holes: corners(3.5, 3.5, 61.5, 52.5), holeDiameter: 2.7, screw: "M2.5", headroom: 20)
     /// Raspberry Pi Zero, Zero W, and Zero 2 W (58 × 23 mm).
-    static let piZero = BoardFootprint(title: "Raspberry Pi Zero / Zero 2 W", shortTitle: "Pi Zero", width: 65, length: 30,
+    static let piZero = BoardFootprint(title: "Raspberry Pi Zero / Zero 2 W", shortTitle: "Raspberry Pi Zero", width: 65, length: 30,
                                        holes: corners(3.5, 3.5, 61.5, 26.5), holeDiameter: 2.7, screw: "M2.5", headroom: 8)
     /// Raspberry Pi Pico, Pico W, and Pico 2 (47 × 11.4 mm, 2 mm from the short ends).
-    static let pico = BoardFootprint(title: "Raspberry Pi Pico", shortTitle: "Pico", width: 51, length: 21,
+    static let pico = BoardFootprint(title: "Raspberry Pi Pico", shortTitle: "Raspberry Pi Pico", width: 51, length: 21,
                                      holes: corners(2, 4.8, 49, 16.2), holeDiameter: 2.1, screw: "M2", headroom: 6)
     /// Arduino Uno R3 and R4: four holes, not in a rectangle.
     static let arduinoUno = BoardFootprint(title: "Arduino Uno", shortTitle: "Arduino Uno", width: 68.6, length: 53.3,
@@ -30,6 +31,9 @@ struct BoardFootprint: Sendable {
                                            holeDiameter: 3.2, screw: "M3", headroom: 16)
 
     static let catalog: [BoardFootprint] = [.piModelB, .piZero, .pico, .arduinoUno]
+
+    /// A name for a `part` made for this board: "Case for Raspberry Pi", or "Board Case" for a custom one.
+    func named(_ part: String) -> String { shortTitle == "Board" ? "Board \(part)" : "\(part) for \(shortTitle)" }
 
     private static func corners(_ x0: Double, _ y0: Double, _ x1: Double, _ y1: Double) -> [Point2] {
         [Point2(x: x0, y: y0), Point2(x: x1, y: y0), Point2(x: x1, y: y1), Point2(x: x0, y: y1)]
@@ -80,17 +84,17 @@ enum Screws {
 /// Mounting plates and cases for electronics boards.
 enum BoardTemplates {
     static var templates: [ProjectTemplate] {
-        [mount(id: "electronics.pi-mount", board: 0, title: "Raspberry Pi Mount",
+        [mount(id: "electronics.pi-mount", board: 0, title: "Mount for Raspberry Pi",
                summary: "A plate with standoffs on the Raspberry Pi's mounting holes, and countersunk holes to screw it to a wall or shelf."),
-         enclosure(id: "electronics.pi-case", board: 0, title: "Raspberry Pi Case",
+         enclosure(id: "electronics.pi-case", board: 0, title: "Case for Raspberry Pi",
                    summary: "A case with standoffs for the board and a lid that presses on. Cut openings for its ports with Sketch and Extrude."),
-         enclosure(id: "electronics.pi-zero-case", board: 1, title: "Pi Zero Case",
+         enclosure(id: "electronics.pi-zero-case", board: 1, title: "Case for Raspberry Pi Zero",
                    summary: "A slim case for a Raspberry Pi Zero, with standoffs and a press-on lid."),
-         mount(id: "electronics.pico-mount", board: 2, title: "Pico Mount",
+         mount(id: "electronics.pico-mount", board: 2, title: "Mount for Raspberry Pi Pico",
                summary: "A small plate with standoffs on the Raspberry Pi Pico's holes, for M2 screws."),
-         mount(id: "electronics.arduino-mount", board: 3, title: "Arduino Uno Mount",
+         mount(id: "electronics.arduino-mount", board: 3, title: "Mount for Arduino Uno",
                summary: "A plate with standoffs on the Arduino Uno's four holes."),
-         enclosure(id: "electronics.arduino-case", board: 3, title: "Arduino Uno Case",
+         enclosure(id: "electronics.arduino-case", board: 3, title: "Case for Arduino Uno",
                    summary: "A case with standoffs for an Arduino Uno and a press-on lid. Cut openings for USB and power with Sketch and Extrude."),
          enclosure(id: "electronics.custom-case", board: BoardFootprint.catalog.count, title: "Custom Board Case",
                    summary: "A case for any board: enter its size and how far its four holes are from the corners.")]
@@ -134,7 +138,7 @@ enum BoardTemplates {
                 TemplateParameter(id: "mountingHoles", title: "Mounting holes", kind: .toggle, defaultValue: 1,
                                   note: "Countersunk M3 holes in the plate's corners")
             ],
-            name: { values in "\(footprint(values).shortTitle) Mount" },
+            name: { values in footprint(values).named("Mount") },
             make: { values in
                 [TemplatePart(name: "Mount", body: try mountingPlate(footprint(values), fixing: fixing(values), standoff: values["standoff"],
                                                                      margin: values["margin"], thickness: values["thickness"],
@@ -198,7 +202,7 @@ enum BoardTemplates {
                 TemplateParameter(id: "vents", title: "Vent slots", kind: .toggle, defaultValue: board == 0 ? 1 : 0),
                 TemplateParameter(id: "notch", title: "Cable notch", kind: .toggle, defaultValue: 0, note: "An opening at the top of one end wall")
             ],
-            name: { values in "\(footprint(values).shortTitle) Case" },
+            name: { values in footprint(values).named("Case") },
             make: { values in
                 let board = footprint(values)
                 let boardThickness = 1.6

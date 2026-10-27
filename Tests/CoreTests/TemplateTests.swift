@@ -214,7 +214,28 @@ final class TemplateTests: XCTestCase {
         } }
         XCTAssertEqual(solid.bounds.max.z, 8, accuracy: 1e-6)
         XCTAssertEqual(solid.bounds.max.x - solid.bounds.min.x, 85 + 16, accuracy: 1e-6)
-        XCTAssertEqual(workspace.groups.first?.name, "Raspberry Pi Mount")
+        XCTAssertEqual(workspace.groups.first?.name, "Mount for Raspberry Pi")
+    }
+
+    /// Other makers' boards are named only after "for" (Raspberry Pi's and Arduino's trademark
+    /// rules), with their notices beside the templates; Gridfinity's creator is credited.
+    func testBoardNamesFollowTheirMakersTrademarkRules() throws {
+        let marks = ["Raspberry", "Pi ", "Pico", "Arduino"]
+        for template in TemplateCatalog.all where template.category == .electronics {
+            XCTAssertFalse(marks.contains { template.title.hasPrefix($0) }, template.title)
+            for board in 0...BoardFootprint.catalog.count {
+                var values = template.defaults
+                values["board"] = Double(board)
+                let name = template.name(values)
+                XCTAssertFalse(marks.contains { name.hasPrefix($0) }, name)
+                if board < BoardFootprint.catalog.count { XCTAssertTrue(name.contains(" for "), name) }
+            }
+        }
+        XCTAssertEqual(BoardFootprint.piZero.named("Case"), "Case for Raspberry Pi Zero")
+        XCTAssertEqual(BoardFootprint.custom(width: 70, length: 50, inset: 3.5, screw: "M3").named("Case"), "Board Case")
+        let notice = try XCTUnwrap(ProjectTemplate.Category.electronics.notice)
+        XCTAssertTrue(notice.contains("Raspberry Pi is a trademark of Raspberry Pi Ltd.") && notice.contains("Arduino® is a trademark of Arduino S.r.l."))
+        XCTAssertTrue(ProjectTemplate.Category.gridfinity.notice?.contains("Zack Freedman") == true)
     }
 
     func testPicoAndArduinoHolePatterns() throws {

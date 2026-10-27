@@ -45,6 +45,10 @@ struct TemplateGallery: View {
                                         .buttonStyle(.plain).accessibilityIdentifier("templates.\(template.id)")
                                 }
                             }
+                            if let notice = category.notice {
+                                Text(notice).font(.system(size: 12)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
+                                    .accessibilityIdentifier("templates.notice.\(category.rawValue)")
+                            }
                         }
                         .id(category)
                     }
@@ -206,6 +210,9 @@ struct TemplateSetup: View {
                     }
                     Text("Once made, these are ordinary solids: change them with any tool.")
                         .font(.system(size: 13)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
+                    if let notice = template.category.notice {
+                        Text(notice).font(.system(size: 12)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
+                    }
                     if !license.access.canEdit {
                         // A template is a model made for you, so it needs editing like any other.
                         Text("Making a template needs the free trial or Unlock.")

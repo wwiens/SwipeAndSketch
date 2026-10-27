@@ -65,6 +65,10 @@ struct AboutView: View {
                     NavigationLink("Open CASCADE Exception") { LicenseText(title: "Open CASCADE Exception", text: Licenses.openCascadeException) }
                         .accessibilityIdentifier("about.exception")
                 }
+                Section("Templates") {
+                    Text(ProjectTemplate.Category.gridfinityCredit)
+                    Text(ProjectTemplate.Category.boardTrademarks)
+                }
             }
             .navigationTitle("About").navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showQuickStart) { QuickStartView(startBlank: nil) { showQuickStart = false }.presentationSizing(.form) }

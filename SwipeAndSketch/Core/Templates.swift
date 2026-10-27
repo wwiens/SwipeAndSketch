@@ -75,6 +75,16 @@ struct ProjectTemplate: Identifiable, Sendable {
             case .enclosures: "Boxes sized by their inside, with lids that screw on or slip on."
             }
         }
+        /// Credit and trademark notices shown with the category's templates (October 26, 2026).
+        var notice: String? {
+            switch self {
+            case .gridfinity: Self.gridfinityCredit
+            case .electronics: Self.boardTrademarks
+            case .enclosures: nil
+            }
+        }
+        static let gridfinityCredit = "Gridfinity is the open modular storage system created by Zack Freedman (Voidstar Lab) and released under the MIT License. Swipe & Sketch is not affiliated with or endorsed by Zack Freedman or Voidstar Lab."
+        static let boardTrademarks = "Raspberry Pi is a trademark of Raspberry Pi Ltd. Arduino® is a trademark of Arduino S.r.l. Swipe & Sketch is not affiliated with or endorsed by either."
     }
     var id: String
     var category: Category

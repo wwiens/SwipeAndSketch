@@ -102,7 +102,9 @@ import XCTest
         let electronics = app.buttons["home.category.electronics"]
         XCTAssertTrue(electronics.waitForExistence(timeout: 10)); electronics.tap()
         let pi = app.buttons["templates.electronics.pi-case"]
-        XCTAssertTrue(pi.waitForExistence(timeout: 10)); pi.tap()
+        XCTAssertTrue(pi.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["templates.notice.electronics"].exists, "The board makers' trademark notice")
+        pi.tap()
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: create)], timeout: 20), .completed)
         let piShot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         piShot.name = "Raspberry Pi case set up"; piShot.lifetime = .keepAlways; add(piShot)
@@ -111,7 +113,7 @@ import XCTest
         app.buttons["home.section.home"].tap()
         XCTAssertTrue(electronics.waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["home.recent.Gridfinity Bin 3×1×6"].exists)
-        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'home.recent.Raspberry'")).firstMatch.exists)
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'home.recent.Case for'")).firstMatch.exists)
     }
     func testQuickStartShowsPencilThenAFirstPartAndComesBackFromAbout() {
         continueAfterFailure = false
