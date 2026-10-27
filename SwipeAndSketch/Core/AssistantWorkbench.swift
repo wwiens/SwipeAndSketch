@@ -2065,7 +2065,7 @@ struct AssistantWorkbench {
     /// Screw Lid: a container's round neck gets a raised printable thread, and a lid is added
     /// already screwed on. `face` is "boss" (the first round boss), a face number, or selected.
     @discardableResult mutating func screwLid(body bodyName: String, face spec: String, pitch: Double?, starts: Int?, turns: Double?,
-                                              top: Double?, height: Double?, ribbed: Bool?, clearance: Double) throws -> String {
+                                              top: Double?, height: Double?, ribbed: Bool?, clearance: Double, testPrint: Bool = false) throws -> String {
         let body = try body(named: bodyName), solid = try buildable(body)
         let text = spec.trimmingCharacters(in: .whitespaces).lowercased()
         let index: Int
@@ -2084,6 +2084,7 @@ struct AssistantWorkbench {
         if let top { lidSpec.top = top }
         lidSpec.height = height
         if let ribbed { lidSpec.ribbed = ribbed }
+        if testPrint { return try screwLidFitTest(body, face: index, lidSpec) }
         let made: ScrewLid.Result
         do { made = try ScrewLid.make(on: body, face: index, lidSpec) } catch let error as ScrewLid.Failure { throw Failure(error.message) }
         var next = workspace
@@ -2095,6 +2096,20 @@ struct AssistantWorkbench {
         let change = "Threaded the neck of \(self.bodyName(body.id)) (\(made.thread.title), closing in \(Self.mm(lidSpec.turns)) turns) and added a \(lidSpec.ribbed ? "ribbed" : "smooth") lid screwed onto it"
         try keep(next, change: change, checking: [made.jar.id, lid.id], focus: .body(lid.id))
         return change + "."
+    }
+
+    /// The thread fit test for a neck: a ring with its thread and three collars, beside the model.
+    private mutating func screwLidFitTest(_ body: SolidBody, face: Int, _ spec: ScrewLidSpec) throws -> String {
+        let test: ScrewLid.TestPrint
+        do { test = try ScrewLid.fitTest(on: body, face: face, spec, at: FitTest.origin(beside: workspace)) } catch let error as ScrewLid.Failure { throw Failure(error.message) }
+        let (group, bodies) = test.parts
+        var next = workspace
+        next.groups.append(group)
+        next.bodies += bodies
+        let clearances = test.collars.map { Self.mm($0.clearance) }.joined(separator: ", ")
+        let change = "Added a thread fit test for \(bodyName(body.id))'s neck: a ring with its thread and collars at \(clearances) mm clearance (one, two, and three notches)"
+        try keep(next, change: change, checking: bodies.map(\.id), focus: .body(bodies[0].id))
+        return change + ". Print them; the collar that turns on smoothly without wobbling gives the clearance to set as Fit Clearance in the project menu."
     }
 
     @discardableResult mutating func addPlane(from planeName: String, face: String?, offset: Double) throws -> String {

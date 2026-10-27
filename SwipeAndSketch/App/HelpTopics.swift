@@ -507,10 +507,11 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                 steps: ["Make the container first, such as a shelled cylinder with an open top.",
                         "Choose Joints, then Screw Lid, and tap the outside of the neck. Or select that face and tap Screw Lid above the dock.",
                         "Pitch, Starts, and Turns set the thread: two starts close the lid in about a turn. Top, Height, and Grip set the lid.",
+                        "Not sure of your printer's clearance? Tap Test Print: a short ring with this thread and three collars (one, two, and three notches, tightest first) go beside the model, in a Thread Fit Test group. Print them, and set Clearance to the collar that turns on smoothly without wobbling.",
                         "Tap Done. The container and the lid are separate solids; move the lid aside to print them both."],
                 tips: ["Check the fit with Section before printing: the lid's ridges sit between the neck's with the clearance all round.",
                        "The thread uses the printable 45° profile, so the container prints upright and the lid upside down without supports.",
-                       "Print a short ring and collar first if you are unsure of your printer's clearance."])
+                       "The fit test's collars try 0.1 mm tighter, the clearance chosen, and 0.1 mm looser; their names in the Model Tree give each one's clearance."])
         case .thread:
             HelpOverview(
                 summary: "Make a real screw thread in a hole (like a nut) or on a round boss (like a bolt), ready to print: cut into the face, or raised onto it.",

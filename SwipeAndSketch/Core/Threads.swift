@@ -780,12 +780,14 @@ extension SolidBody {
         case .nut, .cap:
             // A body from `engagement` inside the mouth, bored at the minor diameter for its thread.
             let wall = shape?.wall ?? finish, outer = 2 * (spec.crestRadius + wall)
-            let capOutline = shape?.ribbed == true ? plane(at: -engagement).flatMap { CapShape.ribbed(outer, at: $0.1, on: $0.0) }
-                : circle(outer, at: -engagement)
+            let capOutline = shape.map { $0.ribbed || $0.marks > 0 } == true
+                ? plane(at: -engagement).flatMap { shape?.outline(outer, at: $0.1, on: $0.0) } : circle(outer, at: -engagement)
             guard let outline = kind == .nut ? hexagon(at: -engagement) : capOutline,
                   let bore = circle(spec.minorDiameter, at: -engagement) else { return nil }
-            part = SolidBody(profile: outline, depth: engagement + (kind == .cap ? shape?.top ?? finish : 0))
-            part.cuts.append(ExtrusionCut(profile: bore, depth: engagement, throughAll: kind == .nut))
+            let top = kind == .cap ? shape?.top ?? finish : 0
+            part = SolidBody(profile: outline, depth: engagement + top)
+            // Without a top (a collar) the bore goes right through, like a nut's.
+            part.cuts.append(ExtrusionCut(profile: bore, depth: engagement, throughAll: top == 0))
         case .bolt, .plug:
             // A head on the mouth's face and a shank at the major diameter down into the hole.
             guard let head = kind == .bolt ? hexagon(at: 0) : circle(diameter + 2 * max(2, 0.1 * diameter), at: 0),
@@ -835,12 +837,40 @@ extension SolidBody {
 }
 
 /// A cap's own shape, where Matching Part's defaults will not do (Screw Lid): its wall beyond the
-/// thread's crest, its top, how far its skirt reaches down the neck, and a ribbed grip.
+/// thread's crest, its top (none for a collar), how far its skirt reaches down the neck, a ribbed
+/// grip, and notches in its edge that tell printed parts apart (the thread fit test's collars).
 struct CapShape: Equatable, Sendable {
     var wall: Double
     var top: Double
     var skirt: Double
     var ribbed: Bool
+    var marks = 0
+
+    /// The cap's outline `diameter` across: ribbed, or round with `marks` notches.
+    func outline(_ diameter: Double, at center: Point2, on plane: SketchPlane) -> SketchProfile? {
+        ribbed ? Self.ribbed(diameter, at: center, on: plane) : Self.notched(diameter, marks: marks, at: center, on: plane)
+    }
+
+    /// A round outline `diameter` across with `marks` V notches 1 mm deep side by side in its edge,
+    /// so printed parts can be told apart by feel or at a glance. True arcs between the notches, so
+    /// the side stays one smooth face.
+    static func notched(_ diameter: Double, marks: Int, at center: Point2, on plane: SketchPlane) -> SketchProfile? {
+        let radius = diameter / 2, depth = 1.0, half = 1.2 / radius
+        guard radius > 2 * depth, (0...6).contains(marks) else { return nil }
+        guard marks > 0 else { return PegJoint.circle(diameter, at: center, on: plane) }
+        let notches = (0..<marks).map { 1 + Double($0) * max(0.3, 4 * half) }
+        func at(_ angle: Double, _ r: Double) -> Point2 { center + Point2(x: r * cos(angle), y: r * sin(angle)) }
+        var sides: [SketchShape] = []
+        for (index, middle) in notches.enumerated() {
+            let tip = at(middle, radius - depth)
+            sides.append(SketchShape(kind: .line, plane: plane, start: at(middle - half, radius), end: tip))
+            sides.append(SketchShape(kind: .line, plane: plane, start: tip, end: at(middle + half, radius)))
+            // The edge on to the next notch, counterclockwise (round the back after the last).
+            let next = index + 1 < notches.count ? notches[index + 1] : notches[0] + 2 * .pi
+            sides.append(.arc(center: center, from: at(middle + half, radius), to: at(next - half, radius), plane: plane))
+        }
+        return Geometry.profiles(in: sides, on: plane).first
+    }
 
     /// A round outline `diameter` across with ribs standing 0.8 mm out of it about every 4 mm, for
     /// a grip: one outline, so the lid is one extrusion however many ribs it has.
@@ -939,5 +969,95 @@ enum ScrewLid {
             throw Failure(message: "The lid could not be built; try another height or pitch.")
         }
         return Result(jar: jar, lid: lid, thread: thread)
+    }
+}
+
+// MARK: Thread fit test
+
+/// The thread fit test (October 26, 2026): before printing a whole jar, a short ring with the
+/// neck's diameter and Screw Lid's thread, and three collars to screw onto it at a tighter, the
+/// chosen, and a looser clearance, marked with one, two, and three notches. The one that turns
+/// on smoothly without wobbling gives the clearance to use.
+extension ScrewLid {
+    struct TestPrint {
+        var ring: SolidBody
+        /// Tightest first; each collar's clearance is the gap on each side it tests.
+        var collars: [(clearance: Double, body: SolidBody)]
+
+        /// The pieces named, in a "Thread Fit Test" group, ready to add to a workspace.
+        var parts: (group: ItemGroup, bodies: [SolidBody]) {
+            let group = ItemGroup(name: "Thread Fit Test")
+            var ring = ring
+            ring.name = "Fit Ring"
+            ring.group = group.id
+            let collars = collars.map { collar in
+                var body = collar.body
+                body.name = "Collar \(String(format: "%.2f", collar.clearance)) mm"
+                body.group = group.id
+                return body
+            }
+            return (group, [ring] + collars)
+        }
+    }
+
+    /// The clearances a fit test tries: 0.1 mm either side of `clearance`, or the next two looser
+    /// ones when a tighter would be under 0.05 mm.
+    static func testClearances(around clearance: Double) -> [Double] {
+        let middle = (clearance * 100).rounded() / 100
+        let first = middle - 0.1 >= 0.05 - 1e-9 ? middle - 0.1 : middle
+        return (0..<3).map { ((first + 0.1 * Double($0)) * 100).rounded() / 100 }
+    }
+
+    /// The fit test for the neck at `face` of `body` with `spec`'s thread, beside the model with
+    /// its row's lower left corner at `origin` on the Top plane, or why not.
+    static func fitTest(on body: SolidBody, face: Int, _ spec: ScrewLidSpec, at origin: Point2) throws -> TestPrint {
+        let (thread, _) = try self.thread(on: body, face: face, spec)
+        return try fitTest(diameter: thread.surfaceDiameter, spec, at: origin)
+    }
+
+    /// The fit test for a neck `diameter` across.
+    static func fitTest(diameter: Double, _ spec: ScrewLidSpec, at origin: Point2) throws -> TestPrint {
+        let clearances = testClearances(around: spec.clearance)
+        guard spec.clearance <= 1 else { throw Failure(message: "The fit test tries clearances up to 1 mm.") }
+        let wall = 2.0
+        guard diameter - 2 * wall >= 2 else { throw Failure(message: "The neck is too thin for a fit test ring.") }
+        // The ring's thread is cut at the tightest clearance; each collar makes up the rest, so a
+        // pair leaves the same gap as a neck and lid both made at that collar's clearance.
+        var ringSpec = spec
+        ringSpec.clearance = clearances[0]
+        let lead = spec.pitch * Double(spec.starts)
+        let threaded = spec.turns * lead, collarHeight = max(threaded, 2 * spec.pitch)
+        let height = collarHeight + 3
+        let collarOuter = diameter + ThreadProfile.printable.diameterLoss * spec.pitch + 2 * spec.wall
+        let spacing = max(collarOuter, diameter) + 6
+        let ringCenter = origin + Point2(x: spacing / 2, y: spacing / 2)
+        guard let outside = PegJoint.circle(diameter, at: ringCenter, on: .top),
+              let bore = PegJoint.circle(diameter - 2 * wall, at: ringCenter, on: .top) else {
+            throw Failure(message: "The fit test ring cannot be drawn at that size.")
+        }
+        var ring = SolidBody(profile: outside, depth: height)
+        ring.cuts.append(ExtrusionCut(profile: bore, depth: height, throughAll: true))
+        let solid = try SolidKernel.solid(for: ring)
+        guard let neck = (0..<solid.faceCount).first(where: { face in
+            solid.cylinderSide(face) == 1 && abs((solid.faceCylinder(face)?.radius ?? 0) - diameter / 2) < 1e-4
+        }) else { throw Failure(message: "The fit test ring's outside could not be found.") }
+        let (thread, _) = try self.thread(on: ring, face: neck, ringSpec)
+        guard let threadedRing = ring.threading(thread) else { throw Failure(message: "The fit test ring's thread could not be built; try another pitch.") }
+
+        var collars: [(clearance: Double, body: SolidBody)] = []
+        for (index, clearance) in clearances.enumerated() {
+            var probe = threadedRing
+            probe.cuts[probe.cuts.count - 1].thread?.clearance = 2 * clearance - clearances[0]
+            guard let screwed = probe.matingPart(.cap, forThreadAt: probe.cuts.count - 1,
+                                                 cap: CapShape(wall: spec.wall, top: 0, skirt: collarHeight, ribbed: false, marks: index + 1)),
+                  let bounds = try? SolidKernel.solid(for: screwed).bounds else {
+                throw Failure(message: "The fit test's collars could not be built; try another pitch.")
+            }
+            // Off the ring and onto the plate, in a row beside it.
+            let move = RigidTransform.move(SIMD3(spacing * Double(index + 1), 0, -bounds.min.z))
+            guard let collar = screwed.transformed(by: move) else { throw Failure(message: "The fit test's collars could not be laid out.") }
+            collars.append((clearance, collar))
+        }
+        return TestPrint(ring: threadedRing, collars: collars)
     }
 }

@@ -713,6 +713,62 @@ final class ThreadTests: XCTestCase {
         XCTAssertThrowsError(try ScrewLid.make(on: neck, face: hole, spec), "The inside of the neck is a hole")
     }
 
+    func testThreadFitTestIsARingAndThreeMarkedCollars() throws {
+        XCTAssertEqual(ScrewLid.testClearances(around: 0.2), [0.1, 0.2, 0.3])
+        XCTAssertEqual(ScrewLid.testClearances(around: 0.1), [0.1, 0.2, 0.3], "Never tighter than 0.05 mm")
+        XCTAssertEqual(ScrewLid.testClearances(around: 0.35), [0.25, 0.35, 0.45])
+
+        let neck = try jarNeck()
+        let (_, solid) = try roundFace(neck, side: 1)
+        let face = try XCTUnwrap((0..<solid.faceCount).first { ssk_face_cylinder_side(solid.handle, Int32($0)) == 1 })
+        let test = try ScrewLid.fitTest(on: neck, face: face, ScrewLidSpec(clearance: 0.2), at: Point2(x: 100, y: 0))
+        let ring = try SolidKernel.solid(for: test.ring)
+        XCTAssertTrue(ring.isValidSolid)
+        // A short ring: one turn of thread (6 mm) and 3 mm more, on the plate beside the model.
+        XCTAssertEqual(ring.bounds.min.z, 0, accuracy: 1e-6)
+        XCTAssertEqual(ring.bounds.max.z, 9, accuracy: 1e-6)
+        XCTAssertGreaterThan(ring.bounds.min.x, 100)
+        let ringThread = try XCTUnwrap(test.ring.cuts.last?.thread)
+        XCTAssertEqual(ringThread.shape, .printable)
+        XCTAssertEqual(ringThread.surfaceDiameter, 60, accuracy: 1e-6, "The neck's own diameter")
+        XCTAssertEqual(ringThread.startCount, 2)
+
+        XCTAssertEqual(test.collars.map(\.clearance), [0.1, 0.2, 0.3])
+        var right = ring.bounds.max.x
+        for (index, collar) in test.collars.enumerated() {
+            let made = try SolidKernel.solid(for: collar.body)
+            XCTAssertTrue(made.isValidSolid, "Collar \(index)")
+            XCTAssertEqual(made.bounds.min.z, 0, accuracy: 1e-6, "Collars lie on the plate")
+            XCTAssertEqual(made.bounds.max.z, 6, accuracy: 1e-6, "As tall as the thread")
+            XCTAssertGreaterThan(made.bounds.min.x, right, "In a row, apart")
+            right = made.bounds.max.x
+            // With the ring, the same gap as a neck and lid both made at the collar's clearance.
+            let thread = try XCTUnwrap(collar.body.cuts.last?.thread)
+            XCTAssertEqual(thread.clearance + ringThread.clearance, 2 * collar.clearance, accuracy: 1e-9)
+            // Back on the ring it does not touch; half a pitch off, the ridges collide.
+            let back = try XCTUnwrap(collar.body.transformed(by: .move(SIMD3((ring.bounds.min.x + ring.bounds.max.x - made.bounds.min.x - made.bounds.max.x) / 2,
+                                                                                 (ring.bounds.min.y + ring.bounds.max.y - made.bounds.min.y - made.bounds.max.y) / 2,
+                                                                                 ring.bounds.max.z - made.bounds.max.z))))
+            XCTAssertLessThan(try overlap(test.ring, back), 1e-3, "Collar \(index) screwed on")
+            let offStep = try XCTUnwrap(back.transformed(by: .move(SIMD3(0, 0, -ringThread.pitch / 2))))
+            XCTAssertGreaterThan(try overlap(test.ring, offStep), 0.5, "Collar \(index) half a pitch off")
+        }
+        let parts = test.parts
+        XCTAssertEqual(parts.group.name, "Thread Fit Test")
+        XCTAssertEqual(parts.bodies.map(\.name), ["Fit Ring", "Collar 0.10 mm", "Collar 0.20 mm", "Collar 0.30 mm"])
+        XCTAssertTrue(parts.bodies.allSatisfy { $0.group == parts.group.id })
+        var workspace = Workspace(bodies: [neck] + parts.bodies)
+        workspace.groups = [parts.group]
+        XCTAssertTrue(workspace.isValid)
+
+        // One, two, and three notches tell the collars apart.
+        for marks in 1...3 {
+            let outline = try XCTUnwrap(CapShape.notched(70, marks: marks, at: .zero, on: .top)).outline
+            XCTAssertEqual(outline.filter { $0.distance(to: .zero) < 34.5 }.count, marks)
+        }
+        XCTAssertThrowsError(try ScrewLid.fitTest(diameter: 5, ScrewLidSpec(clearance: 0.2), at: .zero), "Too thin for a ring")
+    }
+
     func testAssistantMakesAScrewLid() throws {
         var bench = AssistantWorkbench(workspace: Workspace(bodies: [try jarNeck()]))
         let change = try bench.screwLid(body: "Body 01", face: "boss", pitch: 2.5, starts: nil, turns: nil, top: nil, height: nil, ribbed: false, clearance: 0.2)
@@ -720,6 +776,15 @@ final class ThreadTests: XCTestCase {
         XCTAssertEqual(bench.workspace.bodies.count, 2)
         XCTAssertEqual(bench.workspace.bodyNames[bench.workspace.bodies[1].id], "Lid")
         XCTAssertThrowsError(try bench.screwLid(body: "Body 01", face: "boss", pitch: 9, starts: nil, turns: nil, top: nil, height: nil, ribbed: nil, clearance: 0.2))
+
+        // Or only the thread fit test, beside the jar.
+        var tester = AssistantWorkbench(workspace: Workspace(bodies: [try jarNeck()]))
+        let test = try tester.screwLid(body: "Body 01", face: "boss", pitch: nil, starts: nil, turns: nil, top: nil, height: nil, ribbed: nil,
+                                       clearance: 0.2, testPrint: true)
+        XCTAssertTrue(test.contains("0.1, 0.2, 0.3 mm"), test)
+        XCTAssertEqual(tester.workspace.bodies.count, 5)
+        XCTAssertNil(tester.workspace.bodies[0].cuts.last?.thread, "The neck itself is left as it was")
+        XCTAssertEqual(tester.workspace.groupNames.values.sorted(), ["Thread Fit Test"])
     }
 
     func testARaisedNeckTakesACapThatScrewsOnInStep() throws {

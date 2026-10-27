@@ -333,6 +333,39 @@ import simd
         XCTAssertNil(session.workspace.bodies[0].cuts.last?.thread)
     }
 
+    func testScrewLidTestPrintAddsARingAndCollarsAndKeepsGoing() async throws {
+        let (session, controller) = try tubeScene()
+        let body = session.workspace.bodies[0]
+        let solid = try SolidKernel.solid(for: body)
+        let outside = try XCTUnwrap((0..<solid.faceCount).first { solid.cylinderSide($0) == 1 })
+        session.beginScrewLid(bodyID: body.id, face: outside)
+        await session.screwLidSettled()
+        XCTAssertTrue(session.hint.contains("Test Print"), session.hint)
+        session.addScrewLidFitTest()
+        await session.screwLidSettled()
+        // The ring and three collars, in their own group, with the tube untouched.
+        let workspace = session.workspace
+        XCTAssertEqual(workspace.bodies.count, 5)
+        XCTAssertNil(workspace.bodies[0].cuts.last?.thread, "The neck waits for Done")
+        XCTAssertEqual(workspace.groups.map(\.name), ["Thread Fit Test"])
+        XCTAssertEqual(workspace.bodies.dropFirst().map { workspace.bodyNames[$0.id] },
+                       ["Fit Ring", "Collar 0.10 mm", "Collar 0.20 mm", "Collar 0.30 mm"])
+        XCTAssertEqual(session.status, "Thread Fit Test added")
+        // Screw Lid is still open, its preview rebuilt on the new model.
+        XCTAssertEqual(session.tool, .screwLid)
+        XCTAssertEqual(session.screwLidPreview?.bodies.count, 6)
+        session.requestCamera(.reset)
+        controller.refresh()
+        attach(controller, "A tube with its thread fit test")
+        session.confirmScrewLid()
+        XCTAssertEqual(session.workspace.bodies.count, 6)
+        session.undo()
+        XCTAssertEqual(session.workspace.bodies.count, 5, "The lid was its own step")
+        session.undo()
+        XCTAssertEqual(session.workspace.bodies.count, 1, "The fit test was one step")
+        XCTAssertTrue(session.workspace.groups.isEmpty)
+    }
+
     func testRaisedThreadKeepsAThinNeckWholeAndTakesACap() async throws {
         let (session, controller) = try tubeScene()
         let body = session.workspace.bodies[0]

@@ -905,11 +905,13 @@ struct AddScrewLidTool: Tool {
         @Guide(description: "The lid's top thickness in mm; omit for 2") var top: Double?
         @Guide(description: "The lid's whole height in mm; omit for just over the thread") var height: Double?
         @Guide(description: "False for a smooth lid; omit for a ribbed grip") var ribbed: Bool?
+        @Guide(description: "True to add only a thread fit test beside the model (a short ring with this thread and three collars at a tighter, the usual, and a looser clearance) instead of threading the neck") var testPrint: Bool?
     }
     func call(arguments: Arguments) async throws -> String {
-        await context.run("Making a screw lid for \(arguments.body)") { bench in
+        await context.run(arguments.testPrint == true ? "Making a thread fit test for \(arguments.body)" : "Making a screw lid for \(arguments.body)") { bench in
             try bench.screwLid(body: arguments.body, face: arguments.face, pitch: arguments.pitch, starts: arguments.starts, turns: arguments.turns,
-                               top: arguments.top, height: arguments.height, ribbed: arguments.ribbed, clearance: Fit.preferredClearance)
+                               top: arguments.top, height: arguments.height, ribbed: arguments.ribbed, clearance: Fit.preferredClearance,
+                               testPrint: arguments.testPrint == true)
         }
     }
 }

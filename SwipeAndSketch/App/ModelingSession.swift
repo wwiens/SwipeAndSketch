@@ -1093,6 +1093,7 @@ struct DimensionEdit: Identifiable {
     private(set) var screwLidLid: UUID?
     @Published private(set) var screwLidError: String?
     @Published private(set) var isBuildingScrewLid = false
+    @Published private(set) var isBuildingScrewLidTest = false
     private var screwLidGeneration = 0
     private var screwLidBuild: Task<Void, Never>?
     @Published private(set) var isBuildingThread = false
@@ -2259,9 +2260,10 @@ struct DimensionEdit: Identifiable {
         }
         if let draft = screwLidDraft {
             if let screwLidError { return screwLidError }
+            if isBuildingScrewLidTest { return "Building the thread fit test…" }
             if isBuildingScrewLid { return "Building the thread and the lid…" }
             let s = draft.spec
-            return "A \(s.starts)-start, \(lengthText(s.pitch)) thread that closes in \(ThreadSpec.mm(s.turns)) \(s.turns == 1 ? "turn" : "turns"), and a \(s.ribbed ? "ribbed" : "smooth") lid screwed on (check it with Section). Done adds both."
+            return "A \(s.starts)-start, \(lengthText(s.pitch)) thread that closes in \(ThreadSpec.mm(s.turns)) \(s.turns == 1 ? "turn" : "turns"), and a \(s.ribbed ? "ribbed" : "smooth") lid screwed on (check it with Section). Test Print adds a ring and three collars to try first; Done adds both."
         }
         if let draft = threadDraft {
             if let threadError { return threadError }
@@ -5930,12 +5932,46 @@ struct DimensionEdit: Identifiable {
     }
 
     func confirmScrewLid() {
-        guard screwLidDraft != nil, let preview = screwLidPreview, let lid = screwLidLid, !isBuildingScrewLid, !isEditingBlocked else { return }
+        guard screwLidDraft != nil, let preview = screwLidPreview, let lid = screwLidLid, !isBuildingScrewLid, !isBuildingScrewLidTest, !isEditingBlocked else { return }
         commit(preview)
         clearScrewLid()
         selection = .body(lid)
         status = "Added a screw lid"
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    /// Adds the thread fit test for the neck at the current settings beside the model, as its own
+    /// undo step, and keeps Screw Lid open (its preview rebuilt on the new model) to finish after.
+    func addScrewLidFitTest() {
+        guard let draft = screwLidDraft, !isBuildingScrewLidTest, !isEditingBlocked,
+              let body = workspace.bodies.first(where: { $0.id == draft.bodyID }) else { return }
+        let base = workspace, origin = FitTest.origin(beside: workspace)
+        isBuildingScrewLidTest = true
+        // After any lid build, so only one thread is built at a time.
+        let previous = screwLidBuild
+        screwLidBuild = Task { [weak self] in
+            await previous?.value
+            let result = await Task.detached(priority: .userInitiated) { Result { try ScrewLid.fitTest(on: body, face: draft.face, draft.spec, at: origin) } }.value
+            guard let self else { return }
+            self.isBuildingScrewLidTest = false
+            // Dropped if the model or the operation changed meanwhile.
+            guard self.screwLidDraft?.bodyID == draft.bodyID, self.workspace == base, !self.isEditingBlocked else { return }
+            switch result {
+            case .success(let test):
+                let (group, bodies) = test.parts
+                var next = base
+                next.groups.append(group)
+                next.bodies += bodies
+                guard next.isValid else { return }
+                self.commit(next)
+                self.status = "Thread Fit Test added"
+                self.requestCamera(.reset)
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                if let current = self.screwLidDraft { self.updateScrewLid(current) }
+            case .failure(let error):
+                self.screwLidError = (error as? ScrewLid.Failure)?.message ?? error.localizedDescription
+            }
+        }
     }
 
     func cancelScrewLid() {
@@ -5950,12 +5986,13 @@ struct DimensionEdit: Identifiable {
         if screwLidPreview != nil { screwLidPreview = nil }
         screwLidLid = nil
         if isBuildingScrewLid { isBuildingScrewLid = false }
+        if isBuildingScrewLidTest { isBuildingScrewLidTest = false }
         screwLidError = nil
     }
 
     /// Waits for the screw lid being built (tests).
     func screwLidSettled() async {
-        while isBuildingScrewLid { try? await Task.sleep(for: .milliseconds(20)) }
+        while isBuildingScrewLid || isBuildingScrewLidTest { try? await Task.sleep(for: .milliseconds(20)) }
     }
 
     /// Waits for the thread preview being built (tests).
