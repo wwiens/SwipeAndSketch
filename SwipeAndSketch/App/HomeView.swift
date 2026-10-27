@@ -387,7 +387,7 @@ struct QuickStartView: View {
                 row(.extrude, "3. Make it solid", "Tap Finish Sketch, tap inside the rectangle, then Extrude. Drag the arrow up and tap Done.")
                 row(.send, "4. Print it", "Open the project menu at the top and choose Send to Slicer or Export 3MF.")
             }
-            Text("Stuck? Tap the help button beside the hint above the dock for help with what you are doing, or Controls at the bottom right for the whole guide.")
+            Text("Stuck? Tap the help button beside the hint at the top for help with what you are doing, or Controls at the bottom right for the whole guide.")
                 .font(.system(size: 14)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
         }
     }
