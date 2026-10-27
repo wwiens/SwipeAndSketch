@@ -30,7 +30,8 @@
 		</dict>
 		<dict>
 			<!-- stat/fstat in the Open CASCADE kernel: sizes and metadata of the app's own files and of
-			     STEP files the user picks to import. Nothing leaves the device. -->
+			     STEP files the user picks to import. Home's recent projects also sort the projects in
+			     the app's Documents folder by modification date. Nothing leaves the device. -->
 			<key>NSPrivacyAccessedAPIType</key>
 			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
 			<key>NSPrivacyAccessedAPITypeReasons</key>
