@@ -100,7 +100,7 @@ enum ModelingTool: String, CaseIterable {
         case .peg: .peg
         case .fitTest: .fitTest
         case .thread: .thread
-        case .screwLid: .thread
+        case .screwLid: .screwLid
         case .text: .text
         case .box: .box
         case .cylinder: .cylinder

@@ -552,6 +552,12 @@ import simd
 
     /// Each group is named for what its tools do, every tool sits in a group whose name fits it, and
     /// nothing is in two groups of one dock except Peg & Socket, which is both a joint and a face feature.
+    func testEveryBrandIconIsInTheAssetCatalog() {
+        for icon in SSIcon.allCases { XCTAssertNotNil(UIImage(named: icon.assetName), icon.rawValue) }
+        XCTAssertEqual(ModelingTool.screwLid.icon, .screwLid, "Screw Lid has its own icon")
+        XCTAssertEqual(ModelingTool.screwLid.title, "Screw Lid")
+    }
+
     func testDockGroupsAreNamedForWhatTheirToolsDo() {
         let modeling: [ToolGroup] = [.planes, .create, .edges, .combine, .transform, .fit]
         let sketching: [ToolGroup] = [.curves, .faceFeatures, .modify]

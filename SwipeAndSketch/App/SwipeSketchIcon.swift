@@ -57,6 +57,7 @@ enum SSIcon: String, CaseIterable {
     case fit = "fit"
     case peg = "peg"
     case thread = "thread"
+    case screwLid = "screw-lid"
     case text = "text"
     case fitTest = "fit-test"
     case arc = "arc"
@@ -163,6 +164,7 @@ enum SSIcon: String, CaseIterable {
         case .fit: "Fit"
         case .peg: "Peg & Socket"
         case .thread: "Thread"
+        case .screwLid: "Screw Lid"
         case .text: "Text"
         case .fitTest: "Fit Test"
         case .arc: "Arc"
@@ -218,7 +220,7 @@ enum SSIcon: String, CaseIterable {
         switch self {
         case .brand: Color("ss-violet")
         case .select, .line, .rectangle, .circle, .sketch, .rectangleCorners, .rectangleCenter, .project, .arc, .slot, .trim, .sketchFillet, .dimension, .offset, .polygon, .ellipse, .point, .construction, .extend, .spline: Color("ss-lavender")
-        case .extrude, .fillet, .chamfer, .shell, .hole, .merge, .cut, .newBody, .throughAll, .holeSimple, .holeCounterbore, .holeCountersink, .holeInsert, .solid, .plane, .offsetPlane, .midplane, .split, .subtract, .align, .revolve, .mirror, .pattern, .fit, .peg, .thread, .text, .fitTest, .intersect, .scale, .deleteFace, .symmetric, .taper, .extrudeTo, .primitives, .box, .cylinder, .sphere, .torus, .planeAngle, .plane3Point, .planeTangent, .axis, .draft, .rib, .loft, .sweep: Color("ss-coralSoft")
+        case .extrude, .fillet, .chamfer, .shell, .hole, .merge, .cut, .newBody, .throughAll, .holeSimple, .holeCounterbore, .holeCountersink, .holeInsert, .solid, .plane, .offsetPlane, .midplane, .split, .subtract, .align, .revolve, .mirror, .pattern, .fit, .peg, .thread, .screwLid, .text, .fitTest, .intersect, .scale, .deleteFace, .symmetric, .taper, .extrudeTo, .primitives, .box, .cylinder, .sphere, .torus, .planeAngle, .plane3Point, .planeTangent, .axis, .draft, .rib, .loft, .sweep: Color("ss-coralSoft")
         case .items, .snapOn, .done, .visible, .hidden, .assistant, .measure, .section, .send, .color, .rename, .group, .groupAdd, .ungroup, .xray: Color("ss-limeSoft")
         case .home, .more, .snapOff, .undo, .redo, .help, .exit, .save, .saveAs, .newProject, .open, .export, .resetView, .backspace, .stop, .copy, .paste, .disclosure, .mesh: Color("ss-neutral")
         case .delete: Color("ss-coralSoft")

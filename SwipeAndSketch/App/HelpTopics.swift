@@ -136,7 +136,8 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .intersect: .intersect
         case .peg: .peg
         case .fitTest: .fitTest
-        case .thread, .matingPart, .screwLid: .thread
+        case .thread, .matingPart: .thread
+        case .screwLid: .screwLid
         case .text: .text
         case .split: .split
         case .align: .align

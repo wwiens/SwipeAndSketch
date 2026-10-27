@@ -638,7 +638,7 @@ struct WorkspaceView: View {
             } else if session.canThreadSelectedFace {
                 stripButton("Thread", icon: .thread, id: "selection.thread") { session.beginThread(bodyID: face.bodyID, face: face.face) }
                 if session.canScrewLidSelectedFace {
-                    stripButton("Screw Lid", icon: .thread, id: "selection.screwLid") { session.beginScrewLid(bodyID: face.bodyID, face: face.face) }
+                    stripButton("Screw Lid", icon: .screwLid, id: "selection.screwLid") { session.beginScrewLid(bodyID: face.bodyID, face: face.face) }
                 }
             }
         } else {
