@@ -469,10 +469,11 @@ import XCTest
         app.buttons["tool.shell"].tap()
         XCTAssertEqual(app.buttons["tool.edges"].label, "Modify", "Tapping the active tool puts it down")
         XCTAssertFalse(app.buttons["tool.edges"].isSelected)
-        // Joints: Peg & Socket, Thread, and Fit Test.
+        // Joints: Peg & Socket, Thread, Screw Lid, and Fit Test.
         app.buttons["tool.fit"].tap()
-        for id in ["tool.peg", "tool.thread", "tool.fitTest"] { XCTAssertTrue(app.buttons[id].waitForExistence(timeout: 5), id) }
+        for id in ["tool.peg", "tool.thread", "tool.screwLid", "tool.fitTest"] { XCTAssertTrue(app.buttons[id].waitForExistence(timeout: 5), id) }
         XCTAssertEqual(app.buttons["tool.peg"].label, "Peg & Socket")
+        XCTAssertEqual(app.buttons["tool.screwLid"].label, "Screw Lid")
         shot("Dock with Joints open")
         app.otherElements["group.dismiss"].tap()
         // Sketch: sketch tools at once, before a plane is picked.

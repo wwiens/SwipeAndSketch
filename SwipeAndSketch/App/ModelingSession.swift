@@ -47,6 +47,7 @@ enum ModelingTool: String, CaseIterable {
         case .midplane: "Midplane"
         case .cornerFillet: "Fillet"
         case .fitTest: "Fit Test"
+        case .screwLid: "Screw Lid"
         case .deleteFace: "Delete Face"
         case .sketchMirror: "Mirror"
         case .planeAngle: "Plane at Angle"
