@@ -55,16 +55,16 @@ final class TemplateTests: XCTestCase {
         XCTAssertEqual(Set(divided.parameters.map(\.id)), ["columns", "rows", "height", "dividersX", "dividersY", "lip", "magnets"])
     }
 
-    /// The library's expansions (October 28, 2026): 50 templates in twelve categories.
+    /// The library's expansions (October 28, 2026): 54 templates in twelve categories.
     func testTheLibraryHasItsCategories() {
-        XCTAssertEqual(TemplateCatalog.all.count, 50)
+        XCTAssertEqual(TemplateCatalog.all.count, 54)
         XCTAssertEqual(ProjectTemplate.Category.allCases.map(\.title),
                        ["Gridfinity", "Electronics", "Boxes & Enclosures", "Drawer & Storage Organizers", "Brackets & Mounts",
                         "Cable Management", "Replacement Parts", "Fit & Print Tests", "Desk & Device Stands", "Workshop & Jigs",
                         "Signs & Labels", "Home & Garden"])
         let counts = Dictionary(grouping: TemplateCatalog.all, by: \.category).mapValues(\.count)
-        XCTAssertEqual(counts, [.gridfinity: 8, .electronics: 8, .enclosures: 3, .organizers: 4, .mounts: 4, .cables: 4, .parts: 4,
-                                .tests: 4, .desk: 3, .workshop: 3, .signs: 4, .home: 1])
+        XCTAssertEqual(counts, [.gridfinity: 8, .electronics: 8, .enclosures: 4, .organizers: 4, .mounts: 4, .cables: 4, .parts: 4,
+                                .tests: 4, .desk: 4, .workshop: 4, .signs: 4, .home: 2])
         // Each new template lists what decides its fit and how it prints.
         let original: Set = ["gridfinity.baseplate", "gridfinity.magnet-baseplate", "gridfinity.bin", "gridfinity.divided-bin"]
         let originalBoxesAndBoards = ["electronics.prototype-tray", "enclosures.sliding-lid-box"]
@@ -149,7 +149,10 @@ final class TemplateTests: XCTestCase {
         "signs.mounting-sign": ["width=40.0", "height=20.0", "inset=4.0", "inset=25.0", "letterHeight=40.0", "margin=12.0", "font=4.0", "font=5.0", "font=7.0"],
         "signs.key-tag": ["width=30.0", "height=15.0", "inset=4.0", "letterHeight=18.0"],
         "signs.plant-marker": ["width=30.0", "letterHeight=18.0"],
-        "home.draining-tray": ["fit=2.0", "gap=15.0", "slotWidth=8.0", "slotPitch=5.0"]
+        "home.draining-tray": ["fit=2.0", "gap=15.0", "slotWidth=8.0", "slotPitch=5.0"],
+        "enclosures.sliding-lid-box": ["wall=2.0", "engagement=2.0", "fit=2.0"],
+        "workshop.drilling-jig": ["spacing=8.0", "offset=5.0", "thickness=8.0", "drill=12.0", "bushingOutside=3.0", "bushingOutside=20.0", "bushingLength=25.0"],
+        "home.planter": ["diameter=35.0"]
     ]
 
     /// The gallery's pictures show what each template makes now. When this fails, a template was
@@ -926,6 +929,94 @@ final class TemplateTests: XCTestCase {
         XCTAssertTrue(solids[0].contains(SIMD3(-70 + 1.5, 0, 2.4 + 5)))
         XCTAssertFalse(solids[0].contains(SIMD3(-70 + 1.5, 0, 2.4 + 7)))
         XCTAssertGreaterThan(workspace.bodies[1].cuts.count, 10)
+    }
+
+    // MARK: Second expansion: assemblies
+
+    func testHeadphoneStandPartsFitTogether() throws {
+        let template = try XCTUnwrap(TemplateCatalog.template("desk.headphone-stand"))
+        let workspace = try template.workspace(template.defaults)
+        let solids = try build(workspace, "headphones")
+        XCTAssertEqual(workspace.bodies.map(\.name), ["Base", "Post", "Cradle"])
+        let stand = DeskTemplates.HeadphoneStand(template.defaults)
+        // Assembled: base, post between its shoulders, and the cradle's crown reach the height.
+        XCTAssertEqual(10 + stand.postLength + solids[2].bounds.max.z, 220, accuracy: 1e-6)
+        XCTAssertEqual(solids[1].bounds.max.x - solids[1].bounds.min.x, stand.postLength + 10, accuracy: 1e-6)
+        // Tenons 14 mm square in 14.4 mm sockets 5 mm deep, over 5 mm of base.
+        let plate: Double = 160 * 100 - (4 - .pi) * 64
+        XCTAssertEqual(try area(solids[0], at: 7), plate - 14.4 * 14.4, accuracy: 0.05)
+        XCTAssertEqual(try area(solids[0], at: 3), plate, accuracy: 0.05)
+        XCTAssertEqual(try area(solids[1], at: 9), stand.postLength * 18 + 2 * 5 * 14, accuracy: 0.05)
+        // The crown: 10 mm thick at the ends, rising to the middle on an 80 mm radius.
+        let crown = try XCTUnwrap(solids[2].face(near: SIMD3(0, 100 / 2 + 10 + 17.5, solids[2].bounds.max.z)))
+        XCTAssertEqual(solids[2].faceCylinder(crown)?.radius ?? 0, 80, accuracy: 1e-6)
+        XCTAssertFalse(solids[2].contains(SIMD3(0, 100 / 2 + 10 + 17.5, 2)), "the socket underneath")
+    }
+
+    func testDrillingJigGuidesSitTheirDistanceFromTheEdge() throws {
+        let jig = try XCTUnwrap(try build(try workspace("workshop.drilling-jig"), "jig").first)
+        // Upside down: bushing seats 8.1 mm across, 10 deep from the face the drill enters, then a 6 mm bore.
+        for x in [-16.0, 16] {
+            XCTAssertFalse(jig.contains(SIMD3(x + 3.9, 10, 5)))
+            XCTAssertTrue(jig.contains(SIMD3(x + 3.9, 10, 12)), "the shoulder under the seat")
+            XCTAssertFalse(jig.contains(SIMD3(x + 2.9, 10, 12)), "the bore through it")
+        }
+        XCTAssertTrue(jig.contains(SIMD3(0, -1.5, 15 + 7)), "the fence along the edge")
+        XCTAssertFalse(jig.contains(SIMD3(0, 1, 15 + 7)), "the workpiece goes under")
+        let printed = try workspace("workshop.drilling-jig", ["mode": 1])
+        try build(printed, "printed")
+        XCTAssertEqual(printed.bodies[0].cuts.compactMap { $0.hole?.diameter }, [5.4, 5.4])
+    }
+
+    func testSlidingLidEngagesItsGroovesAndSlidesOut() throws {
+        let template = try XCTUnwrap(TemplateCatalog.template("enclosures.sliding-lid-box"))
+        let workspace = try template.workspace(template.defaults)
+        let solids = try build(workspace, "sliding")
+        let box = BoxTemplates.SlidingLidBox(template.defaults)
+        let center = BoxTemplates.layout(outerWidth: 94.8).box
+        XCTAssertEqual(solids[0].bounds.max.z, box.top, accuracy: 1e-6)
+        XCTAssertEqual(solids[1].bounds.max.y - solids[1].bounds.min.y, 60 + 2 - 0.4, accuracy: 1e-6)
+        // The lid in place, at any point of its travel, sits in the grooves without touching the box.
+        for travel in [0.0, 30, 80] {
+            // The lid's entry end at the box's outside, slid back by `travel`.
+            let entry: Double = center.x - 45 - 2.4
+            let lidMiddle = (solids[1].bounds.min.x + solids[1].bounds.max.x) / 2, lidSide = (solids[1].bounds.min.y + solids[1].bounds.max.y) / 2
+            let move = RigidTransform(translation: SIMD3(entry + 92.2 / 2 - travel - lidMiddle, -lidSide, box.lidUnderside))
+            let lid = try SolidKernel.solid(for: try XCTUnwrap(workspace.bodies[1].transformed(by: move)))
+            XCTAssertLessThan(try SolidKernel.boolean(solids[0], lid, .intersect).volume, 1e-6, "travel \(travel)")
+        }
+        // Each lid edge reaches 0.8 mm into its wall; the wall behind the groove is 1.4 mm.
+        XCTAssertFalse(solids[0].contains(SIMD3(center.x, 30.5, box.lidUnderside + 1)), "the groove")
+        XCTAssertTrue(solids[0].contains(SIMD3(center.x, 31.7, box.lidUnderside + 1)), "the wall behind it")
+        XCTAssertTrue(solids[0].contains(SIMD3(center.x, 30.5, box.grooveTop + 0.5)), "the lip over the lid")
+        XCTAssertFalse(solids[0].contains(SIMD3(center.x - 46.2, 0, box.lidUnderside + 1)), "open at the entry end")
+        XCTAssertTrue(solids[0].contains(SIMD3(center.x + 46.2, 0, box.lidUnderside + 1)), "closed at the far end")
+    }
+
+    func testPlanterSaucerClearsThePlanter() throws {
+        for shape in [0.0, 1] {
+            let template = try XCTUnwrap(TemplateCatalog.template("home.planter"))
+            var values = template.defaults
+            values["shape"] = shape
+            let workspace = try template.workspace(values)
+            let solids = try build(workspace, "planter \(shape)")
+            let planter = HomeTemplates.Planter(values)
+            XCTAssertEqual(solids[0].bounds.max.z, 83, accuracy: 1e-6)
+            // Assembled on the saucer's ribs, the planter touches only the ribs.
+            let saucer = solids[1].bounds, foot = solids[0].bounds
+            let move = RigidTransform(translation: SIMD3((saucer.min.x + saucer.max.x) / 2 - (foot.min.x + foot.max.x) / 2, 0, 4))
+            let placed = try SolidKernel.solid(for: try XCTUnwrap(workspace.bodies[0].transformed(by: move)))
+            XCTAssertLessThan(try SolidKernel.boolean(solids[1], placed, .intersect).volume, 1e-6)
+            XCTAssertEqual(workspace.bodies[0].cuts.filter { $0.hole != nil }.count, 5)
+            // The ribs stay inside the saucer's wall.
+            XCTAssertEqual(saucer.max.x - saucer.min.x, planter.saucerInside.width + 4, accuracy: 1e-6)
+            XCTAssertEqual(saucer.max.y - saucer.min.y, planter.saucerInside.depth + 4, accuracy: 1e-6)
+            XCTAssertEqual(planter.bottom.width, 80 - 2 * 80 * tan(5 * Double.pi / 180), accuracy: 1e-9)
+        }
+        let straight = try workspace("home.planter", ["draft": 0, "drains": 0])
+        let solid = try XCTUnwrap(try build(straight, "straight").first)
+        XCTAssertEqual(try area(solid, at: 1), .pi * 42.4 * 42.4, accuracy: 0.05, "an undrilled floor")
+        XCTAssertEqual(try area(solid, at: 50), .pi * (42.4 * 42.4 - 40 * 40), accuracy: 0.05)
     }
 }
 

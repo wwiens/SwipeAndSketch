@@ -3,7 +3,7 @@ import simd
 
 /// Workshop & Jigs (October 28, 2026, second expansion): racks, holders, and jigs for the bench.
 enum WorkshopTemplates {
-    static var templates: [ProjectTemplate] { [screwdriverRack, hexKeyHolder, paintRack] }
+    static var templates: [ProjectTemplate] { [screwdriverRack, hexKeyHolder, drillingJig, paintRack] }
 
     static var fitParameter: TemplateParameter {
         TemplateParameter(id: "fit", title: "Clearance", kind: .length(Fit.clearanceRange, step: 0.05), defaultValue: Fit.preferredClearance,
@@ -236,6 +236,106 @@ enum WorkshopTemplates {
                 TemplateMeasurement(title: "Wells", lengths: [well], text: "across, \(TemplateFormat.number(depth)) mm deep, \(columns * rows) in all"),
                 TemplateMeasurement(title: "Rows", lengths: (0..<rows).map(deck), separator: ", ", text: "high")
             ], printing: "Print it flat base down.")
+        }
+    }
+
+    // MARK: Drilling jig
+
+    static var drillingJig: ProjectTemplate {
+        let bushing: @Sendable (TemplateValues) -> Bool = { $0.choice("mode") == 0 }
+        let printed: @Sendable (TemplateValues) -> Bool = { $0.choice("mode") == 1 }
+        return ProjectTemplate(
+            id: "workshop.drilling-jig", category: .workshop, title: "Hole-Spacing Drilling Jig",
+            summary: "Drill a row of holes a set distance from an edge: the fence hooks over the edge and guides keep the drill straight.",
+            parameters: [
+                TemplateParameter(id: "count", title: "Holes", kind: .count(1...6), defaultValue: 2),
+                TemplateParameter(id: "spacing", title: "Hole spacing", kind: .length(8...80, step: 1), defaultValue: 32, note: "Center to center"),
+                TemplateParameter(id: "offset", title: "Distance from the edge", kind: .length(5...40, step: 0.5), defaultValue: 10,
+                                  note: "From the workpiece's edge to the holes' centers"),
+                TemplateParameter(id: "thickness", title: "Block thickness", kind: .length(8...35, step: 1), defaultValue: 15),
+                TemplateParameter(id: "drop", title: "Fence drop", kind: .length(4...25, step: 1), defaultValue: 8, note: "How far the fence reaches down the edge"),
+                TemplateParameter(id: "fence", title: "Fence thickness", kind: .length(2...6, step: 0.5), defaultValue: 3),
+                TemplateParameter(id: "mode", title: "Guide", kind: .choice(["Metal bushing", "Printed bore"]), defaultValue: 0),
+                TemplateParameter(id: "drill", title: "Drill diameter", kind: .length(1...12, step: 0.1), defaultValue: 5,
+                                  note: "The drill, or the bushing's inside"),
+                TemplateParameter(id: "bushingOutside", title: "Bushing outside", kind: .length(3...20, step: 0.1), defaultValue: 8, isShown: bushing),
+                TemplateParameter(id: "bushingLength", title: "Bushing length", kind: .length(4...25, step: 0.5), defaultValue: 10, isShown: bushing),
+                TemplateParameter(id: "seat", title: "Seat clearance", kind: .length(0...0.3, step: 0.05), defaultValue: 0.05,
+                                  note: "Gap on each side of the bushing", isShown: bushing),
+                TemplateParameter(id: "fit", title: "Clearance", kind: .length(Fit.clearanceRange, step: 0.05), defaultValue: Fit.preferredClearance,
+                                  note: "Gap on each side of the drill; starts from the Fit in the project menu", isShown: printed)
+            ],
+            name: { values in "Drilling Jig \(values.count("count")) × \(TemplateFormat.number(values["spacing"])) mm" },
+            make: { values in [TemplatePart(name: "Drilling Jig", body: try DrillingJig(values).body())] },
+            notes: { values in DrillingJig(values).notes })
+    }
+
+    struct DrillingJig {
+        var count: Int
+        var spacing, offset, thickness, drop, fence, drill, bushingOutside, bushingLength, seat, fit: Double
+        var bushings: Bool
+        init(_ values: TemplateValues) {
+            count = values.count("count"); spacing = values["spacing"]; offset = values["offset"]; thickness = values["thickness"]
+            drop = values["drop"]; fence = values["fence"]; drill = values["drill"]; bushings = values.choice("mode") == 0
+            bushingOutside = values["bushingOutside"]; bushingLength = values["bushingLength"]; seat = values["seat"]; fit = values["fit"]
+        }
+        /// The widest part of each guide: the bushing's seat, or the printed bore.
+        var seatDiameter: Double { bushingOutside + 2 * seat }
+        var bore: Double { bushings ? drill + 1 : drill + 2 * fit }
+        var widest: Double { bushings ? seatDiameter : bore }
+        static let border = 6.0
+        var width: Double { Double(count - 1) * spacing + widest + 2 * Self.border }
+        /// From the fence's outside to the block's far edge.
+        var reach: Double { offset + widest / 2 + Self.border }
+
+        func body() throws -> SolidBody {
+            if count > 1 {
+                guard spacing - widest >= 2 - 1e-9 else {
+                    throw TemplateError.tooSmall("The guides would run into each other. Space the holes \(TemplateFormat.number(widest + 2, digits: 1)) mm apart or more.")
+                }
+            }
+            guard offset - widest / 2 >= 2 - 1e-9 else {
+                throw TemplateError.tooSmall("The guides would break through the fence. Put the holes \(TemplateFormat.number(widest / 2 + 2, digits: 1)) mm or more from the edge.")
+            }
+            if bushings {
+                guard bushingOutside - drill >= 2 - 1e-9 else {
+                    throw TemplateError.tooSmall("A bushing needs at least 1 mm of wall round the drill. Check its outside and inside diameters.")
+                }
+                guard thickness - bushingLength >= 2 - 1e-9 else {
+                    throw TemplateError.tooSmall("The bushings need 2 mm of shoulder under them. Make the block \(TemplateFormat.number(bushingLength + 2)) mm thick or more.")
+                }
+            }
+            // Upside down, as it prints: the top face (where the drill goes in) on the plate, the
+            // fence standing up along the workpiece's edge at y = 0.
+            var jig = TemplateGeometry.block(TemplateGeometry.roundedRectangle(center: Point2(x: 0, y: (reach - fence) / 2), width: width, depth: reach + fence,
+                                                                               radius: 0, on: .top), height: thickness)
+            jig.cuts.append(TemplateGeometry.step(TemplateGeometry.roundedRectangle(center: Point2(x: 0, y: -fence / 2), width: width, depth: fence, radius: 0,
+                                                                                    on: TemplateGeometry.horizontal(thickness)), depth: drop, join: true))
+            for index in 0..<count {
+                let center = Point2(x: (Double(index) - Double(count - 1) / 2) * spacing, y: offset)
+                if bushings {
+                    jig.cuts.append(TemplateGeometry.step(TemplateGeometry.circle(seatDiameter, at: center, on: .top), depth: bushingLength))
+                }
+                jig.cuts.append(TemplateGeometry.hole(TemplateGeometry.plainHole(bore, label: bushings ? "Bushing" : "Guide"), at: center,
+                                                      on: TemplateGeometry.horizontal(0, facingDown: true), depth: nil))
+            }
+            return jig
+        }
+
+        var notes: TemplateNotes {
+            var measurements = [
+                TemplateMeasurement(title: "Holes", lengths: [offset], text: "from the edge, \(count) of them \(TemplateFormat.number(spacing)) mm apart"),
+                TemplateMeasurement(title: "Jig", lengths: [width, reach + fence, thickness + drop])
+            ]
+            if bushings {
+                measurements.append(TemplateMeasurement(title: "Bushing seats", lengths: [seatDiameter, bushingLength], text: "across, deep"))
+                measurements.append(TemplateMeasurement(title: "Under each seat", lengths: [thickness - bushingLength], text: "of shoulder, \(TemplateFormat.number(bore)) mm bore"))
+            } else {
+                measurements.append(TemplateMeasurement(title: "Guide bores", lengths: [bore]))
+            }
+            return TemplateNotes(measurements: measurements,
+                                 hardware: bushings ? "\(count) drill bushing\(count == 1 ? "" : "s"), \(TemplateFormat.number(bushingOutside)) mm outside, \(TemplateFormat.number(drill)) mm inside, \(TemplateFormat.number(bushingLength)) mm long, glued or pressed in." : nil,
+                                 printing: "Print it upside down, the face the drill enters on the plate and the fence pointing up. Printed bores wear; for many holes use bushings.")
         }
     }
 }

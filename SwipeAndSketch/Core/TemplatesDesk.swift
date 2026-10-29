@@ -3,7 +3,7 @@ import simd
 
 /// Desk & Device Stands (October 28, 2026, second expansion): stands, rests, and holders for the desk.
 enum DeskTemplates {
-    static var templates: [ProjectTemplate] { [deviceStand, stylusRest, cardHolder] }
+    static var templates: [ProjectTemplate] { [deviceStand, stylusRest, headphoneStand, cardHolder] }
 
     static var fitParameter: TemplateParameter {
         TemplateParameter(id: "fit", title: "Clearance", kind: .length(Fit.clearanceRange, step: 0.05), defaultValue: Fit.preferredClearance,
@@ -219,6 +219,114 @@ enum DeskTemplates {
                 TemplateMeasurement(title: "Back and front", lengths: [back, front], separator: " and ", text: "above the floor"),
                 TemplateMeasurement(title: "Outside", lengths: [outside.width, outside.depth, floor + back])
             ], printing: "Print it floor down.")
+        }
+    }
+
+    // MARK: Headphone stand
+
+    static var headphoneStand: ProjectTemplate {
+        ProjectTemplate(
+            id: "desk.headphone-stand", category: .desk, title: "Headphone Stand",
+            summary: "Make a three-part stand with a broad curved cradle for a headband. The post plugs into the base and the cradle.",
+            parameters: [
+                TemplateParameter(id: "height", title: "Height", kind: .length(120...300, step: 1), defaultValue: 220, note: "Assembled, to the top of the cradle"),
+                TemplateParameter(id: "baseWidth", title: "Base width", kind: .length(100...220, step: 1), defaultValue: 160),
+                TemplateParameter(id: "baseDepth", title: "Base depth", kind: .length(70...160, step: 1), defaultValue: 100),
+                TemplateParameter(id: "baseThickness", title: "Base thickness", kind: .length(8...18, step: 0.5), defaultValue: 10),
+                TemplateParameter(id: "postWidth", title: "Post width", kind: .length(12...30, step: 0.5), defaultValue: 18),
+                TemplateParameter(id: "postDepth", title: "Post depth", kind: .length(12...30, step: 0.5), defaultValue: 18),
+                TemplateParameter(id: "cradleWidth", title: "Cradle width", kind: .length(40...100, step: 1), defaultValue: 70),
+                TemplateParameter(id: "cradleDepth", title: "Cradle depth", kind: .length(20...60, step: 1), defaultValue: 35),
+                TemplateParameter(id: "cradleThickness", title: "Cradle thickness", kind: .length(8...18, step: 0.5), defaultValue: 10,
+                                  note: "At its thinnest, the ends"),
+                TemplateParameter(id: "crown", title: "Crown radius", kind: .length(40...160, step: 1), defaultValue: 80, note: "The curve the headband rests on"),
+                TemplateParameter(id: "engagement", title: "Joint depth", kind: .length(3...8, step: 0.5), defaultValue: 5, note: "How far the post plugs in"),
+                fitParameter
+            ],
+            name: { values in "Headphone Stand \(TemplateFormat.number(values["height"])) mm" },
+            make: { values in try HeadphoneStand(values).parts() },
+            notes: { values in HeadphoneStand(values).notes })
+    }
+
+    struct HeadphoneStand {
+        var height, baseWidth, baseDepth, baseThickness, postWidth, postDepth, cradleWidth, cradleDepth, cradleThickness, crown, engagement, fit: Double
+        init(_ values: TemplateValues) {
+            height = values["height"]; baseWidth = values["baseWidth"]; baseDepth = values["baseDepth"]; baseThickness = values["baseThickness"]
+            postWidth = values["postWidth"]; postDepth = values["postDepth"]; cradleWidth = values["cradleWidth"]; cradleDepth = values["cradleDepth"]
+            cradleThickness = values["cradleThickness"]; crown = values["crown"]; engagement = values["engagement"]; fit = values["fit"]
+        }
+        /// The tenons are the post's section less 2 mm each side; the sockets are the tenon plus the clearance.
+        var tenon: (width: Double, depth: Double) { (postWidth - 4, postDepth - 4) }
+        var socket: (width: Double, depth: Double) { (tenon.width + 2 * fit, tenon.depth + 2 * fit) }
+        /// How far the crown rises in the middle over its ends, and the cradle's height there.
+        var sag: Double { crown - (crown * crown - cradleWidth * cradleWidth / 4).squareRoot() }
+        var cradleHeight: Double { cradleThickness + sag }
+        /// The post between its shoulders.
+        var postLength: Double { height - baseThickness - cradleHeight }
+
+        func parts() throws -> [TemplatePart] {
+            guard crown >= cradleWidth / 2 + 1 - 1e-9 else {
+                throw TemplateError.tooSmall("The crown radius must be more than half the cradle's width. Make it \(TemplateFormat.number((cradleWidth / 2 + 1).rounded(.up))) mm or more.")
+            }
+            guard postLength >= 2 * engagement + 20 - 1e-9 else {
+                throw TemplateError.tooSmall("The stand is too short for its base and cradle. Make it \(TemplateFormat.number((baseThickness + cradleHeight + 2 * engagement + 20).rounded(.up))) mm tall or more.")
+            }
+            guard baseThickness - engagement >= 2 - 1e-9, cradleThickness - engagement >= 2 - 1e-9 else {
+                throw TemplateError.tooSmall("The sockets need 2 mm of floor. Make the base and cradle at least \(TemplateFormat.number(engagement + 2)) mm thick, or the joint shallower.")
+            }
+            guard (cradleDepth - socket.depth) / 2 >= 2 - 1e-9, (cradleWidth - socket.width) / 2 >= 2 - 1e-9 else {
+                throw TemplateError.tooSmall("The cradle needs 2 mm round its socket. Make it bigger or the post thinner.")
+            }
+            guard postWidth <= baseWidth - 20 + 1e-9, postDepth <= baseDepth - 20 + 1e-9 else {
+                throw TemplateError.tooSmall("The post is too big for the base. Make the base bigger or the post thinner.")
+            }
+            // The base, its socket in the middle of its top.
+            var base = TemplateGeometry.block(TemplateGeometry.roundedRectangle(width: baseWidth, depth: baseDepth, radius: 8, on: .top), height: baseThickness)
+            base.cuts.append(TemplateGeometry.step(TemplateGeometry.roundedRectangle(width: socket.width, depth: socket.depth, radius: 0,
+                                                                                     on: TemplateGeometry.horizontal(baseThickness)), depth: -engagement))
+            // The post lying on its side behind the base, a tenon at each end.
+            let postY = -(baseDepth / 2 + 10 + postWidth / 2)
+            var post = TemplateGeometry.block(TemplateGeometry.roundedRectangle(center: Point2(x: 0, y: postY), width: postLength, depth: postWidth, radius: 0, on: .top),
+                                              height: postDepth)
+            for side in [-1.0, 1] {
+                let plane = TemplateGeometry.horizontal(2)
+                post.cuts.append(TemplateGeometry.step(TemplateGeometry.roundedRectangle(center: Point2(x: side * (postLength / 2 + engagement / 2 - 0.25), y: postY),
+                                                                                         width: engagement + 0.5, depth: tenon.width, radius: 0, on: plane),
+                                                       depth: tenon.depth, join: true))
+            }
+            // The cradle in front, flat side down: its profile across the width, crowned on top, extruded along its depth.
+            let cradleY = baseDepth / 2 + 10, x0 = -cradleWidth / 2
+            let side = SketchPlane.through(SIMD3(0, cradleY, 0), normal: SIMD3(0, 1, 0)) ?? .front
+            let steps = 24
+            var outline = [SIMD3(x0, cradleY, 0), SIMD3(-x0, cradleY, 0)]
+            let middle = cradleHeight - crown
+            for index in 0...steps {
+                let x = -x0 - Double(index) * cradleWidth / Double(steps)
+                outline.append(SIMD3(x, cradleY, middle + (crown * crown - x * x).squareRoot()))
+            }
+            var profile = TemplateGeometry.polygon(outline, on: side)
+            // The crown is an exact arc: its points run from one end to the other, whichever way
+            // round the outline turned out.
+            let ends = [outline[2], outline[2 + steps]].map { side.coordinates(of: $0) }
+            let reversed = profile.outline[0].distance(to: side.coordinates(of: outline[0])) > 1e-9
+            if let start = profile.outline.firstIndex(where: { $0.distance(to: ends[reversed ? 1 : 0]) < 1e-9 }) {
+                profile.arcs = [ProfileArc(start: start, segments: steps, center: side.coordinates(of: SIMD3(0, cradleY, middle)), radius: crown)]
+            }
+            var cradle = TemplateGeometry.block(profile, height: cradleDepth)
+            cradle.cuts.append(TemplateGeometry.step(TemplateGeometry.roundedRectangle(center: Point2(x: 0, y: cradleY + cradleDepth / 2), width: socket.width,
+                                                                                       depth: socket.depth, radius: 0, on: .top), depth: engagement))
+            return [TemplatePart(name: "Base", body: base), TemplatePart(name: "Post", body: post), TemplatePart(name: "Cradle", body: cradle)]
+        }
+
+        var notes: TemplateNotes {
+            TemplateNotes(measurements: [
+                TemplateMeasurement(title: "Assembled height", lengths: [height]),
+                TemplateMeasurement(title: "Cradle", lengths: [cradleWidth, cradleDepth], text: "crowned at \(TemplateFormat.number(crown)) mm radius"),
+                TemplateMeasurement(title: "Base", lengths: [baseWidth, baseDepth, baseThickness]),
+                TemplateMeasurement(title: "Post", lengths: [postWidth, postDepth, postLength], text: "between shoulders"),
+                TemplateMeasurement(title: "Joints", lengths: [engagement], text: "deep, \(TemplateFormat.number(fit)) mm clearance a side")
+            ], hardware: "Glue for the joints, if they're loose once printed.",
+               printing: "Print the base and cradle flat side down and the post on its side. Check it doesn't tip with your headphones on it.")
         }
     }
 }

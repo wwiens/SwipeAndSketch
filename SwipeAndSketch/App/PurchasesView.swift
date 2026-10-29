@@ -39,7 +39,7 @@ struct PurchasesView: View {
         "Extrude, Revolve, Fillet, Chamfer, and Holes",
         "Union, Subtract, Intersect, Align, Mirror, and Scale",
         "Measure, Section, and Import Mesh",
-        "Gridfinity Baseplate, Bin, Spacer Set, and Fit & Print Test templates",
+        "Templates: Gridfinity Baseplate, Bin, and Label Bin, Spacer Set, Stylus Rest, Key Tag, and the Fit & Print Tests",
         "Unlimited projects, full-quality STL and 3MF export",
         "Ask the AI Assistant about your model",
     ]

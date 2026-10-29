@@ -57,7 +57,8 @@ enum BoxTemplates {
             make: { values in
                 try screwLidJar(inside: values["diameter"], height: values["height"], wall: values["wall"], pitch: values["pitch"],
                                 fit: values["fit"], ribbed: values.flag("ribbed"))
-            })]
+            }),
+         slidingLidBox]
     }
 
     static let screwChoices = ["M2.5", "M3", "M4"]
@@ -219,5 +220,82 @@ enum BoxTemplates {
         let underside = TemplateGeometry.horizontal(0, facingDown: true)
         for offset in offsets { lid.cuts.append(TemplateGeometry.hole(sink, at: place.lid + offset, on: underside, depth: nil)) }
         return [TemplatePart(name: "Box", body: box), TemplatePart(name: "Lid", body: lid)]
+    }
+
+    // MARK: Sliding lid (October 28, 2026, second expansion)
+
+    static var slidingLidBox: ProjectTemplate {
+        ProjectTemplate(
+            id: "enclosures.sliding-lid-box", category: .enclosures, title: "Sliding-Lid Box",
+            summary: "A box whose lid slides in along grooves in its walls, from one open end to a stop at the other.",
+            parameters: [
+                TemplateParameter(id: "length", title: "Inside length", kind: .length(30...250, step: 1), defaultValue: 90, note: "The way the lid slides"),
+                TemplateParameter(id: "width", title: "Inside width", kind: .length(20...180, step: 1), defaultValue: 60),
+                TemplateParameter(id: "height", title: "Inside height", kind: .length(10...150, step: 1), defaultValue: 35, note: "Floor to the lid's underside"),
+                TemplateParameter(id: "wall", title: "Wall thickness", kind: .length(2...6, step: 0.1), defaultValue: 2.4),
+                TemplateParameter(id: "floor", title: "Floor thickness", kind: .length(1.6...6, step: 0.1), defaultValue: 2.4),
+                TemplateParameter(id: "lid", title: "Lid thickness", kind: .length(1.6...4, step: 0.1), defaultValue: 2),
+                TemplateParameter(id: "engagement", title: "Groove depth", kind: .length(0.8...2, step: 0.1), defaultValue: 1,
+                                  note: "How far the lid's edges reach into each wall"),
+                TemplateParameter(id: "above", title: "Material above the grooves", kind: .length(1.2...3, step: 0.1), defaultValue: 1.6),
+                TemplateParameter(id: "fit", title: "Lid fit", kind: .length(Fit.clearanceRange, step: 0.05), defaultValue: Fit.preferredClearance,
+                                  note: "Gap round the lid in its grooves; starts from the Fit in the project menu")
+            ],
+            name: { values in "Sliding-Lid Box \(TemplateFormat.size(values["length"], values["width"], values["height"]))" },
+            make: { values in try SlidingLidBox(values).parts() },
+            notes: { values in SlidingLidBox(values).notes })
+    }
+
+    struct SlidingLidBox {
+        var length, width, height, wall, floor, lid, engagement, above, fit: Double
+        init(_ values: TemplateValues) {
+            length = values["length"]; width = values["width"]; height = values["height"]; wall = values["wall"]; floor = values["floor"]
+            lid = values["lid"]; engagement = values["engagement"]; above = values["above"]; fit = values["fit"]
+        }
+        var outside: (length: Double, width: Double) { (length + 2 * wall, width + 2 * wall) }
+        /// The lid's underside when it is closed, the groove's faces a clearance either side of the
+        /// lid, and the box's top over them.
+        var lidUnderside: Double { floor + height }
+        var grooveBottom: Double { lidUnderside - fit }
+        var grooveTop: Double { lidUnderside + lid + fit }
+        var top: Double { grooveTop + above }
+        var grooveWidth: Double { width + 2 * engagement }
+        /// The lid runs from the entry end's outside to a clearance short of the far wall.
+        var lidSize: (length: Double, width: Double) { (length + wall - fit, width + 2 * engagement - 2 * fit) }
+
+        func parts() throws -> [TemplatePart] {
+            guard wall - engagement >= 1.2 - 1e-9 else {
+                throw TemplateError.tooSmall("The grooves would leave less than 1.2 mm of wall behind them. Make the walls \(TemplateFormat.number(engagement + 1.2, digits: 1)) mm thick or more, or the grooves shallower.")
+            }
+            guard engagement - fit >= 0.4 - 1e-9 else {
+                throw TemplateError.tooSmall("The lid would barely reach into its grooves. Make them deeper than \(TemplateFormat.number(fit + 0.4, digits: 2)) mm, or use less clearance.")
+            }
+            let place = layout(outerWidth: max(outside.length, lidSize.length))
+            // The box, open at its top; the entry end (−x) is cut down to the groove so the lid slides in.
+            var box = TemplateGeometry.block(TemplateGeometry.roundedRectangle(center: place.box, width: outside.length, depth: outside.width, radius: 0, on: .top),
+                                             height: top)
+            box.cuts.append(TemplateGeometry.step(TemplateGeometry.roundedRectangle(center: place.box, width: length, depth: width, radius: 0,
+                                                                                    on: TemplateGeometry.horizontal(top)), depth: -(top - floor)))
+            let entry = place.box.x - length / 2
+            let groove = TemplateGeometry.roundedRectangle(center: Point2(x: (entry - wall - 1 + place.box.x + length / 2) / 2, y: place.box.y),
+                                                           width: length + wall + 1, depth: grooveWidth, radius: 0, on: TemplateGeometry.horizontal(grooveBottom))
+            box.cuts.append(TemplateGeometry.step(groove, depth: grooveTop - grooveBottom))
+            let opening = TemplateGeometry.roundedRectangle(center: Point2(x: entry - wall / 2, y: place.box.y), width: wall + 2, depth: grooveWidth, radius: 0,
+                                                            on: TemplateGeometry.horizontal(grooveBottom))
+            box.cuts.append(TemplateGeometry.step(opening, depth: top - grooveBottom + 1))
+            // The lid lies flat beside it.
+            let lidPlate = TemplateGeometry.block(TemplateGeometry.roundedRectangle(center: place.lid, width: lidSize.length, depth: lidSize.width, radius: 0, on: .top),
+                                                  height: lid)
+            return [TemplatePart(name: "Box", body: box), TemplatePart(name: "Lid", body: lidPlate)]
+        }
+
+        var notes: TemplateNotes {
+            TemplateNotes(measurements: [
+                TemplateMeasurement(title: "Inside", lengths: [length, width, height], text: "to the lid"),
+                TemplateMeasurement(title: "Outside", lengths: [outside.length, outside.width, top]),
+                TemplateMeasurement(title: "Lid", lengths: [lidSize.length, lidSize.width, lid]),
+                TemplateMeasurement(title: "In each groove", lengths: [engagement - fit], text: "of lid, \(TemplateFormat.number(fit)) mm clearance round it")
+            ], printing: "Print the box open side up and the lid flat. Slide the lid in from the open end.")
+        }
     }
 }
