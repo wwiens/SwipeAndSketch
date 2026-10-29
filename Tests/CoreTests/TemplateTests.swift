@@ -43,7 +43,7 @@ final class TemplateTests: XCTestCase {
     /// divider options; so are the Spacer Set and the Fit & Print Tests (October 28, 2026).
     func testOnlyTheStarterTemplatesAreFree() throws {
         let free = TemplateCatalog.all.filter { !$0.needsPro }
-        XCTAssertEqual(Set(free.map(\.id)), ["gridfinity.baseplate", "gridfinity.bin",
+        XCTAssertEqual(Set(free.map(\.id)), ["gridfinity.baseplate", "gridfinity.bin", "parts.spacers",
                                              "tests.peg-fit", "tests.slide-fit", "tests.hole-ladder", "tests.insert-block"])
         for template in free where template.category == .gridfinity {
             XCTAssertTrue(Set(template.parameters.map(\.id)).isDisjoint(with: ["magnets", "dividersX", "dividersY"]), template.id)
@@ -102,6 +102,9 @@ final class TemplateTests: XCTestCase {
     /// (TemplateError.tooSmall) instead of making something, as the specification asks.
     private static let conflictingEnds: [String: Set<String>] = [
         "tests.insert-block": ["insertLength=15.0", "depth=2.0"],
+        "parts.knob": ["height=8.0", "shaftSize=20.0", "flat=3.0", "boreDepth=35.0"],
+        "parts.handle": ["centers=40.0", "gripWidth=160.0", "sectionWidth=8.0", "sectionThickness=16.0", "hole=8.0"],
+        "parts.spacers": ["outside=5.0", "bore=20.0"],
     ]
 
     /// The gallery's pictures show what each template makes now. When this fails, a template was
@@ -429,6 +432,57 @@ final class TemplateTests: XCTestCase {
         assertRefused("tests.insert-block", ["insertLength": 6])
     }
 
+    // MARK: Replacement Parts
+
+    func testSpacersStepUpOrRepeat() throws {
+        let solids = try build(try workspace("parts.spacers"), "spacers")
+        XCTAssertEqual(solids.map { ($0.bounds.max.z * 10).rounded() / 10 }, [2, 3, 4, 5, 6])
+        for (solid, length) in zip(solids, [2.0, 3, 4, 5, 6]) { XCTAssertEqual(solid.volume, .pi * (25 - 1.7 * 1.7) * length, accuracy: 0.01) }
+        let same = try workspace("parts.spacers", ["increment": 0, "count": 3])
+        XCTAssertEqual(same.bodies.map(\.name), ["Spacer 1", "Spacer 2", "Spacer 3"])
+        XCTAssertTrue(try build(same, "same").allSatisfy { abs($0.bounds.max.z - 2) < 1e-6 })
+    }
+
+    func testTubePlugInsertIsTheOpeningPlusInterference() throws {
+        let plug = try XCTUnwrap(try build(try workspace("parts.tube-plug"), "round plug").first)
+        // A 26 mm cap 2 mm thick, then a 20.2 mm sleeve with 2 mm walls, 15 mm long with a lead-in.
+        XCTAssertEqual(try area(plug, at: 1), .pi * 13 * 13, accuracy: 0.05)
+        XCTAssertEqual(try area(plug, at: 8), .pi * (10.1 * 10.1 - 8.1 * 8.1), accuracy: 0.05)
+        XCTAssertEqual(plug.bounds.max.z, 17, accuracy: 1e-6)
+        XCTAssertLessThan(try area(plug, at: 16.8), .pi * (10.1 * 10.1 - 8.1 * 8.1))
+        let square = try XCTUnwrap(try build(try workspace("parts.tube-plug", ["shape": 1, "width": 30, "depth": 20, "interference": -0.2]), "square plug").first)
+        XCTAssertEqual(square.bounds.max.x - square.bounds.min.x, 36, accuracy: 1e-6)
+        XCTAssertEqual(try area(square, at: 8), roundedSquareArea(29.6, 19.6, radius: 1) - roundedSquareArea(25.6, 15.6, radius: 0.3), accuracy: 0.05)
+    }
+
+    func testKnobBoreFollowsTheShaftWithClearance() throws {
+        let knob = try XCTUnwrap(try build(try workspace("parts.knob", ["grip": 0]), "D knob").first)
+        // 4 mm of knob over a 12 mm deep bore: 6 mm D shaft, 0.5 mm flat, 0.2 mm clearance.
+        let outside = Double.pi * 12 * 12
+        XCTAssertEqual(try area(knob, at: 2), outside, accuracy: 0.05)
+        let r = 3.2, flat = 2.7
+        let d = Double.pi * r * r - (r * r * acos(flat / r) - flat * (r * r - flat * flat).squareRoot())
+        XCTAssertEqual(try area(knob, at: 10), outside - d, accuracy: 0.05)
+        let hex = try XCTUnwrap(try build(try workspace("parts.knob", ["grip": 0, "shaft": 1]), "hex knob").first)
+        XCTAssertEqual(try area(hex, at: 10), outside - 3.squareRoot() / 2 * 6.4 * 6.4, accuracy: 0.05)
+        let fluted = try XCTUnwrap(try build(try workspace("parts.knob"), "fluted knob").first)
+        XCTAssertLessThan(fluted.volume, knob.volume)
+    }
+
+    func testPullHandleKeepsTheScrewsOutsideTheGrip() throws {
+        let handle = try XCTUnwrap(try build(try workspace("parts.handle"), "handle").first)
+        // Lying on its side: 96 mm centers, tabs 3 mm past the holes, 12 mm wide, 28 mm tall.
+        XCTAssertEqual(handle.bounds.max.x - handle.bounds.min.x, 96 + 4.5 + 6, accuracy: 1e-6)
+        XCTAssertEqual(handle.bounds.max.y, 28, accuracy: 1e-6)
+        for x in [-48.0, 48] {
+            let face = try XCTUnwrap(handle.face(near: SIMD3(x + 2.25, 2, 6)))
+            XCTAssertEqual(handle.faceCylinder(face)?.radius ?? 0, 2.25, accuracy: 1e-6)
+        }
+        // Room for the hand under the grip.
+        XCTAssertFalse(handle.contains(SIMD3(0, 19, 6)))
+        XCTAssertTrue(handle.contains(SIMD3(0, 21, 6)))
+        assertRefused("parts.handle", ["centers": 80])
+    }
 
 
 
