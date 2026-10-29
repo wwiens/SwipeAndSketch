@@ -14,10 +14,15 @@ private let card = Color("ss-white")
 /// choices before it is made (Core/Templates.swift). Opened from the Files browser's + and the
 /// project menu, and shown in Home's Templates (October 22, 2026, without Cancel); `onCreate` gets
 /// the new project and its suggested file name, then the usual save sheet asks where to put it.
+/// It opens on a panel saying what templates do (user request, October 29, 2026): each is a model
+/// generator, not a fixed model. Home's Templates has no Blank Project (Home has its own); New
+/// Project keeps one in the panel.
 struct TemplateGallery: View {
     var title = "New Project"
     /// A category to show first (Home's Start Something cards).
     var category: ProjectTemplate.Category? = nil
+    /// Offer Blank Project in the panel: New Project's sheet, where it's the only way to a blank one.
+    var offersBlank = true
     var onCreate: (Project, String) -> Void
     var onCancel: (() -> Void)?
     @State private var path: [String] = []
@@ -30,10 +35,7 @@ struct TemplateGallery: View {
           ScrollViewReader { scroller in
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
-                    LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
-                        Button { onCreate(Project(), "Untitled Project") } label: { blankCard }
-                            .buttonStyle(.plain).accessibilityIdentifier("templates.blank")
-                    }
+                    intro
                     ForEach(ProjectTemplate.Category.allCases, id: \.self) { category in
                         VStack(alignment: .leading, spacing: 12) {
                             VStack(alignment: .leading, spacing: 2) {
@@ -78,19 +80,58 @@ struct TemplateGallery: View {
 
     private var columns: [GridItem] { [GridItem(.adaptive(minimum: 220, maximum: 300), spacing: 16, alignment: .top)] }
 
-    private var blankCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 12).fill(canvas)
-                SSIconTile(icon: .newProject)
+    /// What a template does for you, at the top of the gallery.
+    private var intro: some View {
+        let lavender = Color("ss-lavender")
+        let benefits: [(icon: SSIcon, title: String, text: String)] = [
+            (.dimension, "Made to your measurements", "Set the sizes, counts, clearances, and screws, even the words on it."),
+            (.solid, "A live preview", "Turn it and zoom in while you set it up; it rebuilds as you change it."),
+            (.fitTest, "Ready to print", "Each one lists the sizes that matter, the hardware it needs, and how to lay it on the bed."),
+            (.items, "Yours to change", "It comes out as ordinary named solids, so you can keep shaping it with every tool.")
+        ]
+        let categories = Set(templates.map(\.category)).count
+        return VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Every template is a model generator").font(.system(size: 28, weight: .bold)).foregroundStyle(paper)
+                    .accessibilityAddTraits(.isHeader)
+                Text("These aren't fixed models. Choose a starting point, tell it what you're storing, mounting, or replacing, and it builds a model that fits: the right size, the right fit, ready to print.")
+                    .font(.system(size: 16)).foregroundStyle(lavender).fixedSize(horizontal: false, vertical: true)
             }
-            .aspectRatio(4 / 3, contentMode: .fit)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Blank Project").font(.system(size: 17, weight: .semibold)).foregroundStyle(ink)
-                Text("Start from an empty grid.").font(.system(size: 13)).foregroundStyle(muted)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12, alignment: .top)], alignment: .leading, spacing: 12) {
+                ForEach(benefits, id: \.title) { benefit in
+                    HStack(alignment: .top, spacing: 12) {
+                        SSIconGlyph(icon: benefit.icon, size: 26, color: paper)
+                            .frame(width: 40, height: 40)
+                            .background(Color("ss-violetPressed"), in: RoundedRectangle(cornerRadius: 11))
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(benefit.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(paper)
+                            Text(benefit.text).font(.system(size: 13)).foregroundStyle(lavender).fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+            }
+            HStack(spacing: 16) {
+                Text("\(templates.count) generators in \(categories) categories, from Gridfinity bins to wall boards, cases, and replacement parts.")
+                    .font(.system(size: 13, weight: .medium)).foregroundStyle(lavender).fixedSize(horizontal: false, vertical: true)
+                if offersBlank {
+                    Spacer(minLength: 0)
+                    Button { onCreate(Project(), "Untitled Project") } label: {
+                        HStack(spacing: 6) {
+                            SSIconGlyph(icon: .newProject, size: 18, color: violet)
+                            Text("Blank Project").font(.system(size: 15, weight: .semibold)).foregroundStyle(violet)
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 9)
+                        .background(paper, in: Capsule())
+                    }
+                    .buttonStyle(.plain).accessibilityIdentifier("templates.blank")
+                }
             }
         }
-        .cardStyle()
+        .padding(24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(violet, in: RoundedRectangle(cornerRadius: 20))
+        .accessibilityIdentifier("templates.intro")
     }
 
     private func templateCard(_ template: ProjectTemplate) -> some View {

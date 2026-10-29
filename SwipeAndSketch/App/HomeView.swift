@@ -56,7 +56,7 @@ struct HomeView: View {
                 switch model.section {
                 case .home: home
                 case .templates:
-                    TemplateGallery(title: "Templates", category: model.category, onCreate: { project, name in model.create(project, name) })
+                    TemplateGallery(title: "Templates", category: model.category, offersBlank: false, onCreate: { project, name in model.create(project, name) })
                         .id(model.galleryID)
                 case .files: EmptyView()
                 }
