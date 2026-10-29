@@ -25,11 +25,11 @@ struct LicenseAccess: Equatable, Sendable {
 
     static let shared = LicenseStore()
 
-    /// The product is not set up in App Store Connect yet (October 28, 2026), so every build runs
-    /// with Pro and never asks StoreKit. Turn this on before the 1.0 submission.
-    /// In Debug builds `--license-store` asks StoreKit anyway (with
-    /// Products.storekit selected in the scheme, purchases and offer codes are simulated).
-    static let enforcesPurchases = false
+    /// Purchases are on (October 29, 2026, build 2, once Pro was set up in App Store Connect):
+    /// StoreKit decides who has Pro. Off, every build ran with Pro and never asked StoreKit.
+    /// Debug builds still pick a state with `--license-free`, `--license-pro`, or `--license-store`
+    /// (with Products.storekit selected in the scheme, purchases and offer codes are simulated).
+    static let enforcesPurchases = true
 
     @Published private(set) var access: LicenseAccess
     @Published private(set) var products: [ProductID: Product] = [:]

@@ -131,7 +131,6 @@ struct TemplateGallery: View {
         .padding(24)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color("ss-lavender"), in: RoundedRectangle(cornerRadius: 20))
-        .accessibilityIdentifier("templates.intro")
     }
 
     private func templateCard(_ template: ProjectTemplate) -> some View {

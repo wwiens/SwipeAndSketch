@@ -320,7 +320,8 @@ import SwiftUI
         XCTAssertTrue(Licenses.lgpl21.contains("END OF TERMS AND CONDITIONS"), "The whole license")
         XCTAssertTrue(Licenses.openCascadeException.hasPrefix("Open CASCADE exception (version 1.0)"))
         XCTAssertEqual(AboutView.repository?.absoluteString, "https://github.com/wwiens/SwipeAndSketch")
-        XCTAssertEqual(AboutView.version, "Version 1.0 (1)")
+        // The build number changes with each upload; the version and its form stay.
+        XCTAssertNotNil(AboutView.version.wholeMatch(of: /Version 1\.0 \(\d+\)/), AboutView.version)
         // App Review asks for the privacy policy inside the app as well as in the store.
         XCTAssertEqual(AboutView.privacy?.absoluteString, "https://swipesketch.com/privacy/")
         XCTAssertEqual(AboutView.support?.absoluteString, "https://swipesketch.com/support/")
