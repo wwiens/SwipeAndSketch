@@ -59,6 +59,8 @@ struct PurchasesView: View {
             .offerCodeRedemption(options: [], isPresented: $redeeming) { license.codeRedemptionFinished($0) }
             .task { if license.products.isEmpty { await license.loadProducts() } }
         }
+        // The light-only design: in Dark Mode a sheet from the editor would otherwise turn dark under the brand ink.
+        .preferredColorScheme(.light)
     }
 
     private func item(_ id: LicenseStore.ProductID, title: String, detail: String, owned: Bool = false) -> some View {

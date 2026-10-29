@@ -71,9 +71,13 @@ struct AboutView: View {
                 }
             }
             .navigationTitle("About").navigationBarTitleDisplayMode(.inline)
-            .sheet(isPresented: $showQuickStart) { QuickStartView(startBlank: nil) { showQuickStart = false }.presentationSizing(.form) }
+            .sheet(isPresented: $showQuickStart) {
+                QuickStartView(startBlank: nil) { showQuickStart = false }.presentationSizing(.form).preferredColorScheme(.light)
+            }
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done", action: onDone) } }
         }
+        // The light-only design: in Dark Mode a sheet from the editor would otherwise turn dark under the brand ink.
+        .preferredColorScheme(.light)
     }
 }
 
