@@ -43,6 +43,10 @@ struct LicenseAccess: Equatable, Sendable {
     @Published var isShowingStore = false
 
     private var updates: Task<Void, Never>?
+    /// Pro as its own verified transactions said this launch (bought, restored, redeemed, or revoked).
+    /// `Transaction.currentEntitlements` can lag a moment behind a new purchase, and read alone it
+    /// left the app Free until the next launch.
+    private var confirmedPro: Bool?
     private let defaults = UserDefaults.standard
     /// Fixed access for tests: StoreKit is not consulted.
     private let fixed: LicenseAccess?
@@ -53,7 +57,10 @@ struct LicenseAccess: Equatable, Sendable {
         guard fixed == nil else { hasLoadedEntitlements = true; return }
         updates = Task { [weak self] in
             for await result in Transaction.updates {
-                if case .verified(let transaction) = result { await transaction.finish() }
+                if case .verified(let transaction) = result {
+                    self?.apply(transaction)
+                    await transaction.finish()
+                }
                 await self?.refreshEntitlements()
             }
         }
@@ -90,8 +97,20 @@ struct LicenseAccess: Equatable, Sendable {
             guard case .verified(let transaction) = result, transaction.revocationDate == nil else { continue }
             if ProductID(rawValue: transaction.productID) == .pro { pro = true }
         }
-        defaults.set(pro, forKey: Keys.pro)
         hasLoadedEntitlements = true
+        // A purchase or refund seen this launch wins over an entitlement list that has not caught up.
+        setPro(confirmedPro ?? pro)
+    }
+
+    /// Takes Pro from one verified transaction at once: owned unless it was refunded or revoked.
+    private func apply(_ transaction: StoreKit.Transaction) {
+        guard ProductID(rawValue: transaction.productID) == .pro else { return }
+        confirmedPro = transaction.revocationDate == nil
+        setPro(transaction.revocationDate == nil)
+    }
+
+    private func setPro(_ pro: Bool) {
+        defaults.set(pro, forKey: Keys.pro)
         if access.ownsPro != pro { access = LicenseAccess(ownsPro: pro) }
     }
 
@@ -104,6 +123,7 @@ struct LicenseAccess: Equatable, Sendable {
         do {
             switch try await purchase(product) {
             case .success(.verified(let transaction)):
+                apply(transaction)
                 await transaction.finish()
                 await refreshEntitlements()
             case .success(.unverified):
@@ -138,7 +158,9 @@ struct LicenseAccess: Equatable, Sendable {
     func codeRedemptionFinished(_ result: Result<VerificationResult<StoreKit.Transaction>, Error>) {
         Task {
             switch result {
-            case .success(.verified(let transaction)): await transaction.finish()
+            case .success(.verified(let transaction)):
+                apply(transaction)
+                await transaction.finish()
             case .success(.unverified): message = "The App Store could not confirm that code. Try Restore Purchases."
             case .failure(StoreKitError.userCancelled): break
             case .failure(let error): message = error.localizedDescription
