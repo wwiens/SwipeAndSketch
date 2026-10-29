@@ -5,7 +5,6 @@ private let ink = Color("ss-ink")
 private let muted = Color("ss-muted")
 private let violet = Color("ss-violet")
 private let paper = Color("ss-paper")
-private let coral = Color("ss-coral")
 private let card = Color("ss-white")
 private let canvas = Color("ss-canvas")
 private let hairline = Color("ss-border")
@@ -105,29 +104,44 @@ struct PurchasesView: View {
                 Text("One-time purchase · No subscription · Family Sharing")
                     .font(.system(size: 13, weight: .medium)).foregroundStyle(paper.opacity(0.85))
             }
+            if let message = license.message {
+                // Problems and notes from the App Store, at the top where they are seen.
+                Text(message).font(.system(size: 14, weight: .semibold)).foregroundStyle(ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(paper, in: RoundedRectangle(cornerRadius: 10))
+                    .accessibilityIdentifier("purchases.message")
+            }
         }
         .padding(22)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(violet, in: RoundedRectangle(cornerRadius: 20))
     }
 
+    /// Get Pro with the store's price. Before the price loads it still works: it loads the product
+    /// first, and says so when the App Store cannot be reached.
     @ViewBuilder private var buyButton: some View {
         let product = license.product(.pro)
-        if license.busy == LicenseStore.ProductID.pro.rawValue {
+        if license.busy == LicenseStore.ProductID.pro.rawValue || license.isLoadingProducts && product == nil {
             ProgressView().tint(paper).frame(height: 50)
         } else {
             Button {
                 Task { await license.purchase(.pro, with: purchase) }
             } label: {
-                Text(product.map { "Get Pro · \($0.displayPrice)" } ?? (license.isLoadingProducts ? "Loading the price…" : "Get Pro"))
+                Text(product.map { "Get Pro · \($0.displayPrice)" } ?? "Get Pro")
                     .font(.system(size: 18, weight: .bold)).foregroundStyle(violet)
                     .padding(.horizontal, 28).frame(height: 50)
                     .background(paper, in: Capsule())
             }
             .buttonStyle(.plain)
-            .opacity(product == nil ? 0.6 : 1)
-            .disabled(product == nil || license.busy != nil)
+            .opacity(license.purchasesAreOn ? 1 : 0.6)
+            .disabled(!license.purchasesAreOn || license.busy != nil)
             .accessibilityIdentifier("purchases.unlock.buy")
+        }
+        if !license.purchasesAreOn {
+            Text("Purchases are switched off in this build.")
+                .font(.system(size: 14, weight: .semibold)).foregroundStyle(paper)
         }
     }
 
@@ -185,10 +199,6 @@ struct PurchasesView: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if let message = license.message {
-                Text(message).font(.system(size: 14, weight: .medium)).foregroundStyle(coral)
-                    .fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("purchases.message")
-            }
             HStack(spacing: 24) {
                 Button("Restore Purchases") { Task { await license.restore() } }
                     .disabled(license.busy != nil).accessibilityIdentifier("purchases.restore")

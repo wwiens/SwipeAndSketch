@@ -1,5 +1,6 @@
 import SwiftUI
 import StoreKit
+import os
 
 /// What the user may do (October 28, 2026). The app is free for good: every file opens,
 /// edits with the free tools, and exports. Swipe & Sketch Pro, one non-consumable purchase, adds the
@@ -74,6 +75,12 @@ struct LicenseAccess: Equatable, Sendable {
     var proPrice: String? { products[.pro]?.displayPrice }
 
     private static let notAnswering = "The App Store is not answering right now."
+    /// Each load, purchase, and restore, for Xcode's console and Console.app (category "purchases").
+    private let log = Logger(subsystem: "noventix.SwipeAndSketch", category: "purchases")
+
+    /// The App Store is consulted; false in builds that fix the plan (tests and Debug launch
+    /// arguments, or every build until purchases are switched on).
+    var purchasesAreOn: Bool { fixed == nil }
 
     func loadProducts() async {
         guard fixed == nil, !isLoadingProducts else { return }
@@ -82,10 +89,12 @@ struct LicenseAccess: Equatable, Sendable {
         do {
             let loaded = try await Product.products(for: ProductID.allCases.map(\.rawValue))
             products = Dictionary(uniqueKeysWithValues: loaded.compactMap { product in ProductID(rawValue: product.id).map { ($0, product) } })
+            log.info("Loaded \(loaded.count) products: \(loaded.map(\.id).joined(separator: ", "), privacy: .public)")
             if products.isEmpty { message = Self.notAnswering + " Check your connection and try again." }
             // An earlier failure to reach the App Store is over.
             else if message?.hasPrefix(Self.notAnswering) == true { message = nil }
         } catch {
+            log.error("Loading products failed: \(error.localizedDescription, privacy: .public)")
             message = Self.notAnswering + " \(error.localizedDescription)"
         }
     }
@@ -115,25 +124,38 @@ struct LicenseAccess: Equatable, Sendable {
     }
 
     /// Buys `id` with SwiftUI's purchase action, which shows the App Store sheet over the right window.
+    /// When the product has not loaded yet, it is loaded first, and a product that cannot be loaded
+    /// says so rather than leaving the button doing nothing.
     func purchase(_ id: ProductID, with purchase: PurchaseAction) async {
-        guard busy == nil, let product = products[id] else { return }
+        guard busy == nil, fixed == nil else { return }
+        if products[id] == nil { await loadProducts() }
+        guard let product = products[id] else {
+            log.error("No product \(id.rawValue, privacy: .public) to buy")
+            message = "Swipe & Sketch Pro could not be loaded from the App Store. Check your connection and try again."
+            return
+        }
         busy = id.rawValue
         message = nil
         defer { busy = nil }
         do {
             switch try await purchase(product) {
             case .success(.verified(let transaction)):
+                log.info("Bought \(transaction.productID, privacy: .public)")
                 apply(transaction)
                 await transaction.finish()
                 await refreshEntitlements()
-            case .success(.unverified):
+            case .success(.unverified(_, let error)):
+                log.error("Unverified purchase: \(error.localizedDescription, privacy: .public)")
                 message = "The App Store could not confirm that purchase. Try Restore Purchases."
             case .pending:
+                log.info("Purchase pending approval")
                 message = "The purchase is waiting for approval. Pro turns on as soon as it is approved."
-            case .userCancelled: break
+            case .userCancelled:
+                log.info("Purchase cancelled")
             @unknown default: break
             }
         } catch {
+            log.error("Purchase failed: \(error.localizedDescription, privacy: .public)")
             message = error.localizedDescription
         }
     }
