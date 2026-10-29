@@ -80,9 +80,9 @@ struct TemplateGallery: View {
 
     private var columns: [GridItem] { [GridItem(.adaptive(minimum: 220, maximum: 300), spacing: 16, alignment: .top)] }
 
-    /// What a template does for you, at the top of the gallery.
+    /// What a template does for you, at the top of the gallery: a soft lavender panel, violet only
+    /// in its icons and button.
     private var intro: some View {
-        let lavender = Color("ss-lavender")
         let benefits: [(icon: SSIcon, title: String, text: String)] = [
             (.dimension, "Made to your measurements", "Set the sizes, counts, clearances, and screws, even the words on it."),
             (.solid, "A live preview", "Turn it and zoom in while you set it up; it rebuilds as you change it."),
@@ -92,20 +92,20 @@ struct TemplateGallery: View {
         let categories = Set(templates.map(\.category)).count
         return VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Every template is a model generator").font(.system(size: 28, weight: .bold)).foregroundStyle(paper)
+                Text("Every template is a model generator").font(.system(size: 28, weight: .bold)).foregroundStyle(ink)
                     .accessibilityAddTraits(.isHeader)
                 Text("These aren't fixed models. Choose a starting point, tell it what you're storing, mounting, or replacing, and it builds a model that fits: the right size, the right fit, ready to print.")
-                    .font(.system(size: 16)).foregroundStyle(lavender).fixedSize(horizontal: false, vertical: true)
+                    .font(.system(size: 16)).foregroundStyle(ink).fixedSize(horizontal: false, vertical: true)
             }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12, alignment: .top)], alignment: .leading, spacing: 12) {
                 ForEach(benefits, id: \.title) { benefit in
                     HStack(alignment: .top, spacing: 12) {
                         SSIconGlyph(icon: benefit.icon, size: 26, color: paper)
                             .frame(width: 40, height: 40)
-                            .background(Color("ss-violetPressed"), in: RoundedRectangle(cornerRadius: 11))
+                            .background(violet, in: RoundedRectangle(cornerRadius: 11))
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(benefit.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(paper)
-                            Text(benefit.text).font(.system(size: 13)).foregroundStyle(lavender).fixedSize(horizontal: false, vertical: true)
+                            Text(benefit.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(ink)
+                            Text(benefit.text).font(.system(size: 13)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
                         }
                     }
                     .accessibilityElement(children: .combine)
@@ -113,16 +113,16 @@ struct TemplateGallery: View {
             }
             HStack(spacing: 16) {
                 Text("\(templates.count) generators in \(categories) categories, from Gridfinity bins to wall boards, cases, and replacement parts.")
-                    .font(.system(size: 13, weight: .medium)).foregroundStyle(lavender).fixedSize(horizontal: false, vertical: true)
+                    .font(.system(size: 13, weight: .medium)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
                 if offersBlank {
                     Spacer(minLength: 0)
                     Button { onCreate(Project(), "Untitled Project") } label: {
                         HStack(spacing: 6) {
-                            SSIconGlyph(icon: .newProject, size: 18, color: violet)
-                            Text("Blank Project").font(.system(size: 15, weight: .semibold)).foregroundStyle(violet)
+                            SSIconGlyph(icon: .newProject, size: 18, color: paper)
+                            Text("Blank Project").font(.system(size: 15, weight: .semibold)).foregroundStyle(paper)
                         }
                         .padding(.horizontal, 14).padding(.vertical, 9)
-                        .background(paper, in: Capsule())
+                        .background(violet, in: Capsule())
                     }
                     .buttonStyle(.plain).accessibilityIdentifier("templates.blank")
                 }
@@ -130,7 +130,7 @@ struct TemplateGallery: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(violet, in: RoundedRectangle(cornerRadius: 20))
+        .background(Color("ss-lavender"), in: RoundedRectangle(cornerRadius: 20))
         .accessibilityIdentifier("templates.intro")
     }
 
