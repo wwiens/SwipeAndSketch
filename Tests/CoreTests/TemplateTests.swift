@@ -106,6 +106,9 @@ final class TemplateTests: XCTestCase {
         "parts.handle": ["centers=40.0", "gripWidth=160.0", "sectionWidth=8.0", "sectionThickness=16.0", "hole=8.0"],
         "parts.spacers": ["outside=5.0", "bore=20.0"],
         "organizers.pocket-insert": ["width=40.0", "depth=30.0", "height=6.0", "object=60.0", "pocketDepth=50.0", "columns=12.0", "rows=8.0"],
+        "mounts.u-bracket": ["component=10.0", "spacing=120.0"],
+        "mounts.slotted-plate": ["width=20.0", "columns=4.0", "rows=4.0", "columnPitch=5.0", "columnPitch=150.0", "slotLength=50.0"],
+        "mounts.keyhole-plate": ["width=25.0", "height=15.0", "count=4.0", "spacing=150.0", "entry=16.0", "neck=8.0", "travel=3.0", "travel=25.0"],
     ]
 
     /// The gallery's pictures show what each template makes now. When this fails, a template was
@@ -545,6 +548,56 @@ final class TemplateTests: XCTestCase {
         XCTAssertNotNil(one.face(near: SIMD3(6.2, 0, 10)), "a single pocket is centered")
     }
 
+    // MARK: Brackets & Mounts
+
+    func testLBracketHolesAndRibs() throws {
+        let plain = try XCTUnwrap(try build(try workspace("mounts.l-bracket"), "bracket").first)
+        XCTAssertEqual(plain.bounds.max.x, 40, accuracy: 1e-6)
+        XCTAssertEqual(plain.bounds.max.y, 40, accuracy: 1e-6)
+        XCTAssertEqual(plain.bounds.max.z, 30, accuracy: 1e-6)
+        XCTAssertEqual(try area(plain, at: 2), 40 * 4 + 36 * 4, accuracy: 0.05)
+        // A hole in the middle of each leg's exposed length.
+        for point in [SIMD3(22 + 1.7, 2, 15), SIMD3(2, 22 + 1.7, 15)] {
+            let face = try XCTUnwrap(plain.face(near: point))
+            XCTAssertEqual(plain.faceCylinder(face)?.radius ?? 0, 1.7, accuracy: 1e-6)
+        }
+        let ribbed = try XCTUnwrap(try build(try workspace("mounts.l-bracket", ["ribs": 1]), "ribbed").first)
+        XCTAssertEqual(ribbed.bounds.max.x, 40, accuracy: 1e-6)
+        XCTAssertEqual(ribbed.bounds.max.z, 30, accuracy: 1e-6)
+        XCTAssertGreaterThan(try area(ribbed, at: 2), try area(plain, at: 2) + 100)
+        XCTAssertEqual(try area(ribbed, at: 15), try area(plain, at: 15), accuracy: 0.05, "the ribs stay at the sides")
+        assertRefused("mounts.l-bracket", ["ribs": 1, "width": 12])
+    }
+
+    func testUBracketOpeningIsTheComponentPlusClearance() throws {
+        let bracket = try XCTUnwrap(try build(try workspace("mounts.u-bracket"), "u bracket").first)
+        XCTAssertEqual(try area(bracket, at: 2), 48.4 * 4 + 2 * 4 * 30, accuracy: 0.05)
+        XCTAssertTrue(bracket.contains(SIMD3(20.3, 20, 2)))
+        XCTAssertFalse(bracket.contains(SIMD3(20.1, 20, 2)))
+        for x in [-10.0, 10] { XCTAssertFalse(bracket.contains(SIMD3(x, 2, 12.5))) }
+    }
+
+    func testSlottedPlateSlots() throws {
+        let plate = try XCTUnwrap(try build(try workspace("mounts.slotted-plate"), "slotted").first)
+        let slot = (14 - 3.4) * 3.4 + .pi * 1.7 * 1.7
+        XCTAssertEqual(plate.volume, (roundedSquareArea(80, 30, radius: 3) - 2 * slot) * 4, accuracy: 0.5)
+        XCTAssertFalse(plate.contains(SIMD3(-22.5 + 5, 0, 2)))
+        XCTAssertTrue(plate.contains(SIMD3(-22.5 + 7.5, 0, 2)))
+    }
+
+    func testKeyholesHaveTheirEntriesBelowTheirNecks() throws {
+        let template = try XCTUnwrap(TemplateCatalog.template("mounts.keyhole-plate"))
+        let plate = try XCTUnwrap(try build(try template.workspace(template.defaults), "keyholes").first)
+        let keyhole = MountTemplates.KeyholePlate(template.defaults)
+        for x in [-22.5, 22.5] {
+            let entry = try XCTUnwrap(plate.face(near: SIMD3(x, keyhole.entryY - 3.5, 2.5)))
+            XCTAssertEqual(plate.faceCylinder(entry)?.radius ?? 0, 3.5, accuracy: 1e-3)
+            let top = try XCTUnwrap(plate.face(near: SIMD3(x, keyhole.entryY + 8 + 1.75, 2.5)))
+            XCTAssertEqual(plate.faceCylinder(top)?.radius ?? 0, 1.75, accuracy: 1e-2)
+            // The neck holds a head wider than it, beside the slot.
+            XCTAssertTrue(plate.contains(SIMD3(x + 2.5, keyhole.entryY + 8, 2.5)))
+        }
+    }
 
 
 }

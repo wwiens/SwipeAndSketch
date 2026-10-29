@@ -29,6 +29,7 @@
 		D44C808239C9C6941328760B /* SwipeAndSketch/Core/TemplatesBoards.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8C23EC73BEDB0781C2E40B5 /* SwipeAndSketch/Core/TemplatesBoards.swift */; };
 		D8985BD8C18FD25DC92C31A7 /* SwipeAndSketch/Core/TemplatesBoxes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A7BC91FFF07B9D1CE003615 /* SwipeAndSketch/Core/TemplatesBoxes.swift */; };
 		8766CD12069418AC22ECD928 /* SwipeAndSketch/Core/TemplatesOrganizers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D210029895D338E6B58E4D3 /* SwipeAndSketch/Core/TemplatesOrganizers.swift */; };
+		643FFE36A14EC300E3661E01 /* SwipeAndSketch/Core/TemplatesMounts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D797C48463A5F519ED48EC /* SwipeAndSketch/Core/TemplatesMounts.swift */; };
 		FA32AE7BEC657E1EA790A73B /* SwipeAndSketch/Core/TemplatesParts.swift in Sources */ = {isa = PBXBuildFile; fileRef = F86C8D070637CE7F0DEF33B0 /* SwipeAndSketch/Core/TemplatesParts.swift */; };
 		879B215DBB9481CBB5CFD6B0 /* SwipeAndSketch/Core/TemplatesPrintTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB7BC46F7B057C0C8E6CEE48 /* SwipeAndSketch/Core/TemplatesPrintTests.swift */; };
 		D1581AE27866C1EA4D7AE989 /* SwipeAndSketch/Canvas/ModelPicture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 500B62A91E8768DF802070F0 /* SwipeAndSketch/Canvas/ModelPicture.swift */; };
@@ -184,6 +185,7 @@
 		C8C23EC73BEDB0781C2E40B5 /* SwipeAndSketch/Core/TemplatesBoards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesBoards.swift; sourceTree = SOURCE_ROOT; };
 		6A7BC91FFF07B9D1CE003615 /* SwipeAndSketch/Core/TemplatesBoxes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesBoxes.swift; sourceTree = SOURCE_ROOT; };
 		8D210029895D338E6B58E4D3 /* SwipeAndSketch/Core/TemplatesOrganizers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesOrganizers.swift; sourceTree = SOURCE_ROOT; };
+		19D797C48463A5F519ED48EC /* SwipeAndSketch/Core/TemplatesMounts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesMounts.swift; sourceTree = SOURCE_ROOT; };
 		F86C8D070637CE7F0DEF33B0 /* SwipeAndSketch/Core/TemplatesParts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesParts.swift; sourceTree = SOURCE_ROOT; };
 		FB7BC46F7B057C0C8E6CEE48 /* SwipeAndSketch/Core/TemplatesPrintTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesPrintTests.swift; sourceTree = SOURCE_ROOT; };
 		500B62A91E8768DF802070F0 /* SwipeAndSketch/Canvas/ModelPicture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Canvas/ModelPicture.swift; sourceTree = SOURCE_ROOT; };
@@ -372,6 +374,7 @@
 				C8C23EC73BEDB0781C2E40B5 /* SwipeAndSketch/Core/TemplatesBoards.swift */,
 				6A7BC91FFF07B9D1CE003615 /* SwipeAndSketch/Core/TemplatesBoxes.swift */,
 				8D210029895D338E6B58E4D3 /* SwipeAndSketch/Core/TemplatesOrganizers.swift */,
+				19D797C48463A5F519ED48EC /* SwipeAndSketch/Core/TemplatesMounts.swift */,
 				F86C8D070637CE7F0DEF33B0 /* SwipeAndSketch/Core/TemplatesParts.swift */,
 				FB7BC46F7B057C0C8E6CEE48 /* SwipeAndSketch/Core/TemplatesPrintTests.swift */,
 				500B62A91E8768DF802070F0 /* SwipeAndSketch/Canvas/ModelPicture.swift */,
@@ -735,6 +738,7 @@
 				D44C808239C9C6941328760B /* SwipeAndSketch/Core/TemplatesBoards.swift in Sources */,
 				D8985BD8C18FD25DC92C31A7 /* SwipeAndSketch/Core/TemplatesBoxes.swift in Sources */,
 				8766CD12069418AC22ECD928 /* SwipeAndSketch/Core/TemplatesOrganizers.swift in Sources */,
+				643FFE36A14EC300E3661E01 /* SwipeAndSketch/Core/TemplatesMounts.swift in Sources */,
 				FA32AE7BEC657E1EA790A73B /* SwipeAndSketch/Core/TemplatesParts.swift in Sources */,
 				879B215DBB9481CBB5CFD6B0 /* SwipeAndSketch/Core/TemplatesPrintTests.swift in Sources */,
 				D1581AE27866C1EA4D7AE989 /* SwipeAndSketch/Canvas/ModelPicture.swift in Sources */,
