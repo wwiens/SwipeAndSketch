@@ -3,48 +3,18 @@
   "nonRenewingSubscriptions": [],
   "products": [
     {
-      "displayPrice": "0",
-      "familyShareable": false,
-      "internalID": "6740000001",
-      "localizations": [
-        {
-          "description": "Every tool, including the AI Assistant, free for 7 days.",
-          "displayName": "7-Day Trial",
-          "locale": "en_US"
-        }
-      ],
-      "productID": "noventix.SwipeAndSketch.trial",
-      "referenceName": "7-Day Trial",
-      "type": "NonConsumable"
-    },
-    {
-      "displayPrice": "19.99",
-      "familyShareable": false,
+      "displayPrice": "24.99",
+      "familyShareable": true,
       "internalID": "6740000002",
       "localizations": [
         {
-          "description": "Edit your models and use every modeling tool, for good.",
-          "displayName": "Unlock",
+          "description": "Templates, joints, power tools, and AI",
+          "displayName": "Swipe & Sketch Pro",
           "locale": "en_US"
         }
       ],
       "productID": "noventix.SwipeAndSketch.unlock",
-      "referenceName": "Unlock",
-      "type": "NonConsumable"
-    },
-    {
-      "displayPrice": "19.99",
-      "familyShareable": false,
-      "internalID": "6740000003",
-      "localizations": [
-        {
-          "description": "Ask about your model and have the assistant change it, for good.",
-          "displayName": "AI Assistant",
-          "locale": "en_US"
-        }
-      ],
-      "productID": "noventix.SwipeAndSketch.assistant",
-      "referenceName": "AI Assistant",
+      "referenceName": "Swipe & Sketch Pro",
       "type": "NonConsumable"
     }
   ],

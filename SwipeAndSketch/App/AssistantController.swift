@@ -140,8 +140,6 @@ import Combine
     func send(_ text: String? = nil) {
         let request = (text ?? draft).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !request.isEmpty, !isWorking, !session.isReadOnly, !session.isProjectBusy else { return }
-        // After the free trial the assistant needs Unlock and AI Assistant (Licensing.swift).
-        guard LicenseStore.shared.access.canUseAssistant else { LicenseStore.shared.isShowingStore = true; return }
         // The model must not change under the request; drafts and tools end first.
         if !session.isReviewingAssistant { session.cancelTransient() }
         if text == nil { draft = "" }
@@ -216,7 +214,10 @@ import Combine
     }
 
     func keep() {
-        guard session.isReviewingAssistant, !isWorking, session.keepAssistantChanges() else { return }
+        guard session.isReviewingAssistant, !isWorking else { return }
+        // Questions and previews are free; keeping the changes needs Swipe & Sketch Pro.
+        guard session.ownsPro else { session.withPro { [weak self] in self?.keep() }; return }
+        guard session.keepAssistantChanges() else { return }
         resolve(.kept)
     }
 

@@ -157,26 +157,35 @@ import XCTest
         XCTAssertEqual(app.textFields.firstMatch.value as? String, "Untitled Project")
     }
 
-    func testTemplatesWaitForUnlockWhenViewOnly() {
+    /// Decision 8: without Pro, a Pro template sets up and previews, and its button asks for Pro;
+    /// the plain Gridfinity Bin is free to make.
+    func testProTemplatesAskForProWhenFree() {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-testing-documents", "--reset-document-tests", "--license-ended"]
+        app.launchArguments = ["--ui-testing-documents", "--reset-document-tests", "--license-free"]
         app.launch()
         XCTAssertTrue(app.staticTexts["project.title"].waitForExistence(timeout: 20))
-        // The trial offer may open by itself; close it first.
-        if app.buttons["purchases.done"].waitForExistence(timeout: 3) { app.buttons["purchases.done"].tap() }
+        XCTAssertFalse(app.buttons["purchases.done"].waitForExistence(timeout: 2), "Purchases never opens by itself")
         app.buttons["Project menu"].tap(); app.buttons["project.new"].tap()
-        let bin = app.buttons["templates.gridfinity.bin"]
-        XCTAssertTrue(bin.waitForExistence(timeout: 10))
-        bin.tap()
-        // A template is a model made for you: view-only sees Purchases instead of a new project.
+        let divided = app.buttons["templates.gridfinity.divided-bin"]
+        XCTAssertTrue(divided.waitForExistence(timeout: 10))
+        divided.tap()
         let create = app.buttons["templates.create"]
         XCTAssertTrue(create.waitForExistence(timeout: 10))
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: create)], timeout: 20), .completed)
-        XCTAssertEqual(create.label, "See Purchases")
+        XCTAssertEqual(create.label, "Create with Pro")
         create.tap()
         XCTAssertTrue(app.staticTexts["purchases.status"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["purchases.status"].label, "Free")
         XCTAssertFalse(app.buttons["DOCPicker.actionButton"].exists)
+        app.buttons["purchases.done"].tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        let bin = app.buttons["templates.gridfinity.bin"]
+        XCTAssertTrue(bin.waitForExistence(timeout: 10))
+        bin.tap()
+        XCTAssertTrue(create.waitForExistence(timeout: 10))
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: create)], timeout: 20), .completed)
+        XCTAssertEqual(create.label, "Create Project", "The plain Bin is free")
     }
 
     func app(arguments: [String] = []) -> XCUIApplication {

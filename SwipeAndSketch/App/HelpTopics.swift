@@ -166,6 +166,12 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Topics for Pro tools and the assistant's changes: the card says they preview for
+    /// free and keeping the result needs Swipe & Sketch Pro, while it is not owned.
+    var isPro: Bool {
+        [.shell, .split, .pattern, .project, .peg, .fitTest, .thread, .matingPart, .text, .screwLid, .sweep, .loft, .rib, .draft, .assistant].contains(self)
+    }
+
     /// What it is, how to do it, and what is worth knowing, in plain words.
     var overview: HelpOverview {
         switch self {

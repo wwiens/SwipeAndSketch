@@ -39,6 +39,20 @@ final class TemplateTests: XCTestCase {
         }
     }
 
+    /// Decision 8: only the plain Gridfinity Baseplate and Bin are free, and they carry none of the
+    /// Pro pair's magnet or divider options.
+    func testOnlyThePlainGridfinityPairIsFree() throws {
+        let free = TemplateCatalog.all.filter { !$0.needsPro }
+        XCTAssertEqual(Set(free.map(\.id)), ["gridfinity.baseplate", "gridfinity.bin"])
+        for template in free {
+            XCTAssertTrue(Set(template.parameters.map(\.id)).isDisjoint(with: ["magnets", "dividersX", "dividersY"]), template.id)
+        }
+        let magnet = try XCTUnwrap(TemplateCatalog.all.first { $0.id == "gridfinity.magnet-baseplate" })
+        XCTAssertTrue(magnet.parameters.contains { $0.id == "magnets" })
+        let divided = try XCTUnwrap(TemplateCatalog.all.first { $0.id == "gridfinity.divided-bin" })
+        XCTAssertEqual(Set(divided.parameters.map(\.id)), ["columns", "rows", "height", "dividersX", "dividersY", "lip", "magnets"])
+    }
+
     func testEveryTemplateMakesNamedSolidsInAGroupThatSave() throws {
         for template in TemplateCatalog.all {
             let workspace = try template.workspace(template.defaults)
@@ -94,7 +108,8 @@ final class TemplateTests: XCTestCase {
     }
 
     func testValuesAreClampedIntoRange() throws {
-        let template = try XCTUnwrap(TemplateCatalog.template("gridfinity.bin"))
+        // The Divided Bin has every bin option; the free Bin has no magnet holes.
+        let template = try XCTUnwrap(TemplateCatalog.template("gridfinity.divided-bin"))
         var values = template.defaults
         values["columns"] = 40
         values["height"] = -3
@@ -185,7 +200,7 @@ final class TemplateTests: XCTestCase {
 
     func testLargestGridfinityBuildsQuickly() throws {
         let start = Date()
-        try build(try XCTUnwrap(TemplateCatalog.template("gridfinity.bin")).workspace(
+        try build(try XCTUnwrap(TemplateCatalog.template("gridfinity.divided-bin")).workspace(
             TemplateValues(values: ["columns": 8, "rows": 8, "height": 6, "dividersX": 7, "dividersY": 7, "lip": 1, "magnets": 2])), "8 × 8 bin")
         try build(try XCTUnwrap(TemplateCatalog.template("gridfinity.magnet-baseplate")).workspace(
             TemplateValues(values: ["columns": 8, "rows": 8, "magnets": 1])), "8 × 8 plate")

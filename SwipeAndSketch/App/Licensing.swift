@@ -1,74 +1,31 @@
 import SwiftUI
 import StoreKit
 
-/// What the user may do. Every tool, the assistant included, is
-/// free for seven days from the free "7-Day Trial" item (App Review Guideline 3.1.1 asks for a free
-/// non-consumable to start a time-based trial). Afterwards models still open for viewing, measuring,
-/// section views, and export; changing them needs Unlock, and the assistant needs Unlock plus AI
-/// Assistant (sold only once the app is unlocked). All three are one-time purchases; nothing renews.
+/// What the user may do (October 28, 2026). The app is free for good: every file opens,
+/// edits with the free tools, and exports. Swipe & Sketch Pro, one non-consumable purchase, adds the
+/// Pro tools, the templates other than the plain Gridfinity pair, Import STEP, and the assistant's
+/// changes. Pro tools preview for everyone; only keeping what they make needs Pro.
 struct LicenseAccess: Equatable, Sendable {
-    static let trialLength: TimeInterval = 7 * 24 * 60 * 60
+    var ownsPro = false
 
-    /// When the free trial was started (its first transaction), if it was.
-    var trialStart: Date?
-    var ownsUnlock = false
-    var ownsAssistant = false
-    var now = Date()
-
-    enum Phase: Equatable { case notStarted, trial, ended, unlocked }
-
-    var trialEnd: Date? { trialStart.map { $0.addingTimeInterval(Self.trialLength) } }
-    var isInTrial: Bool { trialEnd.map { now < $0 } ?? false }
-    var canEdit: Bool { ownsUnlock || isInTrial }
-    var canUseAssistant: Bool { isInTrial || ownsUnlock && ownsAssistant }
-    /// The trial can be started once; after Unlock it still brings a week of the assistant.
-    var canStartTrial: Bool { trialStart == nil && !(ownsUnlock && ownsAssistant) }
-    /// The assistant is offered once the app is unlocked.
-    var canBuyAssistant: Bool { ownsUnlock && !ownsAssistant }
-
-    var phase: Phase {
-        if ownsUnlock { return .unlocked }
-        if isInTrial { return .trial }
-        return trialStart == nil ? .notStarted : .ended
-    }
-
-    /// Whole days left in the trial, counting a part day as one ("1 day left" on the last day).
-    var trialDaysLeft: Int? {
-        guard isInTrial, let end = trialEnd else { return nil }
-        return max(1, Int((end.timeIntervalSince(now) / 86_400).rounded(.up)))
-    }
-
-    /// One line for the project tab and the purchases screen.
-    var status: String {
-        switch phase {
-        case .notStarted: return "View only · start the free trial to edit"
-        case .trial:
-            let days = trialDaysLeft ?? 1
-            return "Free trial · \(days) \(days == 1 ? "day" : "days") left"
-        case .ended: return "Trial ended · view only"
-        case .unlocked:
-            if ownsAssistant { return "Unlocked · AI Assistant" }
-            if let days = trialDaysLeft { return "Unlocked · assistant trial \(days) \(days == 1 ? "day" : "days") left" }
-            return "Unlocked"
-        }
-    }
+    /// One line for the project menu, Home, and the purchases screen.
+    var status: String { ownsPro ? "Swipe & Sketch Pro" : "Free" }
 }
 
-/// The App Store side of `LicenseAccess`: loads the three products, buys, restores, and redeems
-/// offer codes (free licenses), and follows the transactions StoreKit reports, here or on the user's
-/// other devices. The last known access is kept so the app opens unlocked offline and without a
-/// flash of the trial screen; StoreKit corrects it moments later.
+/// The App Store side of `LicenseAccess`: loads the Pro product, buys, restores, and redeems offer
+/// codes (free licenses), and follows the transactions StoreKit reports, here or on the user's other
+/// devices. The last known access is kept so the app opens with Pro offline; StoreKit corrects it
+/// moments later.
 @MainActor final class LicenseStore: ObservableObject {
     enum ProductID: String, CaseIterable {
-        case trial = "noventix.SwipeAndSketch.trial"
-        case unlock = "noventix.SwipeAndSketch.unlock"
-        case assistant = "noventix.SwipeAndSketch.assistant"
+        /// Named "unlock" for the earlier Unlock purchase; the ID stays, the product is Swipe & Sketch Pro.
+        case pro = "noventix.SwipeAndSketch.unlock"
     }
 
     static let shared = LicenseStore()
 
-    /// The products are not set up in App Store Connect yet (October 21, 2026), so every build runs
-    /// fully unlocked and never asks StoreKit. Turn this on before the 1.0 submission.
+    /// The product is not set up in App Store Connect yet (October 28, 2026), so every build runs
+    /// with Pro and never asks StoreKit. Turn this on before the 1.0 submission.
     /// In Debug builds `--license-store` asks StoreKit anyway (with
     /// Products.storekit selected in the scheme, purchases and offer codes are simulated).
     static let enforcesPurchases = false
@@ -82,40 +39,32 @@ struct LicenseAccess: Equatable, Sendable {
     @Published private(set) var busy: String?
     /// The last problem or note to show on the purchases screen.
     @Published var message: String?
-    /// Opens the purchases screen from anywhere (a locked tool, the assistant, the project menu).
+    /// Opens the purchases screen from anywhere (a Pro tool's Keep, the assistant, the project menu).
     @Published var isShowingStore = false
 
-    private var entitlements: (trialStart: Date?, unlock: Bool, assistant: Bool)
     private var updates: Task<Void, Never>?
-    private var clock: Task<Void, Never>?
     private let defaults = UserDefaults.standard
     /// Fixed access for tests: StoreKit is not consulted.
     private let fixed: LicenseAccess?
 
     private init() {
         fixed = Self.testAccess
-        let cachedStart = defaults.object(forKey: Keys.trialStart) as? Date
-        entitlements = (cachedStart, defaults.bool(forKey: Keys.unlock), defaults.bool(forKey: Keys.assistant))
-        access = fixed ?? LicenseAccess(trialStart: entitlements.trialStart, ownsUnlock: entitlements.unlock, ownsAssistant: entitlements.assistant)
+        access = fixed ?? LicenseAccess(ownsPro: defaults.bool(forKey: Keys.pro))
         guard fixed == nil else { hasLoadedEntitlements = true; return }
-        recompute()
         updates = Task { [weak self] in
             for await result in Transaction.updates {
                 if case .verified(let transaction) = result { await transaction.finish() }
                 await self?.refreshEntitlements()
             }
         }
-        // The trial ends while the app is open: check the clock each minute.
-        clock = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(60))
-                self?.recompute()
-            }
-        }
         Task { await refreshEntitlements(); await loadProducts() }
     }
 
     func product(_ id: ProductID) -> Product? { products[id] }
+
+    /// The Pro price as the App Store gives it for this storefront (never a typed one: it changes
+    /// after the launch price), or nil until the product loads.
+    var proPrice: String? { products[.pro]?.displayPrice }
 
     private static let notAnswering = "The App Store is not answering right now."
 
@@ -136,26 +85,17 @@ struct LicenseAccess: Equatable, Sendable {
 
     func refreshEntitlements() async {
         guard fixed == nil else { return }
-        var trialStart: Date?, unlock = false, assistant = false
+        var pro = false
         for await result in Transaction.currentEntitlements {
             guard case .verified(let transaction) = result, transaction.revocationDate == nil else { continue }
-            switch ProductID(rawValue: transaction.productID) {
-            case .trial: trialStart = min(trialStart ?? transaction.originalPurchaseDate, transaction.originalPurchaseDate)
-            case .unlock: unlock = true
-            case .assistant: assistant = true
-            case nil: break
-            }
+            if ProductID(rawValue: transaction.productID) == .pro { pro = true }
         }
-        entitlements = (trialStart, unlock, assistant)
-        defaults.set(trialStart, forKey: Keys.trialStart)
-        defaults.set(unlock, forKey: Keys.unlock)
-        defaults.set(assistant, forKey: Keys.assistant)
+        defaults.set(pro, forKey: Keys.pro)
         hasLoadedEntitlements = true
-        recompute()
+        if access.ownsPro != pro { access = LicenseAccess(ownsPro: pro) }
     }
 
-    /// Buys `id` (the free trial too) with SwiftUI's purchase action, which shows the App Store sheet
-    /// over the right window.
+    /// Buys `id` with SwiftUI's purchase action, which shows the App Store sheet over the right window.
     func purchase(_ id: ProductID, with purchase: PurchaseAction) async {
         guard busy == nil, let product = products[id] else { return }
         busy = id.rawValue
@@ -169,7 +109,7 @@ struct LicenseAccess: Equatable, Sendable {
             case .success(.unverified):
                 message = "The App Store could not confirm that purchase. Try Restore Purchases."
             case .pending:
-                message = "The purchase is waiting for approval. It unlocks as soon as it is approved."
+                message = "The purchase is waiting for approval. Pro turns on as soon as it is approved."
             case .userCancelled: break
             @unknown default: break
             }
@@ -187,7 +127,7 @@ struct LicenseAccess: Equatable, Sendable {
         do {
             try await AppStore.sync()
             await refreshEntitlements()
-            if !access.ownsUnlock && !access.ownsAssistant && access.trialStart == nil { message = "No purchases were found for this Apple ID." }
+            if !access.ownsPro { message = "No purchases were found for this Apple ID." }
         } catch StoreKitError.userCancelled {
         } catch {
             message = error.localizedDescription
@@ -207,41 +147,23 @@ struct LicenseAccess: Equatable, Sendable {
         }
     }
 
-    private func recompute() {
-        guard fixed == nil else { return }
-        // Setting the clock back does not bring the trial back: time never runs backwards here.
-        let seen = defaults.object(forKey: Keys.latestSeen) as? Date ?? .distantPast
-        let now = max(Date(), seen)
-        defaults.set(now, forKey: Keys.latestSeen)
-        let next = LicenseAccess(trialStart: entitlements.trialStart, ownsUnlock: entitlements.unlock, ownsAssistant: entitlements.assistant, now: now)
-        // Only the phase, days, and ownership matter to views; a new `now` alone redraws nothing.
-        if next.phase != access.phase || next.trialDaysLeft != access.trialDaysLeft || next.canUseAssistant != access.canUseAssistant ||
-            next.trialStart != access.trialStart || next.ownsAssistant != access.ownsAssistant {
-            access = next
-        }
-    }
-
     private enum Keys {
-        static let trialStart = "license.trialStart"
-        static let unlock = "license.unlock"
-        static let assistant = "license.assistant"
-        static let latestSeen = "license.latestSeen"
+        /// Kept from the earlier Unlock purchase, which used the same product.
+        static let pro = "license.unlock"
     }
 
-    /// Tests run unlocked unless a launch argument picks a state; otherwise StoreKit decides, once
+    /// Tests run with Pro unless a launch argument picks a state; otherwise StoreKit decides, once
     /// purchases are enforced.
     private static var testAccess: LicenseAccess? {
-        let everything = LicenseAccess(ownsUnlock: true, ownsAssistant: true)
+        let pro = LicenseAccess(ownsPro: true)
         #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments
         if arguments.contains("--license-store") { return nil }
-        if arguments.contains("--license-not-started") { return LicenseAccess() }
-        if arguments.contains("--license-trial") { return LicenseAccess(trialStart: Date()) }
-        if arguments.contains("--license-ended") { return LicenseAccess(trialStart: Date(timeIntervalSinceNow: -30 * 86_400)) }
-        if arguments.contains("--license-unlocked") { return LicenseAccess(trialStart: Date(timeIntervalSinceNow: -30 * 86_400), ownsUnlock: true) }
+        if arguments.contains("--license-free") { return LicenseAccess() }
+        if arguments.contains("--license-pro") { return pro }
         let underTest = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil || arguments.contains("--ui-testing")
-        if underTest { return everything }
+        if underTest { return pro }
         #endif
-        return enforcesPurchases ? nil : everything
+        return enforcesPurchases ? nil : pro
     }
 }

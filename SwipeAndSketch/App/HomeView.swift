@@ -172,7 +172,7 @@ struct HomeView: View {
             Spacer(minLength: 12)
             if LicenseStore.enforcesPurchases {
                 Button { showPurchases = true } label: {
-                    Text(license.access.status).font(.system(size: 13, weight: .semibold)).foregroundStyle(violet)
+                    Text(license.access.ownsPro ? license.access.status : "Free · Get Pro").font(.system(size: 13, weight: .semibold)).foregroundStyle(violet)
                         .padding(.horizontal, 12).padding(.vertical, 7)
                         .background(Color("ss-lavender"), in: Capsule())
                 }
@@ -388,6 +388,8 @@ struct QuickStartView: View {
                 row(.send, "4. Print it", "Open the project menu at the top and choose Send to Slicer or Export 3MF.")
             }
             Text("Stuck? Tap the help button beside the hint at the top for help with what you are doing, or Controls at the bottom right for the whole guide.")
+                .font(.system(size: 14)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
+            Text("All of this is free, with no trial and no limit on projects or exports. Tools marked PRO preview for free; keeping what they make needs Swipe & Sketch Pro, a one-time purchase.")
                 .font(.system(size: 14)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
         }
     }

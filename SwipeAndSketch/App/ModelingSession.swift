@@ -57,6 +57,9 @@ enum ModelingTool: String, CaseIterable {
         }
     }
     var isPlaneTool: Bool { self == .offsetPlane || self == .midplane }
+    /// Pro tools: they preview for everyone, and keeping what they make needs Swipe &
+    /// Sketch Pro. Free covers every tool needed to make a part by hand.
+    var isPro: Bool { [.shell, .draft, .split, .pattern, .project, .loft, .sweep, .rib, .peg, .fitTest, .thread, .screwLid, .text].contains(self) }
     /// Tools that work on sketch shapes rather than draw them.
     var isSketchEditTool: Bool { [.cornerFillet, .trim, .dimension, .extend, .offset, .sketchMirror, .polygon].contains(self) }
     /// Features placed with a tap on the face being sketched on.
@@ -959,11 +962,19 @@ struct DimensionEdit: Identifiable {
     /// Called when the assistant's request and review end without keeping anything.
     var onAssistantReset: (() -> Void)?
     @Published private(set) var isReadOnly = false
-    /// The free trial is over (or was never started) and the app is not unlocked (Licensing.swift):
-    /// models open to view, measure, section, and export, but nothing in them changes.
-    @Published var isLicenseLocked = false {
-        didSet { if isLicenseLocked && !oldValue { cancelTransient(); selection = nil; tool = .select; endSketchMode() } }
+    /// Swipe & Sketch Pro is owned (Licensing.swift). Without it every file still opens,
+    /// edits with the free tools, and exports; Pro tools preview, and keeping what they make asks
+    /// for Pro. Follows `LicenseStore`; tests set it.
+    @Published var ownsPro = true {
+        didSet {
+            guard ownsPro, !oldValue, let finish = pendingPro else { return }
+            pendingPro = nil
+            finish()
+        }
     }
+    /// What a Pro tool's Keep was about to do when Purchases opened: done as soon as Pro is owned,
+    /// dropped when Purchases closes without it.
+    private(set) var pendingPro: (() -> Void)?
     private var licenseWatch: AnyCancellable?
     @Published private(set) var editPreview: Workspace?
     @Published private(set) var finishDraft: FinishDraft?
@@ -1156,14 +1167,26 @@ struct DimensionEdit: Identifiable {
     var onSaveAs: (() -> Void)?
     var hasProjectFile: Bool { document != nil }
     /// Editing waits while the assistant works on a request or its changes are under review.
-    var isEditingBlocked: Bool { isReadOnly || isLicenseLocked || isViewingBlocked }
+    var isEditingBlocked: Bool { isReadOnly || isViewingBlocked }
     /// Looking at the model (Measure, the section view) waits only for the project and the assistant;
-    /// a read-only file or a locked app still shows it.
+    /// a read-only file still shows it.
     var isViewingBlocked: Bool { isProjectBusy || isAssistantWorking || assistantPreview != nil }
     /// The Pencil may still pick while measuring or moving the section's cut when editing is blocked.
     var acceptsPencil: Bool { !isEditingBlocked || !isViewingBlocked && (tool == .measure || section != nil) }
     /// Whether a dimension value can be typed: the section's offset changes only the view.
     func canEditDimension(_ target: DimensionTarget) -> Bool { target == .sectionOffset ? !isViewingBlocked : !isEditingBlocked }
+
+    /// Does `action` now with Swipe & Sketch Pro; without it opens Purchases and does it once Pro is
+    /// bought. The confirm functions call themselves back through this, and each checks
+    /// its own draft again, so a Keep whose operation was cancelled meanwhile does nothing.
+    func withPro(_ action: @escaping () -> Void) {
+        guard !ownsPro else { return action() }
+        pendingPro = action
+        LicenseStore.shared.isShowingStore = true
+    }
+
+    /// Purchases closed: a Keep that waited for Pro is not done later by surprise.
+    func dropPendingPro() { pendingPro = nil }
     var projectName: String { document?.fileURL.deletingPathExtension().lastPathComponent ?? "Untitled Project" }
     var workspace: Workspace { history.workspace }
     var displayWorkspace: Workspace { assistantPreview ?? editPreview ?? finishPreview ?? shellPreview ?? shapeToolPreview ?? primitivePreview ?? holePreview ?? pegPreview ?? threadPreview ?? screwLidPreview ?? textPreview ?? splitPreview ?? mirrorPreview ?? patternPreview ?? scalePreview ?? deleteFacePreview ?? sketchMirrorPreview ?? unionPreview ?? subtractPreview ?? alignPreview ?? revolvePreview ?? operationPreview ?? workspace }
@@ -2168,11 +2191,6 @@ struct DimensionEdit: Identifiable {
         select(item)
     }
     var hint: String {
-        if isLicenseLocked && section == nil && tool != .measure {
-            return LicenseStore.shared.access.trialStart == nil
-                ? "View only. Start the free 7-day trial to edit; you can always open, measure, and export your models."
-                : "Your trial has ended, so models are view-only. You can still open, measure, section, and export them; Unlock lets you edit again."
-        }
         if isAssistantWorking { return "The assistant is working on your request." }
         if isReviewingAssistant { return "Review the assistant's changes. Keep adds them as one step you can undo; Discard leaves the model as it was." }
         if section != nil {
@@ -2544,8 +2562,8 @@ struct DimensionEdit: Identifiable {
         document?.onReloadFailure = { [weak self] in self?.documentStateChanged() }
         document?.onError = { [weak self] error in self?.status = "Not saved"; self?.saveError = error.localizedDescription }
         isReadOnly = document?.isReadOnly ?? false
-        licenseWatch = LicenseStore.shared.$access.map { !$0.canEdit }.removeDuplicates()
-            .sink { [weak self] locked in self?.isLicenseLocked = locked }
+        licenseWatch = LicenseStore.shared.$access.map(\.ownsPro).removeDuplicates()
+            .sink { [weak self] owned in self?.ownsPro = owned }
     }
 
     static var isRunningUITests: Bool {
@@ -3046,6 +3064,7 @@ struct DimensionEdit: Identifiable {
     /// One undo step; the changed or new solid is selected.
     func confirmShapeTool() {
         guard let preview = shapeToolPreview, !isEditingBlocked else { return }
+        guard ownsPro else { withPro { [weak self] in self?.confirmShapeTool() }; return }
         let before = workspace
         let kind = tool
         clearShapeTool()
@@ -3148,6 +3167,7 @@ struct DimensionEdit: Identifiable {
     /// One undo step; the first piece is selected.
     func confirmSplit() {
         guard let preview = splitPreview, splitDraft != nil, !isEditingBlocked else { return }
+        guard ownsPro else { withPro { [weak self] in self?.confirmSplit() }; return }
         let original = Set(workspace.bodies.map(\.id))
         let first = preview.bodies.first { !original.contains($0.id) }?.id
         let count = splitPieceCount
@@ -3447,6 +3467,7 @@ struct DimensionEdit: Identifiable {
     /// One undo step; the copies are independent solids and sketches, and the first is selected.
     func confirmPattern() {
         guard let draft = patternDraft, patternPreview != nil, !isEditingBlocked else { return }
+        guard ownsPro else { withPro { [weak self] in self?.confirmPattern() }; return }
         guard let result = Patterning.pattern(workspace, bodies: draft.bodies, sketches: draft.sketches, spec: draft.spec) else {
             status = "A copy cannot be built"
             return
@@ -3743,6 +3764,7 @@ struct DimensionEdit: Identifiable {
     /// Adds the projected shapes as one undo step: to the target sketch, or as a new sketch.
     func confirmProjection() {
         guard let draft = projectionDraft, let target = draft.target, let first = projectionPreview.first, !isEditingBlocked else { return }
+        guard ownsPro else { withPro { [weak self] in self?.confirmProjection() }; return }
         var next = workspace
         let sketchID: UUID
         if let id = target.sketchID, next.sketch(id)?.plane == target.plane {
@@ -4206,6 +4228,7 @@ struct DimensionEdit: Identifiable {
     /// where the file put it, in millimeters, as one undo step. A single solid is selected.
     func importSTEP(from url: URL) {
         guard !isEditingBlocked else { return }
+        guard ownsPro else { withPro { [weak self] in self?.importSTEP(from: url) }; return }
         cancelTransient()
         endSketchMode()
         selection = nil
@@ -5230,6 +5253,7 @@ struct DimensionEdit: Identifiable {
 
     func confirmShell() {
         guard let draft = shellDraft, draftError == nil, let preview = shellPreview, !isEditingBlocked else { return }
+        guard ownsPro else { withPro { [weak self] in self?.confirmShell() }; return }
         lastShellThickness = draft.thickness
         commit(preview)
         clearShellDraft()
@@ -5505,6 +5529,7 @@ struct DimensionEdit: Identifiable {
     /// One undo step for the peg and its sockets; the Peg tool stays ready on this face.
     func confirmPeg() {
         guard let draft = pegDraft, draftError == nil, let preview = pegPreview, !isEditingBlocked else { return }
+        guard ownsPro else { withPro { [weak self] in self?.confirmPeg() }; return }
         let sockets = pegSockets.count
         commit(preview)
         clearPegDraft()
@@ -5591,6 +5616,7 @@ struct DimensionEdit: Identifiable {
     /// One undo step, once the preview is built; the Text tool stays ready on this face.
     func confirmText() {
         guard let draft = textDraft, let preview = textPreview, !isBuildingText, !isEditingBlocked else { return }
+        guard ownsPro else { withPro { [weak self] in self?.confirmText() }; return }
         commit(preview)
         lastText = (draft.text, draft.font, draft.height, draft.depth)
         clearTextDraft()
@@ -5783,6 +5809,7 @@ struct DimensionEdit: Identifiable {
     /// One undo step, once the preview is built.
     func confirmThread() {
         guard let draft = threadDraft, let preview = threadPreview, !isBuildingThread, !isEditingBlocked else { return }
+        guard ownsPro else { withPro { [weak self] in self?.confirmThread() }; return }
         commit(preview)
         clearThread()
         selection = .body(draft.bodyID)
@@ -5934,6 +5961,7 @@ struct DimensionEdit: Identifiable {
 
     func confirmScrewLid() {
         guard screwLidDraft != nil, let preview = screwLidPreview, let lid = screwLidLid, !isBuildingScrewLid, !isBuildingScrewLidTest, !isEditingBlocked else { return }
+        guard ownsPro else { withPro { [weak self] in self?.confirmScrewLid() }; return }
         commit(preview)
         clearScrewLid()
         selection = .body(lid)
@@ -5946,6 +5974,7 @@ struct DimensionEdit: Identifiable {
     func addScrewLidFitTest() {
         guard let draft = screwLidDraft, !isBuildingScrewLidTest, !isEditingBlocked,
               let body = workspace.bodies.first(where: { $0.id == draft.bodyID }) else { return }
+        guard ownsPro else { withPro { [weak self] in self?.addScrewLidFitTest() }; return }
         let base = workspace, origin = FitTest.origin(beside: workspace)
         isBuildingScrewLidTest = true
         // After any lid build, so only one thread is built at a time.
@@ -6005,6 +6034,7 @@ struct DimensionEdit: Identifiable {
     /// as one undo step, and selects it. Built in the background; a change meanwhile drops it.
     func makeMatingPart(_ kind: ThreadMate) {
         guard !isMakingMatingPart, let target = selectedThread, let body = workspace.bodies.first(where: { $0.id == target.bodyID }) else { return }
+        guard ownsPro else { withPro { [weak self] in self?.makeMatingPart(kind) }; return }
         cancelTransient()
         endSketchMode()
         let base = workspace
@@ -6249,6 +6279,7 @@ struct DimensionEdit: Identifiable {
     /// Adds the Fit Test coupon beside the model as one undo step, selected and in view.
     func addFitTest() {
         guard !isEditingBlocked else { return }
+        guard ownsPro else { withPro { [weak self] in self?.addFitTest() }; return }
         cancelTransient()
         endSketchMode()
         tool = .select
@@ -6997,10 +7028,6 @@ struct DimensionEdit: Identifiable {
         guard let preview = assistantPreview, !isAssistantWorking, !isProjectBusy else { return false }
         guard !isReadOnly else {
             saveError = "This file cannot be changed right now, so the assistant's changes are still under review. Resolve the file first, or Discard them."
-            return false
-        }
-        guard !isLicenseLocked else {
-            saveError = "Editing is locked, so the assistant's changes are still under review. Unlock in Purchases to keep them, or Discard them."
             return false
         }
         assistantPreview = nil

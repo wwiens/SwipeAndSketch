@@ -94,6 +94,9 @@ struct ProjectTemplate: Identifiable, Sendable {
     /// The project's suggested file name for these values.
     var name: @Sendable (TemplateValues) -> String
     var make: @Sendable (TemplateValues) throws -> [TemplatePart]
+    /// Making it needs Swipe & Sketch Pro; only the plain Gridfinity Baseplate and Bin are
+    /// free. A template is free or Pro as a whole, never one option inside it.
+    var needsPro = true
 
     var defaults: TemplateValues {
         TemplateValues(values: Dictionary(uniqueKeysWithValues: parameters.map { ($0.id, $0.defaultValue) }))

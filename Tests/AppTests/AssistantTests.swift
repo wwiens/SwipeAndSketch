@@ -188,6 +188,26 @@ import XCTest
         XCTAssertEqual(assistant.messages[1].text, "Here are the changes.")
     }
 
+    /// Decision 8: a free user asks and sees the changes on the canvas; Keep waits for Swipe & Sketch
+    /// Pro, and buying it keeps them.
+    func testFreeUsersSeeTheChangesAndKeepingThemNeedsPro() async throws {
+        let session = boxScene()
+        session.ownsPro = false
+        defer { LicenseStore.shared.isShowingStore = false }
+        let assistant = controller(session) { try $0.shell(body: "Body 01", openFaces: ["top"], thickness: 2) }
+        assistant.send("Hollow it out")
+        await waitUntilIdle(assistant)
+        XCTAssertTrue(session.isReviewingAssistant, "Free users get the preview")
+        assistant.keep()
+        XCTAssertTrue(session.isReviewingAssistant, "Keep waits for Pro")
+        XCTAssertTrue(session.workspace.bodies[0].cuts.isEmpty)
+        XCTAssertTrue(LicenseStore.shared.isShowingStore, "Purchases opens")
+        session.ownsPro = true
+        XCTAssertFalse(session.isReviewingAssistant, "Buying Pro keeps the changes")
+        XCTAssertFalse(session.workspace.bodies[0].cuts.isEmpty)
+        XCTAssertEqual(assistant.messages.last?.review, .kept)
+    }
+
     func testTheCloudModelNeedsTheSignedEntitlement() throws {
         // Unsigned test builds have no entitlements; signed ones carry the cloud entitlement.
         let entitlements = PrivateCloudEntitlement.signedEntitlements()

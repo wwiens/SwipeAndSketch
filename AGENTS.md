@@ -8,7 +8,7 @@
 - **Editing behavior:** dragging previews live, keeps joined endpoints connected, commits one undo step at Pencil lift, and rolls back on cancellation. Numeric edits are validated before they change the document.
 - **Assistant:** changes go through `AssistantWorkbench` (Core) on a draft, are previewed, and are kept as one undo step or discarded. New modeling tools get a workbench operation and an assistant tool (and, for the on-device planner, an action). Never call the cloud model from a build without the Private Cloud Compute entitlement; `PrivateCloudEntitlement` checks.
 - **Help:** new tools get a `HelpTopic` with an overview in `SwipeAndSketch/App/HelpTopics.swift`.
-- **Paid features:** all gating goes through `LicenseStore`/`LicenseAccess` (`SwipeAndSketch/App/Licensing.swift`) and `isEditingBlocked`.
+- **Paid features:** the app is free with one Swipe & Sketch Pro purchase. Gating goes through `LicenseStore`/`LicenseAccess` (`SwipeAndSketch/App/Licensing.swift`); a Pro tool (`ModelingTool.isPro`) previews for everyone and its Keep goes through `ModelingSession.withPro`. Files always open, edit with the free tools, and export without Pro.
 - **Kernel:** Open CASCADE is reached only through the C facade in `SwipeAndSketch/Kernel` (`SSKernel.h`) and `SwipeAndSketch/Core/SolidKernel.swift`. See `Docs/Kernel.md`.
 - **Xcode project:** maintained by hand. Add new sources to `SwipeAndSketch.xcodeproj` carefully; never regenerate it, and don't commit signing, team, or bundle changes.
 - **Verification:** verify geometry, input and rendering integration, and simulator UI behavior with tests. Simulator tests don't prove real Apple Pencil or palm behavior; say which was checked.

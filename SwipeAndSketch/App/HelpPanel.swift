@@ -13,6 +13,7 @@ private let white = Color("ss-white")
 struct HelpPanel: View {
     @ObservedObject var session: ModelingSession
     @ObservedObject var library = WalkthroughLibrary.shared
+    @ObservedObject private var license = LicenseStore.shared
     /// The topic shown; it stays put while the user works, with a button to follow the current one.
     let topic: HelpTopic
     /// Moves the card by a drag of its top bar; `ended` is true at lift.
@@ -108,6 +109,14 @@ struct HelpPanel: View {
                     .font(.system(size: 15)).foregroundStyle(ink)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("help.summary")
+                if topic.isPro && !license.access.ownsPro {
+                    Text(topic == .assistant
+                         ? "Asking is free. Keeping the assistant's changes needs Swipe & Sketch Pro."
+                         : "A Pro tool: try it and see the preview for free. Keep with Pro keeps the result, with Swipe & Sketch Pro.")
+                        .font(.system(size: 14, weight: .medium)).foregroundStyle(violet)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("help.pro")
+                }
                 VStack(alignment: .leading, spacing: 9) {
                     ForEach(Array(content.steps.enumerated()), id: \.offset) { index, step in
                         HStack(alignment: .firstTextBaseline, spacing: 10) {

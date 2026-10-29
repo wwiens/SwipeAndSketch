@@ -16,7 +16,7 @@ struct WorkspaceView: View {
     @ObservedObject var session: ModelingSession
     @StateObject private var assistant: AssistantController
     @StateObject private var keyboard = KeyboardInset()
-    /// The free trial and purchases (Licensing.swift).
+    /// Swipe & Sketch Pro and purchases (Licensing.swift).
     @ObservedObject private var license = LicenseStore.shared
     @State private var showItems = false
     /// The floating help card opened from the hint, the topic it shows, and where it was dragged.
@@ -170,13 +170,8 @@ struct WorkspaceView: View {
         .allowsHitTesting(!session.isProjectBusy)
         .sheet(isPresented: $session.showHelp) { help }
         .sheet(isPresented: $showAbout) { AboutView { showAbout = false } }
-        .sheet(isPresented: $license.isShowingStore) { PurchasesView { license.isShowingStore = false } }
-        // On first use the trial offer opens by itself, once per launch.
-        .task(id: license.hasLoadedEntitlements) {
-            guard license.hasLoadedEntitlements, license.access.phase == .notStarted, !PurchasesView.offeredThisLaunch else { return }
-            PurchasesView.offeredThisLaunch = true
-            license.isShowingStore = true
-        }
+        // A Keep that opened Purchases is done once Pro is bought, and forgotten if Purchases closes without it.
+        .sheet(isPresented: $license.isShowingStore, onDismiss: { session.dropPendingPro() }) { PurchasesView { license.isShowingStore = false } }
         .sheet(item: $session.exportItem) { item in ShareSheet(url: item.url).ignoresSafeArea() }
         .sheet(item: $session.printSheet) { mode in PrintSheet(session: session, mode: mode) }
         .fileImporter(isPresented: Binding(get: { importingSTEP || importingMesh }, set: { if !$0 { importingSTEP = false; importingMesh = false } }),
@@ -316,7 +311,7 @@ struct WorkspaceView: View {
                     .disabled(!session.canExport).accessibilityIdentifier("project.export.3mf")
                 menuButton("Export STL…", icon: .export) { session.export(.stl) }
                     .disabled(!session.canExport).accessibilityIdentifier("project.export.stl")
-                menuButton("Import STEP…", icon: .open) { importingSTEP = true }
+                menuButton(proTitle("Import STEP…"), icon: .open) { session.withPro { importingSTEP = true } }
                     .disabled(session.isEditingBlocked).accessibilityIdentifier("project.importSTEP")
                 menuButton("Import Mesh (STL, 3MF)…", icon: .mesh) { importingMesh = true }
                     .disabled(session.isEditingBlocked).accessibilityIdentifier("project.importMesh")
@@ -340,7 +335,7 @@ struct WorkspaceView: View {
                         session.openDimension(.fitClearance, at: CGPoint(x: workspaceSize.width / 2 - 55, y: workspaceSize.height / 2 + 170))
                     }
                     Divider()
-                    menuButton("Add a Fit Test Print", icon: .fitTest) { session.chooseTool(.fitTest) }
+                    menuButton(proTitle("Add a Fit Test Print"), icon: .fitTest) { session.chooseTool(.fitTest) }
                         .accessibilityIdentifier("project.fitTest")
                 } label: {
                     Label { Text("Fit Clearance: \(session.fitText(session.fitClearance))") } icon: { Image(SSIcon.fit.assetName).renderingMode(.template) }
@@ -430,12 +425,12 @@ struct WorkspaceView: View {
                 dockDivider
                 groupTile(.modify)
                 dockTile("Dimension", icon: .dimension, selected: session.tool == .dimension, id: "tool.dimension") { toggle(.dimension) }
-                dockTile("Project", icon: .project, selected: session.tool == .project, id: "tool.project") { toggle(.project) }
+                dockTile("Project", icon: .project, selected: session.tool == .project, id: "tool.project", pro: !session.ownsPro) { toggle(.project) }
             } else {
                 // Left to right, the way a part is made: what to build on (sketches and planes), then
                 // solids made, changed, and combined, then moved and copied, then fitted together.
                 dockTile("Sketch", icon: .sketch, selected: false, id: "tool.sketch") { session.beginSketch() }
-                dockTile("Project", icon: .project, selected: session.tool == .project, id: "tool.project") { toggle(.project) }
+                dockTile("Project", icon: .project, selected: session.tool == .project, id: "tool.project", pro: !session.ownsPro) { toggle(.project) }
                 groupTile(.planes)
                 dockDivider
                 groupTile(.create)
@@ -466,18 +461,19 @@ struct WorkspaceView: View {
     }
 
     /// A brand tile with its name underneath.
-    private func dockTile(_ title: String, icon: SSIcon, selected: Bool, id: String, subtitle: String? = nil,
+    private func dockTile(_ title: String, icon: SSIcon, selected: Bool, id: String, subtitle: String? = nil, pro: Bool = false,
                           action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: 3) {
                 BrandTile(icon: icon, selected: selected)
+                    .overlay(alignment: .topTrailing) { if pro { ProBadge().offset(x: 8, y: -5) } }
                 Text(title).font(.system(size: 11, weight: .medium)).foregroundStyle(ink).lineLimit(1)
                 if let subtitle { Text(subtitle).font(.system(size: subtitle == "▴" ? 11 : 9, weight: .semibold)).foregroundStyle(muted).lineLimit(1) }
             }
             .frame(minWidth: 54).contentShape(Rectangle())
         }
         // "▴" marks a group of tools; VoiceOver would read the triangle itself.
-        .buttonStyle(.plain).accessibilityLabel(title).accessibilityValue(subtitle == "▴" ? "Group of tools" : subtitle ?? "").accessibilityIdentifier(id)
+        .buttonStyle(.plain).accessibilityLabel(pro ? "\(title), Pro" : title).accessibilityValue(subtitle == "▴" ? "Group of tools" : subtitle ?? "").accessibilityIdentifier(id)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
@@ -506,13 +502,15 @@ struct WorkspaceView: View {
                             .frame(width: 36, height: 36)
                             .background(active ? violet : tool.icon.tileColor, in: RoundedRectangle(cornerRadius: 10))
                         Text(group.title(for: tool)).font(.system(size: 15, weight: .semibold)).foregroundStyle(ink)
+                        if tool.isPro && !session.ownsPro { ProBadge() }
                         Spacer(minLength: 12)
                     }
                     .padding(4).frame(minWidth: 168).frame(height: 44)
                     .background(active ? Color("ss-lavender") : .clear, in: RoundedRectangle(cornerRadius: 12))
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain).accessibilityLabel(group.title(for: tool)).accessibilityIdentifier("tool.\(tool.rawValue)")
+                .buttonStyle(.plain).accessibilityLabel(tool.isPro && !session.ownsPro ? "\(group.title(for: tool)), Pro" : group.title(for: tool))
+                .accessibilityIdentifier("tool.\(tool.rawValue)")
                 .accessibilityAddTraits(active ? .isSelected : [])
             }
         }
@@ -605,7 +603,7 @@ struct WorkspaceView: View {
             selectionMeasureLabel
             stripButton("Delete \(finish.kind.title)", icon: .deleteFace, id: "selection.deleteFinish") { session.deleteSelectedFinish() }
                 .disabled(!session.canDeleteSelectedFinish)
-            stripButton("Shell", icon: .shell, id: "selection.shell") { session.shellSelection() }
+            stripButton("Shell", icon: .shell, id: "selection.shell", pro: !session.ownsPro) { session.shellSelection() }
         } else {
             AnyView(plainFaceActions(face))
         }
@@ -625,7 +623,7 @@ struct WorkspaceView: View {
             AnyView(flatFaceActions)
         }
         // Shell with this face (flat or curved) left open.
-        stripButton("Shell", icon: .shell, id: "selection.shell") { session.shellSelection() }
+        stripButton("Shell", icon: .shell, id: "selection.shell", pro: !session.ownsPro) { session.shellSelection() }
         stripButton("Delete Face", icon: .deleteFace, id: "selection.deleteFace") { session.chooseTool(.deleteFace) }
         if session.canDeleteSelectedHole {
             // A hole's wall: the whole hole goes, with its thread and rim fillets.
@@ -636,9 +634,9 @@ struct WorkspaceView: View {
             if !session.matingChoices.isEmpty {
                 matingMenu
             } else if session.canThreadSelectedFace {
-                stripButton("Thread", icon: .thread, id: "selection.thread") { session.beginThread(bodyID: face.bodyID, face: face.face) }
+                stripButton("Thread", icon: .thread, id: "selection.thread", pro: !session.ownsPro) { session.beginThread(bodyID: face.bodyID, face: face.face) }
                 if session.canScrewLidSelectedFace {
-                    stripButton("Screw Lid", icon: .screwLid, id: "selection.screwLid") { session.beginScrewLid(bodyID: face.bodyID, face: face.face) }
+                    stripButton("Screw Lid", icon: .screwLid, id: "selection.screwLid", pro: !session.ownsPro) { session.beginScrewLid(bodyID: face.bodyID, face: face.face) }
                 }
             }
         } else {
@@ -657,7 +655,7 @@ struct WorkspaceView: View {
             .disabled(!session.canExtrudeSelectedFace)
         stripButton("Sketch", icon: .sketch, id: "selection.sketch") { session.beginFaceSketch() }
             .disabled(!session.canSketchOnSelectedFace)
-        stripButton("Text", icon: .text, id: "selection.text") { session.chooseTool(.text) }
+        stripButton("Text", icon: .text, id: "selection.text", pro: !session.ownsPro) { session.chooseTool(.text) }
             .disabled(!session.canSketchOnSelectedFace)
     }
 
@@ -679,8 +677,8 @@ struct WorkspaceView: View {
     @ViewBuilder private func bodyActions(_ body: SolidBody) -> some View {
         // The hint already says a solid is selected, so its size stands alone (VoiceOver still hears the kind).
         if let measure = session.selectionMeasure { measureLabel(measure, kind: "Solid body") } else { stripLabel("Solid body") }
-        stripButton("Shell", icon: .shell, id: "selection.shell") { session.shellSelection() }
-        stripButton("Split Body", icon: .split, id: "selection.split") { session.chooseTool(.split) }
+        stripButton("Shell", icon: .shell, id: "selection.shell", pro: !session.ownsPro) { session.shellSelection() }
+        stripButton("Split Body", icon: .split, id: "selection.split", pro: !session.ownsPro) { session.chooseTool(.split) }
         if session.workspace.bodies.count > 1 { AnyView(combineMenu) }
         AnyView(transformMenu(solid: true))
         if !session.matingChoices.isEmpty { matingMenu }
@@ -712,7 +710,7 @@ struct WorkspaceView: View {
             }
             menuButton("Scale", icon: .scale) { session.chooseTool(.scale) }.accessibilityIdentifier("selection.scale")
             menuButton("Mirror", icon: .mirror) { session.chooseTool(.mirror) }.accessibilityIdentifier("selection.mirror")
-            menuButton("Pattern", icon: .pattern) { session.chooseTool(.pattern) }.accessibilityIdentifier("selection.pattern")
+            menuButton(proTitle("Pattern"), icon: .pattern) { session.chooseTool(.pattern) }.accessibilityIdentifier("selection.pattern")
         } label: {
             StripLabel(title: "Transform", icon: .align, showsMenu: true)
         }
@@ -810,10 +808,10 @@ struct WorkspaceView: View {
                 menuButton(kind.title, icon: .thread) { session.makeMatingPart(kind) }.accessibilityIdentifier("selection.mate.\(kind.rawValue)")
             }
         } label: {
-            StripLabel(title: "Matching Part", icon: .thread, showsMenu: true)
+            StripLabel(title: "Matching Part", icon: .thread, showsMenu: true, pro: !session.ownsPro)
         }
         .disabled(session.isMakingMatingPart)
-        .accessibilityLabel("Matching Part").accessibilityIdentifier("selection.matingPart")
+        .accessibilityLabel(session.ownsPro ? "Matching Part" : "Matching Part, Pro").accessibilityIdentifier("selection.matingPart")
     }
 
     /// The selected edge's, face's, or solid's size, shown as soon as it is selected.
@@ -834,10 +832,16 @@ struct WorkspaceView: View {
     }
 
     /// A compact action: glyph and name side by side.
-    private func stripButton(_ title: String, icon: SSIcon, id: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) { StripLabel(title: title, icon: icon) }
-            .buttonStyle(.plain).accessibilityLabel(title).accessibilityIdentifier(id)
+    private func stripButton(_ title: String, icon: SSIcon, id: String, pro: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) { StripLabel(title: title, icon: icon, pro: pro) }
+            .buttonStyle(.plain).accessibilityLabel(pro ? "\(title), Pro" : title).accessibilityIdentifier(id)
     }
+
+    /// A menu item's name, marked when it is a Pro tool and Pro is not owned.
+    private func proTitle(_ title: String) -> String { session.ownsPro ? title : "\(title) · Pro" }
+
+    /// A Pro operation's Done: without Pro it offers to keep the result with Pro.
+    private var proDone: String { session.ownsPro ? "Done" : "Keep with Pro" }
 
     /// Every solid and sketch: the Model Tree. Tapping a row selects it, including
     /// sketches hidden behind solids or drawn on another plane.
@@ -1411,7 +1415,7 @@ struct WorkspaceView: View {
                 .padding(6).background(white.opacity(0.94), in: RoundedRectangle(cornerRadius: 10))
                 HStack(spacing: 8) {
                     actionButton("Cancel", icon: .exit, id: "split.cancel") { session.cancelSplit() }
-                    actionButton("Done", icon: .done, id: "split.confirm") { session.confirmSplit() }
+                    actionButton(proDone, icon: .done, id: "split.confirm") { session.confirmSplit() }
                         .disabled(session.splitPreview == nil)
                 }
             }
@@ -1429,7 +1433,7 @@ struct WorkspaceView: View {
                 }
                 HStack(spacing: 8) {
                     actionButton("Cancel", icon: .exit, id: "projection.cancel") { session.cancelProjection() }
-                    actionButton("Done", icon: .done, id: "projection.confirm") { session.confirmProjection() }
+                    actionButton(proDone, icon: .done, id: "projection.confirm") { session.confirmProjection() }
                         .disabled(session.projectionPreview.isEmpty)
                 }
             }
@@ -1446,7 +1450,7 @@ struct WorkspaceView: View {
                         .padding(.horizontal, 12).frame(height: 48).background(white, in: RoundedRectangle(cornerRadius: 12))
                 }
                 actionButton("Cancel", icon: .exit, id: "shapeTool.cancel") { session.cancelShapeTool() }
-                actionButton("Done", icon: .done, id: "shapeTool.confirm") { session.confirmShapeTool() }
+                actionButton(proDone, icon: .done, id: "shapeTool.confirm") { session.confirmShapeTool() }
                     .disabled(session.shapeToolPreview == nil)
             }
         } else if session.tool.isConstructionTool {
@@ -1464,7 +1468,7 @@ struct WorkspaceView: View {
         } else if session.isShelling {
             HStack(spacing: 8) {
                 actionButton("Cancel", icon: .exit, id: "shell.cancel") { session.cancelShell() }
-                actionButton("Done", icon: .done, id: "shell.confirm") { session.confirmShell() }
+                actionButton(proDone, icon: .done, id: "shell.confirm") { session.confirmShell() }
                     .disabled(session.draftError != nil || session.shellPreview == nil)
             }
         } else if let hole = session.holeDraft {
@@ -1521,7 +1525,7 @@ struct WorkspaceView: View {
                 .padding(6).background(white.opacity(0.94), in: RoundedRectangle(cornerRadius: 10))
                 HStack(spacing: 8) {
                     actionButton("Cancel", icon: .exit, id: "text.cancel") { session.cancelText() }
-                    actionButton("Done", icon: .done, id: "text.confirm") { session.confirmText() }
+                    actionButton(proDone, icon: .done, id: "text.confirm") { session.confirmText() }
                         .disabled(session.textPreview == nil || session.isBuildingText)
                 }
             }
@@ -1548,7 +1552,7 @@ struct WorkspaceView: View {
                 .padding(6).background(white.opacity(0.94), in: RoundedRectangle(cornerRadius: 10))
                 HStack(spacing: 8) {
                     actionButton("Cancel", icon: .exit, id: "peg.cancel") { session.cancelPeg() }
-                    actionButton("Done", icon: .done, id: "peg.confirm") { session.confirmPeg() }
+                    actionButton(proDone, icon: .done, id: "peg.confirm") { session.confirmPeg() }
                         .disabled(session.draftError != nil || session.pegPreview == nil)
                 }
             }
@@ -1589,8 +1593,6 @@ struct WorkspaceView: View {
             }
             if session.isReviewingAssistant || session.isAssistantWorking {
                 assistantReviewBar
-            } else if !operationActive && session.isLicenseLocked {
-                lockedBar
             } else if !operationActive {
                 VStack(spacing: 8) {
                     contextStrip
@@ -1648,22 +1650,8 @@ struct WorkspaceView: View {
                     actionButton("Stop", icon: .stop, id: "assistant.stopRequest") { assistant.stop() }
                 } else {
                     actionButton("Discard", icon: .exit, id: "assistant.discard") { assistant.discard() }
-                    actionButton("Keep", icon: .done, id: "assistant.keep") { assistant.keep() }
+                    actionButton(session.ownsPro ? "Keep" : "Keep with Pro", icon: .done, id: "assistant.keep") { assistant.keep() }
                 }
-            }
-        }
-    }
-
-    /// After the trial (or before it starts) the dock gives way to what still works and the way back to editing.
-    private var lockedBar: some View {
-        VStack(spacing: 8) {
-            Text(license.access.trialStart == nil ? "View only · open, measure, section, and export" : "Your free trial has ended · models are view-only")
-                .font(.system(size: 15, weight: .medium)).foregroundStyle(ink).lineLimit(1)
-                .padding(.horizontal, 14).frame(height: 34)
-                .background(white.opacity(0.94), in: RoundedRectangle(cornerRadius: 10))
-                .accessibilityIdentifier("license.lockedMessage")
-            actionButton(license.access.canStartTrial ? "Start Free Trial…" : "Unlock Editing…", icon: .done, id: "license.unlock") {
-                license.isShowingStore = true
             }
         }
     }
@@ -1723,7 +1711,7 @@ struct WorkspaceView: View {
             .padding(6).background(white.opacity(0.94), in: RoundedRectangle(cornerRadius: 10))
             HStack(spacing: 8) {
                 actionButton("Cancel", icon: .exit, id: "pattern.cancel") { session.cancelPattern() }
-                actionButton("Done", icon: .done, id: "pattern.confirm") { session.confirmPattern() }
+                actionButton(proDone, icon: .done, id: "pattern.confirm") { session.confirmPattern() }
                     .disabled(session.patternPreview == nil)
             }
         }
@@ -1800,7 +1788,7 @@ struct WorkspaceView: View {
             .padding(.horizontal, 12)
             HStack(spacing: 8) {
                 actionButton("Cancel", icon: .exit, id: "thread.cancel") { session.cancelThread() }
-                actionButton("Done", icon: .done, id: "thread.confirm") { session.confirmThread() }
+                actionButton(proDone, icon: .done, id: "thread.confirm") { session.confirmThread() }
                     .disabled(session.threadPreview == nil || session.isBuildingThread)
             }
         })
@@ -1837,7 +1825,7 @@ struct WorkspaceView: View {
                 actionButton("Cancel", icon: .exit, id: "screwLid.cancel") { session.cancelScrewLid() }
                 actionButton("Test Print", icon: .fitTest, id: "screwLid.testPrint") { session.addScrewLidFitTest() }
                     .disabled(session.screwLidThread == nil || session.isBuildingScrewLidTest)
-                actionButton("Done", icon: .done, id: "screwLid.confirm") { session.confirmScrewLid() }
+                actionButton(proDone, icon: .done, id: "screwLid.confirm") { session.confirmScrewLid() }
                     .disabled(session.screwLidPreview == nil || session.isBuildingScrewLid || session.isBuildingScrewLidTest)
             }
         })
@@ -2123,6 +2111,7 @@ struct WorkspaceView: View {
                     Text("Create and open .swipesketch projects in Files, on your iPad or in iCloud Drive. Completed changes save automatically. Use the project menu for New Project, Open Project, Save, or Save As; the home button returns to the Home screen.")
                     Text("Save As creates and opens a separate editable copy. New Project opens the template gallery: Blank Project, or a template set up with a few sizes; the current project stays saved. Canceled file pickers leave your current project open. Finish an extrusion with Done before saving it.")
                 }
+                Section("Free and Pro") { Text("Swipe & Sketch is free for good, with no limit on projects or exports. Swipe & Sketch Pro, a one-time purchase in Purchases (project menu), adds the tools marked PRO: Shell, Draft, Split Body, Pattern, Project, Loft, Sweep, Rib, Thread, Matching Part, Screw Lid, Peg & Socket, Fit Test, and Text, every template but the Gridfinity Baseplate and Bin, Import STEP, and keeping the assistant's changes. A Pro tool works and previews as usual; its Done says Keep with Pro. Files that use Pro features open, change with the free tools, and export for everyone.") }
                 Section("Import") { Text("Import STEP in the project menu brings in the solids of a .step or .stp file from Files, each as a solid of its own, where the file put them, converted to millimeters, together in a Model Tree group named after the file (hide or show them all with its eye). Open surfaces are joined into solids where they close. Imported solids are ordinary solids: move, rotate, mirror, align, cut, drill, shell, fillet any edge, combine, split, sketch on their faces, and export them. Their exact shapes are saved in the project, so it does not need the STEP file again. Import Mesh brings in STL and 3MF files the same way, such as downloaded models to remix: each closed mesh becomes a solid whose flat areas are single faces (a mesh with holes in it is left out; repair it in a mesh tool first).") }
                 Section("Export") { Text("Export 3MF in the project menu makes a print-ready file: choose all visible solids or the selection (a solid, several picked solids, or a group), Arrange on Plate (side by side, each resting on the plate) or As Modeled, and your printer's plate. Each part is named as in the Model Tree, and a picture of the view is the file's preview. Export STL saves every visible solid in one watertight millimeter file. Both open the share sheet for AirDrop, Files, or a slicer app.") }
                 Section("Send to Slicer") { Text("Send to Slicer in the project menu makes the same print-ready 3MF and saves it into a print folder you choose once, such as a folder in iCloud Drive that the slicer on your Mac opens. Each send replaces the file there, so the newest version is always the one you open. Or share it with AirDrop or another app.") }
@@ -2188,17 +2177,31 @@ private struct StripLabel: View {
     let icon: SSIcon
     /// Marks an action that opens a menu of tools.
     var showsMenu = false
+    /// Marks a Pro tool while Pro is not owned.
+    var pro = false
     @Environment(\.isEnabled) private var enabled
     var body: some View {
         HStack(spacing: 5) {
             SSIconGlyph(icon: icon, size: 20, color: icon == .delete ? Color("ss-coral") : ink)
             Text(title).font(.system(size: 14, weight: .medium)).foregroundStyle(ink).lineLimit(1).fixedSize()
+            if pro { ProBadge() }
             if showsMenu { Text("▾").font(.system(size: 11, weight: .semibold)).foregroundStyle(muted).accessibilityHidden(true) }
         }
         .opacity(enabled ? 1 : 0.4)
         .padding(.horizontal, 8).frame(height: 36)
         .background(Color("ss-neutral"), in: RoundedRectangle(cornerRadius: 9))
         .contentShape(Rectangle())
+    }
+}
+
+/// Marks a Pro tool while Pro is not owned: the tool still opens and previews, and keeping what it
+/// makes asks for Swipe & Sketch Pro.
+private struct ProBadge: View {
+    var body: some View {
+        Text("PRO").font(.system(size: 8, weight: .heavy)).foregroundStyle(paper)
+            .padding(.horizontal, 4).padding(.vertical, 1.5)
+            .background(violet, in: Capsule())
+            .accessibilityHidden(true)
     }
 }
 

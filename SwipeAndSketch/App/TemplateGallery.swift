@@ -22,6 +22,7 @@ struct TemplateGallery: View {
     var onCancel: (() -> Void)?
     @State private var path: [String] = []
     @StateObject private var thumbnails = TemplateThumbnails.shared
+    @ObservedObject private var license = LicenseStore.shared
     private let templates = TemplateCatalog.all
 
     var body: some View {
@@ -105,7 +106,14 @@ struct TemplateGallery: View {
             .aspectRatio(4 / 3, contentMode: .fit)
             .clipShape(RoundedRectangle(cornerRadius: 12))
             VStack(alignment: .leading, spacing: 3) {
-                Text(template.title).font(.system(size: 17, weight: .semibold)).foregroundStyle(ink)
+                HStack(spacing: 6) {
+                    Text(template.title).font(.system(size: 17, weight: .semibold)).foregroundStyle(ink)
+                    if template.needsPro && !license.access.ownsPro {
+                        Text("PRO").font(.system(size: 9, weight: .heavy)).foregroundStyle(paper)
+                            .padding(.horizontal, 5).padding(.vertical, 2).background(violet, in: Capsule())
+                            .accessibilityLabel("Pro")
+                    }
+                }
                 Text(template.summary).font(.system(size: 13)).foregroundStyle(muted).lineLimit(4, reservesSpace: true)
             }
         }
@@ -213,9 +221,9 @@ struct TemplateSetup: View {
                     if let notice = template.category.notice {
                         Text(notice).font(.system(size: 12)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
                     }
-                    if !license.access.canEdit {
-                        // A template is a model made for you, so it needs editing like any other.
-                        Text("Making a template needs the free trial or Unlock.")
+                    if needsPro {
+                        // Decision 8: every template sets up and previews for free; making this one needs Pro.
+                        Text("Set it up and preview it for free. Making this template needs Swipe & Sketch Pro; the plain Gridfinity Baseplate and Bin are free.")
                             .font(.system(size: 13, weight: .medium)).foregroundStyle(violet).fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -227,7 +235,7 @@ struct TemplateSetup: View {
                     .disabled(values == template.defaults).accessibilityIdentifier("templates.defaults")
                 Spacer()
                 Button(action: create) {
-                    Text(license.access.canEdit ? "Create Project" : "See Purchases").font(.system(size: 17, weight: .semibold)).foregroundStyle(paper)
+                    Text(needsPro ? "Create with Pro" : "Create Project").font(.system(size: 17, weight: .semibold)).foregroundStyle(paper)
                         .padding(.horizontal, 22).padding(.vertical, 12)
                         .background(preview.isReady ? violet : muted.opacity(0.5), in: Capsule())
                 }
@@ -242,8 +250,10 @@ struct TemplateSetup: View {
         Binding(get: { values[parameter.id] }, set: { values[parameter.id] = parameter.clamped($0) })
     }
 
+    private var needsPro: Bool { template.needsPro && !license.access.ownsPro }
+
     private func create() {
-        guard license.access.canEdit else { showPurchases = true; return }
+        guard !needsPro else { showPurchases = true; return }
         guard let workspace = preview.workspace, preview.isReady else { return }
         var project = Project(workspace: workspace)
         project.preview = ModelPicture.image(parts: preview.parts, side: CGFloat(ProjectPreview.side))?.pngData()

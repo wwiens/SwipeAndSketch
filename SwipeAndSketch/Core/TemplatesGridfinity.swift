@@ -47,16 +47,19 @@ enum Gridfinity {
     static func baseplate(id: String, title: String, magnets: Bool, summary: String) -> ProjectTemplate {
         ProjectTemplate(
             id: id, category: .gridfinity, title: title, summary: summary,
+            // The free Baseplate has no magnet pockets; the Magnet Baseplate (Pro) can turn them off.
             parameters: [
                 TemplateParameter(id: "columns", title: "Width", kind: .count(1...8), defaultValue: magnets ? 3 : 4, note: "Grid units of 42 mm"),
-                TemplateParameter(id: "rows", title: "Depth", kind: .count(1...8), defaultValue: 3, note: "Grid units of 42 mm"),
-                TemplateParameter(id: "magnets", title: "Magnet pockets", kind: .toggle, defaultValue: magnets ? 1 : 0,
+                TemplateParameter(id: "rows", title: "Depth", kind: .count(1...8), defaultValue: 3, note: "Grid units of 42 mm")
+            ] + (magnets ? [
+                TemplateParameter(id: "magnets", title: "Magnet pockets", kind: .toggle, defaultValue: 1,
                                   note: "Adds a floor with a pocket for a 6 × 2 mm magnet under each bin corner")
-            ],
+            ] : []),
             name: { values in "Gridfinity Baseplate \(values.count("columns"))×\(values.count("rows"))" },
             make: { values in
                 [TemplatePart(name: "Baseplate", body: try plate(columns: values.count("columns"), rows: values.count("rows"), magnets: values.flag("magnets")))]
-            })
+            },
+            needsPro: magnets)
     }
 
     /// The pocket centers, one per cell, with the grid centered on the origin.
@@ -122,24 +125,31 @@ enum Gridfinity {
     static let magnetChoices = ["None", "Outer corners", "Every cell"]
 
     static func bin(id: String, title: String, dividers: (Int, Int), summary: String) -> ProjectTemplate {
-        ProjectTemplate(
+        // The free Bin is a plain bin with its lip; the Divided Bin (Pro) adds dividers and
+        // magnet holes, and with no dividers is a plain bin that can take magnets.
+        let divided = dividers.0 > 0 || dividers.1 > 0
+        return ProjectTemplate(
             id: id, category: .gridfinity, title: title, summary: summary,
             parameters: [
                 TemplateParameter(id: "columns", title: "Width", kind: .count(1...8), defaultValue: dividers.0 > 0 ? 3 : 2, note: "Grid units of 42 mm"),
                 TemplateParameter(id: "rows", title: "Depth", kind: .count(1...8), defaultValue: dividers.1 > 0 ? 2 : 1, note: "Grid units of 42 mm"),
-                TemplateParameter(id: "height", title: "Height", kind: .count(2...15), defaultValue: dividers.0 > 0 ? 3 : 6, note: "Height units of 7 mm"),
+                TemplateParameter(id: "height", title: "Height", kind: .count(2...15), defaultValue: dividers.0 > 0 ? 3 : 6, note: "Height units of 7 mm")
+            ] + (divided ? [
                 TemplateParameter(id: "dividersX", title: "Dividers across", kind: .count(0...7), defaultValue: Double(dividers.0)),
-                TemplateParameter(id: "dividersY", title: "Dividers front to back", kind: .count(0...7), defaultValue: Double(dividers.1)),
-                TemplateParameter(id: "lip", title: "Stacking lip", kind: .toggle, defaultValue: 1, note: "Lets another bin stack on top"),
+                TemplateParameter(id: "dividersY", title: "Dividers front to back", kind: .count(0...7), defaultValue: Double(dividers.1))
+            ] : []) + [
+                TemplateParameter(id: "lip", title: "Stacking lip", kind: .toggle, defaultValue: 1, note: "Lets another bin stack on top")
+            ] + (divided ? [
                 TemplateParameter(id: "magnets", title: "Magnet holes", kind: .choice(magnetChoices), defaultValue: 0,
                                   note: "Pockets underneath for 6 × 2 mm magnets")
-            ],
+            ] : []),
             name: { values in "Gridfinity Bin \(values.count("columns"))×\(values.count("rows"))×\(values.count("height"))" },
             make: { values in
                 [TemplatePart(name: "Bin", body: try bin(columns: values.count("columns"), rows: values.count("rows"), height: values.count("height"),
                                                          dividers: (values.count("dividersX"), values.count("dividersY")),
                                                          lip: values.flag("lip"), magnets: values.choice("magnets")))]
-            })
+            },
+            needsPro: divided)
     }
 
     /// A bin `columns` × `rows` cells and `height` units tall, standing on the origin.

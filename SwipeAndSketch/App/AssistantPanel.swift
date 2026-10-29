@@ -29,7 +29,7 @@ struct AssistantPanel: View {
             header
             Divider().overlay(hairline.opacity(0.6))
             conversation
-            if license.access.canUseAssistant { composer } else { locked }
+            composer
         }
         .background(white, in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(hairline.opacity(0.6)))
@@ -99,7 +99,8 @@ struct AssistantPanel: View {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     if assistant.messages.isEmpty { emptyState }
                     ForEach(assistant.messages) { message in
-                        MessageView(message: message, canReview: !assistant.isWorking, retry: { assistant.retry(message) },
+                        MessageView(message: message, canReview: !assistant.isWorking, keepTitle: license.access.ownsPro ? "Keep" : "Keep with Pro",
+                                    retry: { assistant.retry(message) },
                                     keep: { assistant.keep() }, discard: { assistant.discard() }).id(message.id)
                     }
                     Color.clear.frame(height: 1).id("bottom")
@@ -127,28 +128,6 @@ struct AssistantPanel: View {
                 .accessibilityIdentifier("assistant.suggestion")
             }
         }
-    }
-
-    /// After the free trial: what the assistant needs, and the way to it.
-    private var locked: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(license.access.ownsUnlock
-                 ? license.access.trialStart == nil
-                    ? "Start the free 7-day trial of the AI Assistant, or buy it to ask about and change your models."
-                    : "The free trial of the AI Assistant has ended. Buy AI Assistant to keep asking about and changing your models."
-                 : license.access.trialStart == nil
-                    ? "Start the free 7-day trial to use the AI Assistant."
-                    : "The free trial has ended. The AI Assistant comes back with Unlock and the AI Assistant purchase.")
-                .font(.system(size: 13)).foregroundStyle(ink).fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("assistant.locked")
-            Button { license.isShowingStore = true } label: {
-                Text(license.access.canStartTrial ? "Start Free Trial…" : "See Purchases…").font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(paper).frame(maxWidth: .infinity).frame(height: 36)
-                    .background(violet, in: RoundedRectangle(cornerRadius: 10))
-            }
-            .buttonStyle(.plain).accessibilityIdentifier("assistant.purchases")
-        }
-        .padding(12)
     }
 
     private var composer: some View {
@@ -187,6 +166,11 @@ struct AssistantPanel: View {
             if !assistant.modelStatus.available {
                 Text(assistant.modelStatus.title).font(.system(size: 12)).foregroundStyle(Color("ss-coral"))
                     .fixedSize(horizontal: false, vertical: true)
+            } else if !license.access.ownsPro {
+                // Decision 8: questions are free; the changes preview, and keeping them needs Pro.
+                Text("Ask anything for free. You can see the changes it suggests; keeping them needs Swipe & Sketch Pro.")
+                    .font(.system(size: 12)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("assistant.proNote")
             }
         }
         .padding(12)
@@ -197,6 +181,7 @@ struct AssistantPanel: View {
 private struct MessageView: View {
     let message: AssistantController.Message
     var canReview: Bool
+    var keepTitle = "Keep"
     var retry: () -> Void
     var keep: () -> Void
     var discard: () -> Void
@@ -261,7 +246,7 @@ private struct MessageView: View {
                     }
                     .buttonStyle(.plain).accessibilityIdentifier("assistant.card.discard")
                     Button(action: keep) {
-                        Text("Keep").font(.system(size: 14, weight: .semibold)).foregroundStyle(paper)
+                        Text(keepTitle).font(.system(size: 14, weight: .semibold)).foregroundStyle(paper)
                             .padding(.horizontal, 16).frame(height: 34).background(violet, in: RoundedRectangle(cornerRadius: 9))
                     }
                     .buttonStyle(.plain).accessibilityIdentifier("assistant.card.keep")

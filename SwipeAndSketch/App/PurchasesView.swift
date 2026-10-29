@@ -7,19 +7,15 @@ private let violet = Color("ss-violet")
 private let paper = Color("ss-paper")
 private let coral = Color("ss-coral")
 
-/// Purchases (October 21, 2026): the free 7-day trial, Unlock, and AI Assistant, with Restore
-/// Purchases and Redeem Code (offer codes are how free licenses are given). App Review asks the
-/// trial offer to say how long it lasts, what stops working afterwards, and what it costs to keep it.
+/// Purchases (October 28, 2026): what stays free, Swipe & Sketch Pro, Restore Purchases,
+/// and Redeem Code (offer codes are how free licenses are given). It opens from the project menu,
+/// Home, a Pro tool's Keep with Pro, and the assistant's Keep, never by itself.
 struct PurchasesView: View {
     var onDone: () -> Void
     @ObservedObject private var license = LicenseStore.shared
     @Environment(\.purchase) private var purchase
     @State private var redeeming = false
-    /// The AI Assistant is not sold on an iPad that cannot run either model.
     private let assistantRuns = AssistantEngine.deviceCanRunAssistant
-
-    /// The trial offer opens by itself only once per launch.
-    static var offeredThisLaunch = false
 
     var body: some View {
         NavigationStack {
@@ -28,33 +24,22 @@ struct PurchasesView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(license.access.status).font(.system(size: 20, weight: .bold)).foregroundStyle(ink)
                             .accessibilityIdentifier("purchases.status")
-                        Text("Every purchase is a one-time payment. Nothing renews.").font(.system(size: 14)).foregroundStyle(muted)
+                        Text("Swipe & Sketch is free for good: no trial, no limit on projects or exports. Pro is a one-time payment; nothing renews.")
+                            .font(.system(size: 14)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(.vertical, 4)
                 }
-                if license.access.canStartTrial {
-                    Section("Free trial") {
-                        item(.trial, title: "7-Day Free Trial",
-                             detail: license.access.ownsUnlock
-                                ? "The AI Assistant free for 7 days. No payment and no subscription. "
-                                    + "Afterwards it needs its own purchase (\(price(.assistant)))."
-                                : "Every tool, including the AI Assistant, free for 7 days. No payment and no subscription. "
-                                    + "When the 7 days are over, your models stay yours: you can still open, view, measure, section, and export them, "
-                                    + "but changing them needs Unlock (\(price(.unlock))), and the AI Assistant needs its own purchase (\(price(.assistant))).",
-                             action: "Start Free Trial")
-                    }
+                Section("Included free") {
+                    Text("Every tool you need to make a part by hand: sketching and dimensions, Extrude, Revolve, primitives, Fillet, Chamfer, Hole, Union, Subtract, Intersect, Align, Scale, Mirror, planes, Measure, Section, the Gridfinity Baseplate and Bin, Import Mesh, and full-quality STL and 3MF export. The AI Assistant answers questions.")
+                        .font(.system(size: 14)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
+                        .padding(.vertical, 4)
                 }
-                Section("Swipe & Sketch") {
-                    item(.unlock, title: "Unlock",
-                         detail: "Edit your models and use every modeling tool, for good. The AI Assistant is a separate purchase.",
-                         owned: license.access.ownsUnlock)
-                    item(.assistant, title: "AI Assistant",
-                         detail: !assistantRuns && !license.access.ownsAssistant
-                            ? "This iPad does not support Apple Intelligence, so the AI Assistant cannot run on it."
-                            : license.access.ownsUnlock || license.access.ownsAssistant
-                                ? "Ask about your model and have the assistant change it, for good. Needs Apple Intelligence."
-                                : "Ask about your model and have the assistant change it. Needs Apple Intelligence; available once Swipe & Sketch is unlocked.",
-                         owned: license.access.ownsAssistant, enabled: license.access.canBuyAssistant && assistantRuns)
+                Section("One-time purchase") {
+                    item(.pro, title: "Swipe & Sketch Pro",
+                         detail: "Adds every template; Thread, Matching Part, Screw Lid, Peg & Socket, and Fit Test; Text; Shell, Draft, Split Body, Pattern, Project, Loft, Sweep, and Rib; Import STEP; the AI Assistant's changes"
+                            + (assistantRuns ? "" : " (on an iPad with Apple Intelligence; this one cannot run the assistant)")
+                            + "; and every Pro tool that comes later. Pro tools preview for free: only keeping what they make needs Pro, and your files always open, edit, and export without it.",
+                         owned: license.access.ownsPro)
                 }
                 Section {
                     Button("Restore Purchases") { Task { await license.restore() } }
@@ -62,7 +47,7 @@ struct PurchasesView: View {
                     Button("Redeem Code") { redeeming = true }
                         .disabled(license.busy != nil).accessibilityIdentifier("purchases.redeem")
                 } footer: {
-                    Text("Purchases belong to your Apple ID and work on each iPad you sign in to.")
+                    Text("Purchases belong to your Apple ID and work on each iPad you sign in to, and with Family Sharing.")
                 }
                 if let message = license.message {
                     Section { Text(message).foregroundStyle(coral).accessibilityIdentifier("purchases.message") }
@@ -76,9 +61,7 @@ struct PurchasesView: View {
         }
     }
 
-    private func price(_ id: LicenseStore.ProductID) -> String { license.product(id)?.displayPrice ?? "one-time purchase" }
-
-    private func item(_ id: LicenseStore.ProductID, title: String, detail: String, action: String? = nil, owned: Bool = false, enabled: Bool = true) -> some View {
+    private func item(_ id: LicenseStore.ProductID, title: String, detail: String, owned: Bool = false) -> some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(.system(size: 17, weight: .semibold)).foregroundStyle(ink)
@@ -95,13 +78,13 @@ struct PurchasesView: View {
                 Button {
                     Task { await license.purchase(id, with: purchase) }
                 } label: {
-                    Text(action ?? product?.displayPrice ?? "…").font(.system(size: 15, weight: .semibold)).foregroundStyle(paper)
+                    Text(product?.displayPrice ?? "…").font(.system(size: 15, weight: .semibold)).foregroundStyle(paper)
                         .padding(.horizontal, 14).frame(height: 34)
                         .background(violet, in: Capsule())
                 }
                 .buttonStyle(.plain)
-                .opacity(product == nil || !enabled ? 0.4 : 1)
-                .disabled(product == nil || !enabled || license.busy != nil)
+                .opacity(product == nil ? 0.4 : 1)
+                .disabled(product == nil || license.busy != nil)
                 .accessibilityIdentifier("purchases.\(id.shortName).buy")
             }
         }

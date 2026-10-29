@@ -444,6 +444,39 @@ import simd
 
     // MARK: Shell
 
+    /// Decision 8: without Pro, Shell previews as usual and its Keep with Pro waits; buying Pro
+    /// finishes it as Done would.
+    func testShellPreviewsForFreeAndKeepsOnceProIsBought() throws {
+        let (session, controller) = boxScene()
+        session.ownsPro = false
+        defer { LicenseStore.shared.isShowingStore = false }
+        session.chooseTool(.shell)
+        controller.refresh()
+        tap(controller, SIMD3(5, 3, 20))
+        XCTAssertNotNil(session.shellPreview, "The preview is free")
+        session.confirmShell()
+        XCTAssertNotNil(session.shellDraft, "Keep with Pro leaves the preview up")
+        XCTAssertTrue(session.workspace.bodies[0].cuts.isEmpty)
+        XCTAssertTrue(LicenseStore.shared.isShowingStore)
+        session.ownsPro = true
+        XCTAssertNil(session.shellDraft)
+        XCTAssertEqual(session.workspace.bodies[0].cuts.last?.operation, .shell)
+    }
+
+    /// A Keep that waited for Pro does nothing once its operation is cancelled.
+    func testCancelledProOperationIsNotKeptLater() throws {
+        let (session, controller) = boxScene()
+        session.ownsPro = false
+        defer { LicenseStore.shared.isShowingStore = false }
+        session.chooseTool(.shell)
+        controller.refresh()
+        tap(controller, SIMD3(5, 3, 20))
+        session.confirmShell()
+        session.cancelShell()
+        session.ownsPro = true
+        XCTAssertTrue(session.workspace.bodies[0].cuts.isEmpty)
+    }
+
     func testShellOpenTopWithThicknessFromTheKeypad() throws {
         let (session, controller) = boxScene()
         session.chooseTool(.shell)
