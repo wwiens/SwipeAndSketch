@@ -86,6 +86,8 @@ struct ProjectTemplate: Identifiable, Sendable {
         case gridfinity, electronics, enclosures
         // The library's first expansion (October 28, 2026).
         case organizers, mounts, cables, parts, tests
+        // The second (October 28, 2026).
+        case desk, workshop
         var title: String {
             switch self {
             case .gridfinity: "Gridfinity"
@@ -96,6 +98,8 @@ struct ProjectTemplate: Identifiable, Sendable {
             case .cables: "Cable Management"
             case .parts: "Replacement Parts"
             case .tests: "Fit & Print Tests"
+            case .desk: "Desk & Device Stands"
+            case .workshop: "Workshop & Jigs"
             }
         }
         var summary: String {
@@ -108,6 +112,8 @@ struct ProjectTemplate: Identifiable, Sendable {
             case .cables: "Saddles, combs, grommets, and winders that keep cables in their place."
             case .parts: "Knobs, handles, plugs, and spacers made to the measurements of the part you're replacing."
             case .tests: "Small prints that find the clearances and hole sizes your printer and material need."
+            case .desk: "Stands, rests, and holders that keep a desk tidy."
+            case .workshop: "Racks, holders, and jigs for the bench."
             }
         }
         /// Credit and trademark notices shown with the category's templates (October 26, 2026).
@@ -136,6 +142,9 @@ struct ProjectTemplate: Identifiable, Sendable {
     /// What setup lists under the controls for these values: the sizes that matter, the hardware,
     /// and how to print it.
     var notes: @Sendable (TemplateValues) -> TemplateNotes = { _ in TemplateNotes() }
+    /// The values after the user changes the parameter `id` in setup: a preset choice fills in the
+    /// sizes it stands for, and changing one of those sizes makes the choice Custom.
+    var adjust: @Sendable (_ values: TemplateValues, _ id: String) -> TemplateValues = { values, _ in values }
 
     var defaults: TemplateValues {
         TemplateValues(values: Dictionary(uniqueKeysWithValues: parameters.map { ($0.id, $0.defaultValue) }))
@@ -209,7 +218,8 @@ enum TemplateCatalog {
     /// (the Fit clearance) read its current value.
     static var all: [ProjectTemplate] {
         Gridfinity.templates + BoardTemplates.templates + BoxTemplates.templates + OrganizerTemplates.templates +
-            MountTemplates.templates + CableTemplates.templates + PartTemplates.templates + PrintTestTemplates.templates
+            MountTemplates.templates + CableTemplates.templates + PartTemplates.templates + PrintTestTemplates.templates +
+            DeskTemplates.templates + WorkshopTemplates.templates
     }
 
     static func template(_ id: String) -> ProjectTemplate? { all.first { $0.id == id } }
@@ -357,6 +367,20 @@ enum TemplateGeometry {
         var outline = points.map { plane.coordinates(of: SIMD3($0.x, $0.y, 0)) }
         if Geometry.signedArea(outline) < 0 { outline.reverse() }
         return SketchProfile(id: "template", plane: plane, sourceIDs: [], outline: outline)
+    }
+
+    /// A polygon through world `points`, all on `plane` (an upright profile, say), given either way round.
+    static func polygon(_ points: [SIMD3<Double>], on plane: SketchPlane) -> SketchProfile {
+        var outline = points.map { plane.coordinates(of: $0) }
+        if Geometry.signedArea(outline) < 0 { outline.reverse() }
+        return SketchProfile(id: "template", plane: plane, sourceIDs: [], outline: outline)
+    }
+
+    /// A regular hexagon `acrossFlats` wide centered at world (x, y) on a horizontal `plane`, its
+    /// flats facing ±y and its corners on ±x.
+    static func hexagon(acrossFlats: Double, at center: Point2, on plane: SketchPlane) -> SketchProfile {
+        let r = acrossFlats / 3.squareRoot()
+        return polygon((0..<6).map { center + Point2(x: cos(Double($0) * .pi / 3), y: sin(Double($0) * .pi / 3)) * r }, on: plane)
     }
 
     /// A circle of `diameter` around the world `point`, on the plane through it facing `normal`.

@@ -248,7 +248,11 @@ struct TemplateSetup: View {
     }
 
     private func binding(_ parameter: TemplateParameter) -> Binding<Double> {
-        Binding(get: { values[parameter.id] }, set: { values[parameter.id] = parameter.clamped($0) })
+        Binding(get: { values[parameter.id] }, set: {
+            var changed = values
+            changed[parameter.id] = parameter.clamped($0)
+            values = template.adjust(changed, parameter.id)
+        })
     }
 
     private var needsPro: Bool { template.needsPro && !license.access.ownsPro }

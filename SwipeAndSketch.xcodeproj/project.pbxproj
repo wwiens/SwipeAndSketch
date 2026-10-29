@@ -28,6 +28,8 @@
 		AF745B24C4459DA5EF65ECE8 /* SwipeAndSketch/Core/TemplatesGridfinity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 984D1A095D013A9113E4FFD8 /* SwipeAndSketch/Core/TemplatesGridfinity.swift */; };
 		D44C808239C9C6941328760B /* SwipeAndSketch/Core/TemplatesBoards.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8C23EC73BEDB0781C2E40B5 /* SwipeAndSketch/Core/TemplatesBoards.swift */; };
 		D8985BD8C18FD25DC92C31A7 /* SwipeAndSketch/Core/TemplatesBoxes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A7BC91FFF07B9D1CE003615 /* SwipeAndSketch/Core/TemplatesBoxes.swift */; };
+		CB61CB5BBEB811ED3615710B /* SwipeAndSketch/Core/TemplatesDesk.swift in Sources */ = {isa = PBXBuildFile; fileRef = E84DB15CFE35F9EC60A3B2B2 /* SwipeAndSketch/Core/TemplatesDesk.swift */; };
+		6902C46DD02FABEEC4F29198 /* SwipeAndSketch/Core/TemplatesWorkshop.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3688B88867DABDC7E032C015 /* SwipeAndSketch/Core/TemplatesWorkshop.swift */; };
 		8766CD12069418AC22ECD928 /* SwipeAndSketch/Core/TemplatesOrganizers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D210029895D338E6B58E4D3 /* SwipeAndSketch/Core/TemplatesOrganizers.swift */; };
 		643FFE36A14EC300E3661E01 /* SwipeAndSketch/Core/TemplatesMounts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D797C48463A5F519ED48EC /* SwipeAndSketch/Core/TemplatesMounts.swift */; };
 		3E13AF405F6528689C9F2D85 /* SwipeAndSketch/Core/TemplatesCables.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE5433B36A0C83E3B77039E8 /* SwipeAndSketch/Core/TemplatesCables.swift */; };
@@ -185,6 +187,8 @@
 		984D1A095D013A9113E4FFD8 /* SwipeAndSketch/Core/TemplatesGridfinity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesGridfinity.swift; sourceTree = SOURCE_ROOT; };
 		C8C23EC73BEDB0781C2E40B5 /* SwipeAndSketch/Core/TemplatesBoards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesBoards.swift; sourceTree = SOURCE_ROOT; };
 		6A7BC91FFF07B9D1CE003615 /* SwipeAndSketch/Core/TemplatesBoxes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesBoxes.swift; sourceTree = SOURCE_ROOT; };
+		E84DB15CFE35F9EC60A3B2B2 /* SwipeAndSketch/Core/TemplatesDesk.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesDesk.swift; sourceTree = SOURCE_ROOT; };
+		3688B88867DABDC7E032C015 /* SwipeAndSketch/Core/TemplatesWorkshop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesWorkshop.swift; sourceTree = SOURCE_ROOT; };
 		8D210029895D338E6B58E4D3 /* SwipeAndSketch/Core/TemplatesOrganizers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesOrganizers.swift; sourceTree = SOURCE_ROOT; };
 		19D797C48463A5F519ED48EC /* SwipeAndSketch/Core/TemplatesMounts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesMounts.swift; sourceTree = SOURCE_ROOT; };
 		BE5433B36A0C83E3B77039E8 /* SwipeAndSketch/Core/TemplatesCables.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesCables.swift; sourceTree = SOURCE_ROOT; };
@@ -375,6 +379,8 @@
 				984D1A095D013A9113E4FFD8 /* SwipeAndSketch/Core/TemplatesGridfinity.swift */,
 				C8C23EC73BEDB0781C2E40B5 /* SwipeAndSketch/Core/TemplatesBoards.swift */,
 				6A7BC91FFF07B9D1CE003615 /* SwipeAndSketch/Core/TemplatesBoxes.swift */,
+				E84DB15CFE35F9EC60A3B2B2 /* SwipeAndSketch/Core/TemplatesDesk.swift */,
+				3688B88867DABDC7E032C015 /* SwipeAndSketch/Core/TemplatesWorkshop.swift */,
 				8D210029895D338E6B58E4D3 /* SwipeAndSketch/Core/TemplatesOrganizers.swift */,
 				19D797C48463A5F519ED48EC /* SwipeAndSketch/Core/TemplatesMounts.swift */,
 				BE5433B36A0C83E3B77039E8 /* SwipeAndSketch/Core/TemplatesCables.swift */,
@@ -740,6 +746,8 @@
 				AF745B24C4459DA5EF65ECE8 /* SwipeAndSketch/Core/TemplatesGridfinity.swift in Sources */,
 				D44C808239C9C6941328760B /* SwipeAndSketch/Core/TemplatesBoards.swift in Sources */,
 				D8985BD8C18FD25DC92C31A7 /* SwipeAndSketch/Core/TemplatesBoxes.swift in Sources */,
+				CB61CB5BBEB811ED3615710B /* SwipeAndSketch/Core/TemplatesDesk.swift in Sources */,
+				6902C46DD02FABEEC4F29198 /* SwipeAndSketch/Core/TemplatesWorkshop.swift in Sources */,
 				8766CD12069418AC22ECD928 /* SwipeAndSketch/Core/TemplatesOrganizers.swift in Sources */,
 				643FFE36A14EC300E3661E01 /* SwipeAndSketch/Core/TemplatesMounts.swift in Sources */,
 				3E13AF405F6528689C9F2D85 /* SwipeAndSketch/Core/TemplatesCables.swift in Sources */,

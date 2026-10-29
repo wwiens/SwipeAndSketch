@@ -44,7 +44,8 @@ final class TemplateTests: XCTestCase {
     func testOnlyTheStarterTemplatesAreFree() throws {
         let free = TemplateCatalog.all.filter { !$0.needsPro }
         XCTAssertEqual(Set(free.map(\.id)), ["gridfinity.baseplate", "gridfinity.bin", "parts.spacers",
-                                             "tests.peg-fit", "tests.slide-fit", "tests.hole-ladder", "tests.insert-block"])
+                                             "tests.peg-fit", "tests.slide-fit", "tests.hole-ladder", "tests.insert-block",
+                                             "gridfinity.label-bin", "desk.stylus-rest"])
         for template in free where template.category == .gridfinity {
             XCTAssertTrue(Set(template.parameters.map(\.id)).isDisjoint(with: ["magnets", "dividersX", "dividersY"]), template.id)
         }
@@ -54,17 +55,18 @@ final class TemplateTests: XCTestCase {
         XCTAssertEqual(Set(divided.parameters.map(\.id)), ["columns", "rows", "height", "dividersX", "dividersY", "lip", "magnets"])
     }
 
-    /// The library's first expansion (October 28, 2026): 34 templates in eight categories.
-    func testTheLibraryHasEightCategories() {
-        XCTAssertEqual(TemplateCatalog.all.count, 34)
+    /// The library's expansions (October 28, 2026): 42 templates in ten categories.
+    func testTheLibraryHasItsCategories() {
+        XCTAssertEqual(TemplateCatalog.all.count, 42)
         XCTAssertEqual(ProjectTemplate.Category.allCases.map(\.title),
                        ["Gridfinity", "Electronics", "Boxes & Enclosures", "Drawer & Storage Organizers", "Brackets & Mounts",
-                        "Cable Management", "Replacement Parts", "Fit & Print Tests"])
-        for category in ProjectTemplate.Category.allCases.dropFirst(3) {
-            XCTAssertEqual(TemplateCatalog.all.filter { $0.category == category }.count, 4, category.title)
-        }
+                        "Cable Management", "Replacement Parts", "Fit & Print Tests", "Desk & Device Stands", "Workshop & Jigs"])
+        let counts = Dictionary(grouping: TemplateCatalog.all, by: \.category).mapValues(\.count)
+        XCTAssertEqual(counts, [.gridfinity: 8, .electronics: 7, .enclosures: 3, .organizers: 4, .mounts: 4, .cables: 4, .parts: 4,
+                                .tests: 4, .desk: 3, .workshop: 1])
         // Each new template lists what decides its fit and how it prints.
-        for template in TemplateCatalog.all where !["gridfinity", "electronics", "enclosures"].contains(template.category.rawValue) {
+        let original: Set = ["gridfinity.baseplate", "gridfinity.magnet-baseplate", "gridfinity.bin", "gridfinity.divided-bin"]
+        for template in TemplateCatalog.all where !["electronics", "enclosures"].contains(template.category.rawValue) && !original.contains(template.id) {
             let notes = template.notes(template.defaults)
             XCTAssertFalse(notes.measurements.isEmpty, template.id)
             XCTAssertNotNil(notes.printing, template.id)
@@ -127,7 +129,15 @@ final class TemplateTests: XCTestCase {
         "mounts.slotted-plate": ["width=20.0", "columns=4.0", "rows=4.0", "columnPitch=5.0", "columnPitch=150.0", "slotLength=50.0"],
         "mounts.keyhole-plate": ["width=25.0", "height=15.0", "count=4.0", "spacing=150.0", "entry=16.0", "neck=8.0", "travel=3.0", "travel=25.0"],
         "cables.saddle": ["cable=25.0", "width=6.0", "arch=5.0", "hole=6.0", "spacing=10.0"],
-        "cables.winder": ["waist=40.0"]
+        "cables.winder": ["waist=40.0"],
+        "gridfinity.label-bin": ["height=3.0", "shelfDepth=18.0"],
+        "gridfinity.tool-insert": ["columns=1.0", "height=2.0", "size=35.0", "pocketColumns=12.0", "pocketRows=8.0", "columnPitch=5.0", "columnPitch=80.0",
+                                   "rowPitch=5.0", "rowPitch=80.0", "pocketDepth=50.0"],
+        "gridfinity.bottle-holder": ["columns=1.0", "rows=1.0", "height=3.0", "bottle=70.0", "bottleColumns=6.0", "bottleRows=6.0", "pocketDepth=60.0"],
+        "gridfinity.adapter-base": ["columns=1.0", "rows=1.0", "holeColumns=4.0", "holeRows=1.0", "holeRows=4.0", "columnPitch=5.0", "columnPitch=150.0",
+                                    "rowPitch=5.0", "rowPitch=150.0"],
+        "desk.stylus-rest": ["troughDepth=8.0"],
+        "desk.card-holder": ["cardHeight=25.0", "back=70.0"]
     ]
 
     /// The gallery's pictures show what each template makes now. When this fails, a template was
@@ -662,6 +672,115 @@ final class TemplateTests: XCTestCase {
         XCTAssertFalse(winder.contains(SIMD3(39, 0, 2)))
         XCTAssertTrue(winder.contains(SIMD3(29, 0, 2)))
         XCTAssertTrue(winder.contains(SIMD3(39, 5, 2)), "material beside the notch")
+    }
+
+    // MARK: Second expansion: Gridfinity accessories
+
+    func testLabelBinAddsAShelfAndStillStacks() throws {
+        let bin = try XCTUnwrap(try build(try workspace("gridfinity.label-bin"), "label bin").first)
+        let plain = try SolidKernel.solid(for: try Gridfinity.bin(columns: 3, rows: 2, height: 4, dividers: (0, 0), lip: true, magnets: 0))
+        // The same outside, feet, and lip as a plain bin, so it seats and takes a bin on top.
+        XCTAssertEqual(bin.bounds.min.x, plain.bounds.min.x, accuracy: 1e-6)
+        XCTAssertEqual(bin.bounds.max.z, plain.bounds.max.z, accuracy: 1e-6)
+        for z in [1.5, 29.0] { XCTAssertEqual(try area(bin, at: z), try area(plain, at: z), accuracy: 0.05) }
+        // A 10 mm shelf along the front wall, its top 2 mm under the walls' top.
+        let front = -(83.5 - 2.4) / 2
+        XCTAssertTrue(bin.contains(SIMD3(0, front + 5, 25.2)))
+        XCTAssertFalse(bin.contains(SIMD3(0, front + 5, 26.5)))
+        XCTAssertFalse(bin.contains(SIMD3(0, front + 12, 25.2)))
+        XCTAssertGreaterThan(bin.volume, plain.volume)
+    }
+
+    func testToolInsertPocketsTakeEachShapeWithClearance() throws {
+        let base = ["columns": 3.0, "rows": 2]
+        let round = try XCTUnwrap(try build(try workspace("gridfinity.tool-insert", base), "round").first)
+        // Eight pockets 14 mm deep from the 28 mm top, over 14 mm of block.
+        let solid = try area(round, at: 12)
+        XCTAssertEqual(solid - (try area(round, at: 20)), 8 * .pi * 4.2 * 4.2, accuracy: 0.05)
+        let hex = try XCTUnwrap(try build(try workspace("gridfinity.tool-insert", ["shape": 1]), "hex").first)
+        XCTAssertEqual(solid - (try area(hex, at: 20)), 8 * 3.squareRoot() / 2 * 8.4 * 8.4, accuracy: 0.05)
+        let box = try XCTUnwrap(try build(try workspace("gridfinity.tool-insert", ["shape": 2]), "rectangular").first)
+        XCTAssertEqual(solid - (try area(box, at: 20)), 8 * 8.4 * 16.4, accuracy: 0.05)
+        // Feet like any bin's.
+        let plain = try SolidKernel.solid(for: try Gridfinity.bin(columns: 3, rows: 2, height: 4, dividers: (0, 0), lip: false, magnets: 0))
+        XCTAssertEqual(try area(round, at: 1.5), try area(plain, at: 1.5), accuracy: 0.05)
+    }
+
+    func testBottleHolderSpreadsItsWells() throws {
+        let holder = try XCTUnwrap(try build(try workspace("gridfinity.bottle-holder"), "bottles").first)
+        XCTAssertEqual(holder.bounds.max.z, 35, accuracy: 1e-6)
+        XCTAssertEqual(try area(holder, at: 12) - (try area(holder, at: 25)), 4 * .pi * 14.2 * 14.2, accuracy: 0.05)
+        let well = try XCTUnwrap(holder.face(near: SIMD3(83.5 / 4 + 14.2, 83.5 / 4, 25)))
+        XCTAssertEqual(holder.faceCylinder(well)?.radius ?? 0, 14.2, accuracy: 1e-6)
+    }
+
+    func testAdapterBaseHolesGoThroughTheFeet() throws {
+        let base = try XCTUnwrap(try build(try workspace("gridfinity.adapter-base"), "adapter").first)
+        XCTAssertEqual(base.bounds.max.z, 6 + 4, accuracy: 1e-6)
+        let plain = try SolidKernel.solid(for: try Gridfinity.bin(columns: 2, rows: 2, height: 2, dividers: (0, 0), lip: false, magnets: 0))
+        XCTAssertEqual(try area(base, at: 1.5), try area(plain, at: 1.5) - 4 * .pi * 1.7 * 1.7, accuracy: 0.05)
+        for z in [1.0, 9] { XCTAssertFalse(base.contains(SIMD3(21, 21, z))) }
+        XCTAssertEqual(try area(base, at: 9), roundedSquareArea(83.5, 83.5, radius: 3.75) - 4 * .pi * 1.7 * 1.7, accuracy: 0.05)
+        let none = try workspace("gridfinity.adapter-base", ["holeColumns": 0])
+        try build(none, "no holes")
+        XCTAssertTrue(none.bodies[0].cuts.allSatisfy { $0.hole == nil })
+        assertRefused("gridfinity.adapter-base", ["holeRows": 1])
+    }
+
+    // MARK: Second expansion: desk and workshop
+
+    func testDeviceStandPresetsFillInTheirSizes() throws {
+        let template = try XCTUnwrap(TemplateCatalog.template("desk.device-stand"))
+        var values = template.defaults
+        values["fit"] = 0.3
+        values["preset"] = 1
+        values = template.adjust(values, "preset")
+        XCTAssertEqual(values["width"], 140)
+        XCTAssertEqual(values["supportHeight"], 150)
+        XCTAssertEqual(values["fit"], 0.3, "a preset keeps the clearance")
+        values["width"] = 150
+        values = template.adjust(values, "width")
+        XCTAssertEqual(values.choice("preset"), 2, "changing a preset size makes it Custom")
+        XCTAssertEqual(values["supportHeight"], 150)
+        for (label, preset) in [("phone", 0.0), ("tablet", 1)] {
+            var chosen = template.defaults
+            chosen["preset"] = preset
+            let stand = try XCTUnwrap(try build(try template.workspace(template.adjust(chosen, "preset")), label).first)
+            let size = DeskTemplates.DeviceStand(template.adjust(chosen, "preset"))
+            // The seat is clear, the base solid, and the notch cuts the lip in the middle only.
+            XCTAssertFalse(stand.contains(SIMD3(size.thickness + size.seatRun / 2, size.thickness + 1, 5)), label)
+            XCTAssertTrue(stand.contains(SIMD3(size.thickness + size.seatRun / 2, size.thickness / 2, 5)), label)
+            XCTAssertFalse(stand.contains(SIMD3(size.thickness / 2, size.thickness + 1, size.width / 2)), label)
+            XCTAssertTrue(stand.contains(SIMD3(size.thickness / 2, size.thickness + 1, 5)), label)
+            XCTAssertEqual(stand.bounds.max.y, size.supportHeight, accuracy: 1e-6, label)
+        }
+    }
+
+    func testStylusRestTroughHasEndStops() throws {
+        let rest = try XCTUnwrap(try build(try workspace("desk.stylus-rest"), "rest").first)
+        XCTAssertEqual(rest.bounds.max.z, 6, accuracy: 1e-6)
+        XCTAssertFalse(rest.contains(SIMD3(0, 0, 5.5)))
+        XCTAssertTrue(rest.contains(SIMD3(0, 0, 2.5)), "3 mm under the trough")
+        XCTAssertTrue(rest.contains(SIMD3(48, 0, 5.5)), "closed ends")
+        let trough = try XCTUnwrap(rest.face(near: SIMD3(0, 0, 3)))
+        XCTAssertEqual(rest.faceCylinder(trough)?.radius ?? 0, 4.7, accuracy: 1e-6)
+    }
+
+    func testCardHolderFitsTheStack() throws {
+        let holder = try XCTUnwrap(try build(try workspace("desk.card-holder"), "cards").first)
+        XCTAssertEqual(holder.bounds.max.x - holder.bounds.min.x, 90.4 + 4, accuracy: 1e-6)
+        XCTAssertEqual(holder.bounds.max.z, 33, accuracy: 1e-6)
+        XCTAssertEqual(try area(holder, at: 6), 94.4 * 16.4 - 90.4 * 12.4, accuracy: 0.05)
+        XCTAssertEqual(try area(holder, at: 20), 94.4 * 2, accuracy: 0.05, "only the back rises past the front")
+    }
+
+    func testHexKeyHolderPocketsAndLabels() throws {
+        let workspace = try workspace("workshop.hex-key-holder")
+        let holder = try XCTUnwrap(try build(workspace, "hex keys").first)
+        XCTAssertEqual(labels(workspace.bodies[0]), ["1.5", "2", "2.5", "3", "4", "5", "6", "8"])
+        let pockets = [1.5, 2, 2.5, 3, 4, 5, 6, 8].reduce(0) { $0 + 3.squareRoot() / 2 * ($1 + 0.4) * ($1 + 0.4) }
+        XCTAssertEqual(try area(holder, at: 3) - (try area(holder, at: 10)), pockets, accuracy: 0.05)
+        XCTAssertEqual(holder.bounds.max.z, 19, accuracy: 1e-6)
     }
 }
 
