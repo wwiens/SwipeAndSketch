@@ -38,6 +38,7 @@
 		09428B6B5CE4AFE55FD4DDCD /* SwipeAndSketch/App/Licensing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 881A27928DFD07B3C42C953F /* SwipeAndSketch/App/Licensing.swift */; };
 		E510146FAE9B48949B5AEBC4 /* SwipeAndSketch/App/PrintExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1C38B8AF6084522AC849439 /* SwipeAndSketch/App/PrintExport.swift */; };
 		60433D785C138D710099DFB8 /* SwipeAndSketch/App/HelpTopics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99CD2616992F0A1BEF867C10 /* SwipeAndSketch/App/HelpTopics.swift */; };
+		0FDEB2926603369785407F48 /* SwipeAndSketch/App/ControlsGuide.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00E290453FFBB8BFFDE5961 /* SwipeAndSketch/App/ControlsGuide.swift */; };
 		0236E86CE05A9AC7687A13C5 /* Tests/AppTests/FaceSketchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BDF94EC4AAE4DC5771E16D6 /* Tests/AppTests/FaceSketchTests.swift */; };
 		03066284C6AF3282C8640C25 /* SwipeAndSketch/Core/Workspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6E7E8C055A07A444FDA8585 /* SwipeAndSketch/Core/Workspace.swift */; };
 		03D4BB6825A26A2FA0BF0D7C /* SwipeAndSketch/Core/Sketches.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5090CA8D4FA28DC90100D0E /* SwipeAndSketch/Core/Sketches.swift */; };
@@ -189,6 +190,7 @@
 		881A27928DFD07B3C42C953F /* SwipeAndSketch/App/Licensing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/Licensing.swift; sourceTree = SOURCE_ROOT; };
 		E1C38B8AF6084522AC849439 /* SwipeAndSketch/App/PrintExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/PrintExport.swift; sourceTree = SOURCE_ROOT; };
 		99CD2616992F0A1BEF867C10 /* SwipeAndSketch/App/HelpTopics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/HelpTopics.swift; sourceTree = SOURCE_ROOT; };
+		F00E290453FFBB8BFFDE5961 /* SwipeAndSketch/App/ControlsGuide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/ControlsGuide.swift; sourceTree = SOURCE_ROOT; };
 		021BB602308717C800AA9C34 /* SwipeAndSketch.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = SwipeAndSketch.entitlements; path = SwipeAndSketch/SwipeAndSketch.entitlements; sourceTree = "<group>"; };
 		06A5EB7F31C2DA03AC84A205 /* SwipeAndSketch/Core/SketchTransforms.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/SketchTransforms.swift; sourceTree = SOURCE_ROOT; };
 		0E7E569F9CEB4E78C84FC119 /* SwipeAndSketch/Core/Geometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Geometry.swift; sourceTree = SOURCE_ROOT; };
@@ -409,6 +411,7 @@
 				881A27928DFD07B3C42C953F /* SwipeAndSketch/App/Licensing.swift */,
 				E1C38B8AF6084522AC849439 /* SwipeAndSketch/App/PrintExport.swift */,
 				99CD2616992F0A1BEF867C10 /* SwipeAndSketch/App/HelpTopics.swift */,
+				F00E290453FFBB8BFFDE5961 /* SwipeAndSketch/App/ControlsGuide.swift */,
 				3646179919F87BCB2F2BD219 /* SwipeAndSketch/Canvas/ModelingCanvas.swift */,
 				B105C9AC4FBD48D2A4D07365 /* SwipeAndSketch/Canvas/ViewCube.swift */,
 				0E7E569F9CEB4E78C84FC119 /* SwipeAndSketch/Core/Geometry.swift */,
@@ -766,6 +769,7 @@
 				09428B6B5CE4AFE55FD4DDCD /* SwipeAndSketch/App/Licensing.swift in Sources */,
 				E510146FAE9B48949B5AEBC4 /* SwipeAndSketch/App/PrintExport.swift in Sources */,
 				60433D785C138D710099DFB8 /* SwipeAndSketch/App/HelpTopics.swift in Sources */,
+				0FDEB2926603369785407F48 /* SwipeAndSketch/App/ControlsGuide.swift in Sources */,
 				50A27319FF3D2B56E34AB9DF /* SwipeAndSketch/Canvas/ModelingCanvas.swift in Sources */,
 				A9841ED803C54B6AB22D8510 /* SwipeAndSketch/Canvas/ViewCube.swift in Sources */,
 				A21E82DFCBE8368CE30A92A7 /* SwipeAndSketch/Core/Geometry.swift in Sources */,

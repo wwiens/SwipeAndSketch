@@ -195,6 +195,30 @@ import XCTest
         XCTAssertEqual(create.label, "Create Project", "The plain Bin is free")
     }
 
+    /// The Controls guide opens from the bottom-right button in chapters, and its search finds a topic
+    /// by what it says; it stays light in Dark Mode.
+    func testControlsGuideHasChaptersAndSearch() {
+        XCUIDevice.shared.appearance = .dark
+        defer { XCUIDevice.shared.appearance = .light }
+        let app = app()
+        let controls = app.buttons.matching(identifier: "Controls").firstMatch
+        XCTAssertTrue(controls.waitForExistence(timeout: 20))
+        controls.tap()
+        XCTAssertTrue(app.staticTexts["How Swipe & Sketch works"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["guide.chapter.fit"].exists, "A chip for each chapter")
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "Controls guide in Dark Mode"; shot.lifetime = .keepAlways; add(shot)
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap()
+        search.typeText("slicer")
+        XCTAssertTrue(app.staticTexts["Send to Slicer"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["How Swipe & Sketch works"].exists, "Searching shows only the topics found")
+        XCTAssertFalse(app.staticTexts["Pencil"].exists)
+        app.buttons["guide.done"].tap()
+        XCTAssertFalse(app.buttons["guide.done"].waitForExistence(timeout: 2))
+    }
+
     func app(arguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing"] + arguments
