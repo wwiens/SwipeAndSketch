@@ -228,7 +228,7 @@ struct HomeView: View {
         switch category {
         case .gridfinity, .organizers, .parts: Color("ss-limeSoft")
         case .electronics, .mounts, .tests: Color("ss-coralSoft")
-        case .enclosures: Color("ss-lavender")
+        case .enclosures, .cables: Color("ss-lavender")
         }
     }
 

@@ -1,4 +1,8 @@
 {
+  "cables.comb" : "Comb 1357.3 mm³ 27.60×12.00×5.20",
+  "cables.grommet" : "Grommet 5589.2 mm³ 47.81×48.00×20.00",
+  "cables.saddle" : "Saddle 937.4 mm³ 30.40×8.40×10.00",
+  "cables.winder" : "Winder 5704.1 mm³ 80.00×30.00×4.00",
   "electronics.arduino-case" : "Case 21082.8 mm³ 76.60×61.30×23.60; Lid 10964.4 mm³ 76.60×61.30×6.00",
   "electronics.arduino-mount" : "Mount 17826.9 mm³ 84.60×69.30×8.00",
   "electronics.custom-case" : "Case 20050.5 mm³ 78.00×58.00×22.60; Lid 10596.9 mm³ 78.00×58.00×6.00",

@@ -85,7 +85,7 @@ struct ProjectTemplate: Identifiable, Sendable {
     enum Category: String, CaseIterable, Sendable {
         case gridfinity, electronics, enclosures
         // The library's first expansion (October 28, 2026).
-        case organizers, mounts, parts, tests
+        case organizers, mounts, cables, parts, tests
         var title: String {
             switch self {
             case .gridfinity: "Gridfinity"
@@ -93,6 +93,7 @@ struct ProjectTemplate: Identifiable, Sendable {
             case .enclosures: "Boxes & Enclosures"
             case .organizers: "Drawer & Storage Organizers"
             case .mounts: "Brackets & Mounts"
+            case .cables: "Cable Management"
             case .parts: "Replacement Parts"
             case .tests: "Fit & Print Tests"
             }
@@ -104,6 +105,7 @@ struct ProjectTemplate: Identifiable, Sendable {
             case .enclosures: "Boxes sized by their inside, with lids that screw on or slip on."
             case .organizers: "Trays, bins, and dividers sized to the drawer you measure."
             case .mounts: "Brackets and plates for screwing parts to walls, shelves, and frames."
+            case .cables: "Saddles, combs, grommets, and winders that keep cables in their place."
             case .parts: "Knobs, handles, plugs, and spacers made to the measurements of the part you're replacing."
             case .tests: "Small prints that find the clearances and hole sizes your printer and material need."
             }
@@ -207,7 +209,7 @@ enum TemplateCatalog {
     /// (the Fit clearance) read its current value.
     static var all: [ProjectTemplate] {
         Gridfinity.templates + BoardTemplates.templates + BoxTemplates.templates + OrganizerTemplates.templates +
-            MountTemplates.templates + PartTemplates.templates + PrintTestTemplates.templates
+            MountTemplates.templates + CableTemplates.templates + PartTemplates.templates + PrintTestTemplates.templates
     }
 
     static func template(_ id: String) -> ProjectTemplate? { all.first { $0.id == id } }

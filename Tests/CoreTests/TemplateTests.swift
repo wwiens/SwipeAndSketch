@@ -54,6 +54,23 @@ final class TemplateTests: XCTestCase {
         XCTAssertEqual(Set(divided.parameters.map(\.id)), ["columns", "rows", "height", "dividersX", "dividersY", "lip", "magnets"])
     }
 
+    /// The library's first expansion (October 28, 2026): 34 templates in eight categories.
+    func testTheLibraryHasEightCategories() {
+        XCTAssertEqual(TemplateCatalog.all.count, 34)
+        XCTAssertEqual(ProjectTemplate.Category.allCases.map(\.title),
+                       ["Gridfinity", "Electronics", "Boxes & Enclosures", "Drawer & Storage Organizers", "Brackets & Mounts",
+                        "Cable Management", "Replacement Parts", "Fit & Print Tests"])
+        for category in ProjectTemplate.Category.allCases.dropFirst(3) {
+            XCTAssertEqual(TemplateCatalog.all.filter { $0.category == category }.count, 4, category.title)
+        }
+        // Each new template lists what decides its fit and how it prints.
+        for template in TemplateCatalog.all where !["gridfinity", "electronics", "enclosures"].contains(template.category.rawValue) {
+            let notes = template.notes(template.defaults)
+            XCTAssertFalse(notes.measurements.isEmpty, template.id)
+            XCTAssertNotNil(notes.printing, template.id)
+        }
+    }
+
     func testEveryTemplateMakesNamedSolidsInAGroupThatSave() throws {
         for template in TemplateCatalog.all {
             let workspace = try template.workspace(template.defaults)
@@ -109,6 +126,8 @@ final class TemplateTests: XCTestCase {
         "mounts.u-bracket": ["component=10.0", "spacing=120.0"],
         "mounts.slotted-plate": ["width=20.0", "columns=4.0", "rows=4.0", "columnPitch=5.0", "columnPitch=150.0", "slotLength=50.0"],
         "mounts.keyhole-plate": ["width=25.0", "height=15.0", "count=4.0", "spacing=150.0", "entry=16.0", "neck=8.0", "travel=3.0", "travel=25.0"],
+        "cables.saddle": ["cable=25.0", "width=6.0", "arch=5.0", "hole=6.0", "spacing=10.0"],
+        "cables.winder": ["waist=40.0"]
     ]
 
     /// The gallery's pictures show what each template makes now. When this fails, a template was
@@ -599,7 +618,51 @@ final class TemplateTests: XCTestCase {
         }
     }
 
+    // MARK: Cable Management
 
+    func testCableSaddleIsOpenUnderneath() throws {
+        let saddle = try XCTUnwrap(try build(try workspace("cables.saddle"), "saddle").first)
+        // The cable (6.4 mm with clearance) lies on the wall at y = 0, under the arch.
+        XCTAssertEqual(saddle.bounds.min.y, 0, accuracy: 1e-6)
+        XCTAssertFalse(saddle.contains(SIMD3(0, 0.5, 5)))
+        XCTAssertFalse(saddle.contains(SIMD3(3.1, 1, 5)))
+        XCTAssertTrue(saddle.contains(SIMD3(0, 7.4, 5)))
+        let arch = try XCTUnwrap(saddle.face(near: SIMD3(0, 6.4, 1)))
+        XCTAssertEqual(saddle.faceCylinder(arch)?.radius ?? 0, 3.2, accuracy: 1e-6)
+        for x in [-11.0, 11] { XCTAssertFalse(saddle.contains(SIMD3(x, 1.5, 5))) }
+    }
+
+    func testCableCombGroovesAreSeparatedAndConnected() throws {
+        let comb = try XCTUnwrap(try build(try workspace("cables.comb"), "comb").first)
+        XCTAssertEqual(comb.bounds.max.x - comb.bounds.min.x, 4 * 4.4 + 3 * 2 + 4, accuracy: 1e-6)
+        XCTAssertEqual(comb.bounds.max.z, 3 + 2.2, accuracy: 1e-6)
+        let groove = try XCTUnwrap(comb.face(near: SIMD3(-13.8 + 2 + 2.2, 0, 3)))
+        XCTAssertEqual(comb.faceCylinder(groove)?.radius ?? 0, 2.2, accuracy: 1e-6)
+        XCTAssertTrue(comb.contains(SIMD3(-13.8 + 2 + 4.4 + 1, 0, 5)), "material between grooves")
+    }
+
+    func testGrommetSleeveFitsTheHoleWithItsSideOpening() throws {
+        let grommet = try XCTUnwrap(try build(try workspace("cables.grommet"), "grommet").first)
+        let sleeve = try XCTUnwrap(grommet.face(near: SIMD3(-19.8, 0, 10)))
+        XCTAssertEqual(grommet.faceCylinder(sleeve)?.radius ?? 0, 19.8, accuracy: 1e-6)
+        let bore = try XCTUnwrap(grommet.face(near: SIMD3(-17.8, 0, 10)))
+        XCTAssertEqual(grommet.faceCylinder(bore)?.radius ?? 0, 17.8, accuracy: 1e-6)
+        XCTAssertEqual(grommet.bounds.max.z, 20, accuracy: 1e-6)
+        // The opening runs through the sleeve and the flange.
+        XCTAssertFalse(grommet.contains(SIMD3(18.8, 0, 10)))
+        XCTAssertFalse(grommet.contains(SIMD3(22, 0, 1)))
+        let ring = try XCTUnwrap(try build(try workspace("cables.grommet", ["opening": 0]), "ring").first)
+        XCTAssertTrue(ring.contains(SIMD3(18.8, 0, 10)))
+    }
+
+    func testCableWinderWaistAndNotches() throws {
+        let winder = try XCTUnwrap(try build(try workspace("cables.winder"), "winder").first)
+        XCTAssertTrue(winder.contains(SIMD3(0, 6.5, 2)))
+        XCTAssertFalse(winder.contains(SIMD3(0, 7.5, 2)))
+        XCTAssertFalse(winder.contains(SIMD3(39, 0, 2)))
+        XCTAssertTrue(winder.contains(SIMD3(29, 0, 2)))
+        XCTAssertTrue(winder.contains(SIMD3(39, 5, 2)), "material beside the notch")
+    }
 }
 
 /// Templates built at their defaults, by id.
