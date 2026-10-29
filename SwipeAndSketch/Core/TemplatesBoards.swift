@@ -97,7 +97,8 @@ enum BoardTemplates {
          enclosure(id: "electronics.arduino-case", board: 3, title: "Case for Arduino Uno",
                    summary: "A case with standoffs for an Arduino Uno and a press-on lid. Cut openings for USB and power with Sketch and Extrude."),
          enclosure(id: "electronics.custom-case", board: BoardFootprint.catalog.count, title: "Custom Board Case",
-                   summary: "A case for any board: enter its size and how far its four holes are from the corners.")]
+                   summary: "A case for any board: enter its size and how far its four holes are from the corners."),
+         prototypeTray]
     }
 
     static var boardChoices: [String] { BoardFootprint.catalog.map(\.title) + ["Custom board"] }
@@ -215,5 +216,109 @@ enum BoardTemplates {
                                                 fixing: fixing(values))
                 return parts
             })
+    }
+
+    // MARK: Prototyping tray (October 28, 2026, second expansion)
+
+    static var prototypeTray: ProjectTemplate {
+        ProjectTemplate(
+            id: "electronics.prototype-tray", category: .electronics, title: "Electronics Prototyping Tray",
+            summary: "Mount several boards of one size on an open tray, each on four standoffs.",
+            parameters: [
+                TemplateParameter(id: "width", title: "Tray width", kind: .length(80...300, step: 1), defaultValue: 180),
+                TemplateParameter(id: "depth", title: "Tray depth", kind: .length(50...220, step: 1), defaultValue: 100),
+                TemplateParameter(id: "floor", title: "Floor thickness", kind: .length(2...6, step: 0.5), defaultValue: 3),
+                TemplateParameter(id: "rim", title: "Rim height", kind: .length(0...12, step: 1), defaultValue: 5, note: "Above the floor; 0 for none"),
+                TemplateParameter(id: "rimThickness", title: "Rim thickness", kind: .length(1.2...4, step: 0.1), defaultValue: 2),
+                TemplateParameter(id: "columns", title: "Board columns", kind: .count(1...3), defaultValue: 2),
+                TemplateParameter(id: "rows", title: "Board rows", kind: .count(1...3), defaultValue: 1),
+                TemplateParameter(id: "boardWidth", title: "Board width", kind: .length(20...120, step: 0.5), defaultValue: 70),
+                TemplateParameter(id: "boardDepth", title: "Board depth", kind: .length(15...100, step: 0.5), defaultValue: 45),
+                TemplateParameter(id: "holeInset", title: "Holes from corners", kind: .length(2...15, step: 0.5), defaultValue: 3.5,
+                                  note: "From each edge to the hole's center"),
+                TemplateParameter(id: "columnPitch", title: "Board spacing across", kind: .length(25...150, step: 1), defaultValue: 80, note: "Center to center"),
+                TemplateParameter(id: "rowPitch", title: "Board spacing front to back", kind: .length(20...120, step: 1), defaultValue: 60,
+                                  note: "Center to center"),
+                TemplateParameter(id: "standoff", title: "Standoff height", kind: .length(4...15, step: 0.5), defaultValue: 6),
+                TemplateParameter(id: "standoffDiameter", title: "Standoff diameter", kind: .length(5...12, step: 0.5), defaultValue: 7),
+                TemplateParameter(id: "screw", title: "Screw", kind: .choice(Screws.sizes), defaultValue: 2),
+                TemplateParameter(id: "fixing", title: "Screws hold by", kind: .choice([Screws.Fixing.selfTapping.title, Screws.Fixing.insert.title]),
+                                  defaultValue: 0)
+            ],
+            name: { values in "Prototyping Tray \(values.count("columns") * values.count("rows")) Boards" },
+            make: { values in [TemplatePart(name: "Tray", body: try PrototypeTray(values).body())] },
+            notes: { values in PrototypeTray(values).notes })
+    }
+
+    struct PrototypeTray {
+        var width, depth, floor, rim, rimThickness, columnPitch, rowPitch, standoff, standoffDiameter: Double
+        var columns, rows: Int
+        var board: BoardFootprint
+        var fixing: Screws.Fixing
+        init(_ values: TemplateValues) {
+            width = values["width"]; depth = values["depth"]; floor = values["floor"]; rim = values["rim"]; rimThickness = values["rimThickness"]
+            columns = values.count("columns"); rows = values.count("rows"); columnPitch = values["columnPitch"]; rowPitch = values["rowPitch"]
+            standoff = values["standoff"]; standoffDiameter = values["standoffDiameter"]
+            let screw = Screws.sizes[min(max(values.choice("screw"), 0), Screws.sizes.count - 1)]
+            board = BoardFootprint(title: "Board", shortTitle: "Board", width: values["boardWidth"], length: values["boardDepth"],
+                                   holes: [Point2(x: values["holeInset"], y: values["holeInset"]), Point2(x: values["boardWidth"] - values["holeInset"], y: values["holeInset"]),
+                                           Point2(x: values["boardWidth"] - values["holeInset"], y: values["boardDepth"] - values["holeInset"]),
+                                           Point2(x: values["holeInset"], y: values["boardDepth"] - values["holeInset"])],
+                                   holeDiameter: Screws.clearance(screw), screw: screw, headroom: 0)
+            fixing = values.choice("fixing") == 1 ? .insert : .selfTapping
+        }
+        var boards: [Point2] {
+            (0..<rows).flatMap { row in
+                (0..<columns).map { column in
+                    Point2(x: (Double(column) - Double(columns - 1) / 2) * columnPitch, y: (Double(row) - Double(rows - 1) / 2) * rowPitch)
+                }
+            }
+        }
+        /// The bore in each standoff: as deep as it may go, keeping 1 mm at the standoff's foot.
+        var bore: (spec: HoleSpec, depth: Double?) { Screws.hole(board.screw, fixing, available: standoff - 1 + 0.8) }
+
+        func body() throws -> SolidBody {
+            let inset = board.holes[0].x
+            guard inset >= standoffDiameter / 2 - 1e-9, inset <= min(board.width, board.length) / 2 - standoffDiameter / 2 + 1e-9 else {
+                throw TemplateError.tooSmall("The holes must sit at least half a standoff (\(TemplateFormat.number(standoffDiameter / 2, digits: 1)) mm) in from the board's edges, and the four mustn't overlap.")
+            }
+            let spec = bore.spec
+            guard (standoffDiameter - spec.diameter) / 2 >= 1.2 - 1e-9 else {
+                throw TemplateError.tooSmall("The standoffs are too thin round their \(TemplateFormat.number(spec.diameter, digits: 1)) mm holes. Make them \(TemplateFormat.number(spec.diameter + 2.4, digits: 1)) mm across or more.")
+            }
+            if fixing == .insert, let needed = HolePresets.defaultDepth(.insert, size: board.screw), standoff - 1 < needed - 1e-9 {
+                throw TemplateError.tooSmall("A \(board.screw) insert needs \(TemplateFormat.number(needed, digits: 1)) mm of standoff. Make the standoffs \(TemplateFormat.number(needed + 1, digits: 1)) mm tall or more, or have the screws hold by screwing into plastic.")
+            }
+            guard columns < 2 || columnPitch >= board.width - 1e-9, rows < 2 || rowPitch >= board.length - 1e-9 else {
+                throw TemplateError.tooSmall("The boards would overlap. Space them at least a board's size apart.")
+            }
+            let inside = (width: width - 2 * (rim > 0 ? rimThickness : 0), depth: depth - 2 * (rim > 0 ? rimThickness : 0))
+            let span = (x: Double(columns - 1) * columnPitch + board.width, y: Double(rows - 1) * rowPitch + board.length)
+            guard span.x <= inside.width + 1e-9, span.y <= inside.depth + 1e-9 else {
+                throw TemplateError.tooSmall("The boards need \(TemplateFormat.number(span.x, digits: 1)) × \(TemplateFormat.number(span.y, digits: 1)) mm inside the rim. Make the tray bigger, or use fewer or closer boards.")
+            }
+            var tray = TemplateGeometry.block(TemplateGeometry.roundedRectangle(width: width, depth: depth, radius: 3, on: .top), height: floor + rim)
+            if rim > 0 {
+                tray.cuts.append(TemplateGeometry.step(TemplateGeometry.roundedRectangle(width: inside.width, depth: inside.depth, radius: max(0.5, 3 - rimThickness),
+                                                                                         on: TemplateGeometry.horizontal(floor + rim)), depth: -rim))
+            }
+            let base = TemplateGeometry.horizontal(floor), top = TemplateGeometry.horizontal(floor + standoff)
+            let points = boards.flatMap { holes(of: board, centeredOn: $0) }
+            for point in points { tray.cuts.append(TemplateGeometry.step(TemplateGeometry.circle(standoffDiameter, at: point, on: base, points: 48), depth: standoff, join: true)) }
+            let (holeSpec, holeDepth) = bore
+            for point in points { tray.cuts.append(TemplateGeometry.hole(holeSpec, at: point, on: top, depth: holeDepth)) }
+            return tray
+        }
+
+        var notes: TemplateNotes {
+            let count = boards.count * 4
+            return TemplateNotes(measurements: [
+                TemplateMeasurement(title: "Tray", lengths: [width, depth, floor + rim]),
+                TemplateMeasurement(title: "Boards", lengths: [board.width, board.length], text: "\(columns) × \(rows)"),
+                TemplateMeasurement(title: "Holes", lengths: [board.width - 2 * board.holes[0].x, board.length - 2 * board.holes[0].x], text: "apart on each board"),
+                TemplateMeasurement(title: "Standoffs", lengths: [standoffDiameter, standoff], text: "across, tall")
+            ], hardware: "\(count) \(board.screw) screws" + (fixing == .insert ? " and \(count) \(board.screw) heat-set inserts." : "."),
+               printing: "Print it floor down.")
+        }
     }
 }

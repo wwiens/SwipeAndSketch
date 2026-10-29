@@ -227,8 +227,8 @@ struct HomeView: View {
     private static func tint(_ category: ProjectTemplate.Category) -> Color {
         switch category {
         case .gridfinity, .organizers, .parts, .workshop: Color("ss-limeSoft")
-        case .electronics, .mounts, .tests: Color("ss-coralSoft")
-        case .enclosures, .cables, .desk: Color("ss-lavender")
+        case .electronics, .mounts, .tests, .signs: Color("ss-coralSoft")
+        case .enclosures, .cables, .desk, .home: Color("ss-lavender")
         }
     }
 

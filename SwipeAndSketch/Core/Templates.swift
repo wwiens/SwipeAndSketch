@@ -43,9 +43,33 @@ struct TemplateParameter: Identifiable, Sendable {
     }
 }
 
+/// Words a template is set up with: one line of text, such as a sign's (October 28, 2026).
+struct TemplateTextParameter: Identifiable, Sendable {
+    var id: String
+    var title: String
+    var defaultText: String
+    /// The most characters it takes; longer text is refused, never cut short.
+    var maxLength: Int
+    var note: String?
+    var isShown: @Sendable (TemplateValues) -> Bool = { _ in true }
+
+    /// Why `text` can't be used, or nil when it can: it must be one line, not blank, and short enough.
+    func problem(with text: String) -> String? {
+        if text.trimmingCharacters(in: .whitespaces).isEmpty { return "Type the \(title.lowercased()) to put on it." }
+        if text.unicodeScalars.contains(where: { CharacterSet.newlines.contains($0) || CharacterSet.controlCharacters.contains($0) }) {
+            return "The \(title.lowercased()) must be one line, without tabs or line breaks."
+        }
+        if text.count > maxLength { return "The \(title.lowercased()) is \(text.count) characters long; it can be at most \(maxLength)." }
+        return nil
+    }
+}
+
 /// The values a template is set up with, by parameter id.
 struct TemplateValues: Equatable, Sendable {
     var values: [String: Double] = [:]
+    /// Text values, by text parameter id. Empty for templates without text.
+    var texts: [String: String] = [:]
+    func text(_ id: String) -> String { texts[id] ?? "" }
     subscript(_ id: String) -> Double {
         get { values[id] ?? 0 }
         set { values[id] = newValue }
@@ -87,7 +111,7 @@ struct ProjectTemplate: Identifiable, Sendable {
         // The library's first expansion (October 28, 2026).
         case organizers, mounts, cables, parts, tests
         // The second (October 28, 2026).
-        case desk, workshop
+        case desk, workshop, signs, home
         var title: String {
             switch self {
             case .gridfinity: "Gridfinity"
@@ -100,6 +124,8 @@ struct ProjectTemplate: Identifiable, Sendable {
             case .tests: "Fit & Print Tests"
             case .desk: "Desk & Device Stands"
             case .workshop: "Workshop & Jigs"
+            case .signs: "Signs & Labels"
+            case .home: "Home & Garden"
             }
         }
         var summary: String {
@@ -114,6 +140,8 @@ struct ProjectTemplate: Identifiable, Sendable {
             case .tests: "Small prints that find the clearances and hole sizes your printer and material need."
             case .desk: "Stands, rests, and holders that keep a desk tidy."
             case .workshop: "Racks, holders, and jigs for the bench."
+            case .signs: "Nameplates, signs, tags, and markers with your own words on them."
+            case .home: "Planters, trays, and other things for around the house."
             }
         }
         /// Credit and trademark notices shown with the category's templates (October 26, 2026).
@@ -145,19 +173,27 @@ struct ProjectTemplate: Identifiable, Sendable {
     /// The values after the user changes the parameter `id` in setup: a preset choice fills in the
     /// sizes it stands for, and changing one of those sizes makes the choice Custom.
     var adjust: @Sendable (_ values: TemplateValues, _ id: String) -> TemplateValues = { values, _ in values }
+    /// Words it is set up with, shown above the sizes.
+    var textParameters: [TemplateTextParameter] = []
 
     var defaults: TemplateValues {
-        TemplateValues(values: Dictionary(uniqueKeysWithValues: parameters.map { ($0.id, $0.defaultValue) }))
+        TemplateValues(values: Dictionary(uniqueKeysWithValues: parameters.map { ($0.id, $0.defaultValue) }),
+                       texts: Dictionary(uniqueKeysWithValues: textParameters.map { ($0.id, $0.defaultText) }))
     }
 
-    /// `values` made valid: every parameter present and within its range.
+    /// `values` made valid: every parameter present and within its range. Text is kept as typed;
+    /// `workspace` refuses text it can't use.
     func clamped(_ values: TemplateValues) -> TemplateValues {
-        TemplateValues(values: Dictionary(uniqueKeysWithValues: parameters.map { ($0.id, $0.clamped(values.values[$0.id] ?? $0.defaultValue)) }))
+        TemplateValues(values: Dictionary(uniqueKeysWithValues: parameters.map { ($0.id, $0.clamped(values.values[$0.id] ?? $0.defaultValue)) }),
+                       texts: Dictionary(uniqueKeysWithValues: textParameters.map { ($0.id, values.texts[$0.id] ?? $0.defaultText) }))
     }
 
     /// A new project's model: the template's solids, named, in a group named after the project.
     func workspace(_ values: TemplateValues) throws -> Workspace {
         let values = clamped(values)
+        for parameter in textParameters where parameter.isShown(values) {
+            if let problem = parameter.problem(with: values.text(parameter.id)) { throw TemplateError.tooSmall(problem) }
+        }
         let parts = try make(values)
         guard !parts.isEmpty else { throw TemplateError.failed(title) }
         let group = ItemGroup(name: ItemNames.cleaned(name(values)))
@@ -219,7 +255,7 @@ enum TemplateCatalog {
     static var all: [ProjectTemplate] {
         Gridfinity.templates + BoardTemplates.templates + BoxTemplates.templates + OrganizerTemplates.templates +
             MountTemplates.templates + CableTemplates.templates + PartTemplates.templates + PrintTestTemplates.templates +
-            DeskTemplates.templates + WorkshopTemplates.templates
+            DeskTemplates.templates + WorkshopTemplates.templates + SignTemplates.templates + HomeTemplates.templates
     }
 
     static func template(_ id: String) -> ProjectTemplate? { all.first { $0.id == id } }

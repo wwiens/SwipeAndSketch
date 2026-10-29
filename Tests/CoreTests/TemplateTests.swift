@@ -45,7 +45,7 @@ final class TemplateTests: XCTestCase {
         let free = TemplateCatalog.all.filter { !$0.needsPro }
         XCTAssertEqual(Set(free.map(\.id)), ["gridfinity.baseplate", "gridfinity.bin", "parts.spacers",
                                              "tests.peg-fit", "tests.slide-fit", "tests.hole-ladder", "tests.insert-block",
-                                             "gridfinity.label-bin", "desk.stylus-rest"])
+                                             "gridfinity.label-bin", "desk.stylus-rest", "signs.key-tag"])
         for template in free where template.category == .gridfinity {
             XCTAssertTrue(Set(template.parameters.map(\.id)).isDisjoint(with: ["magnets", "dividersX", "dividersY"]), template.id)
         }
@@ -55,18 +55,21 @@ final class TemplateTests: XCTestCase {
         XCTAssertEqual(Set(divided.parameters.map(\.id)), ["columns", "rows", "height", "dividersX", "dividersY", "lip", "magnets"])
     }
 
-    /// The library's expansions (October 28, 2026): 42 templates in ten categories.
+    /// The library's expansions (October 28, 2026): 50 templates in twelve categories.
     func testTheLibraryHasItsCategories() {
-        XCTAssertEqual(TemplateCatalog.all.count, 42)
+        XCTAssertEqual(TemplateCatalog.all.count, 50)
         XCTAssertEqual(ProjectTemplate.Category.allCases.map(\.title),
                        ["Gridfinity", "Electronics", "Boxes & Enclosures", "Drawer & Storage Organizers", "Brackets & Mounts",
-                        "Cable Management", "Replacement Parts", "Fit & Print Tests", "Desk & Device Stands", "Workshop & Jigs"])
+                        "Cable Management", "Replacement Parts", "Fit & Print Tests", "Desk & Device Stands", "Workshop & Jigs",
+                        "Signs & Labels", "Home & Garden"])
         let counts = Dictionary(grouping: TemplateCatalog.all, by: \.category).mapValues(\.count)
-        XCTAssertEqual(counts, [.gridfinity: 8, .electronics: 7, .enclosures: 3, .organizers: 4, .mounts: 4, .cables: 4, .parts: 4,
-                                .tests: 4, .desk: 3, .workshop: 1])
+        XCTAssertEqual(counts, [.gridfinity: 8, .electronics: 8, .enclosures: 3, .organizers: 4, .mounts: 4, .cables: 4, .parts: 4,
+                                .tests: 4, .desk: 3, .workshop: 3, .signs: 4, .home: 1])
         // Each new template lists what decides its fit and how it prints.
         let original: Set = ["gridfinity.baseplate", "gridfinity.magnet-baseplate", "gridfinity.bin", "gridfinity.divided-bin"]
-        for template in TemplateCatalog.all where !["electronics", "enclosures"].contains(template.category.rawValue) && !original.contains(template.id) {
+        let originalBoxesAndBoards = ["electronics.prototype-tray", "enclosures.sliding-lid-box"]
+        for template in TemplateCatalog.all where (!["electronics", "enclosures"].contains(template.category.rawValue) || originalBoxesAndBoards.contains(template.id))
+            && !original.contains(template.id) {
             let notes = template.notes(template.defaults)
             XCTAssertFalse(notes.measurements.isEmpty, template.id)
             XCTAssertNotNil(notes.printing, template.id)
@@ -137,7 +140,16 @@ final class TemplateTests: XCTestCase {
         "gridfinity.adapter-base": ["columns=1.0", "rows=1.0", "holeColumns=4.0", "holeRows=1.0", "holeRows=4.0", "columnPitch=5.0", "columnPitch=150.0",
                                     "rowPitch=5.0", "rowPitch=150.0"],
         "desk.stylus-rest": ["troughDepth=8.0"],
-        "desk.card-holder": ["cardHeight=25.0", "back=70.0"]
+        "desk.card-holder": ["cardHeight=25.0", "back=70.0"],
+        "electronics.prototype-tray": ["width=80.0", "columns=3.0", "rows=3.0", "boardWidth=120.0", "boardDepth=100.0", "holeInset=2.0", "columnPitch=25.0",
+                                       "columnPitch=150.0", "standoffDiameter=12.0", "fixing=1.0"],
+        "workshop.screwdriver-rack": ["handle=8.0", "handle=45.0", "pitch=10.0", "railDepth=20.0"],
+        "workshop.paint-rack": ["pocketDepth=20.0", "front=8.0"],
+        "signs.nameplate": ["faceHeight=20.0"],
+        "signs.mounting-sign": ["width=40.0", "height=20.0", "inset=4.0", "inset=25.0", "letterHeight=40.0", "margin=12.0", "font=4.0", "font=5.0", "font=7.0"],
+        "signs.key-tag": ["width=30.0", "height=15.0", "inset=4.0", "letterHeight=18.0"],
+        "signs.plant-marker": ["width=30.0", "letterHeight=18.0"],
+        "home.draining-tray": ["fit=2.0", "gap=15.0", "slotWidth=8.0", "slotPitch=5.0"]
     ]
 
     /// The gallery's pictures show what each template makes now. When this fails, a template was
@@ -291,7 +303,8 @@ final class TemplateTests: XCTestCase {
                 values["board"] = Double(board)
                 let name = template.name(values)
                 XCTAssertFalse(marks.contains { name.hasPrefix($0) }, name)
-                if board < BoardFootprint.catalog.count { XCTAssertTrue(name.contains(" for "), name) }
+                // The prototyping tray takes any board, so its name names no maker's.
+                if board < BoardFootprint.catalog.count, template.parameters.contains(where: { $0.id == "board" }) { XCTAssertTrue(name.contains(" for "), name) }
             }
         }
         XCTAssertEqual(BoardFootprint.piZero.named("Case"), "Case for Raspberry Pi Zero")
@@ -781,6 +794,138 @@ final class TemplateTests: XCTestCase {
         let pockets = [1.5, 2, 2.5, 3, 4, 5, 6, 8].reduce(0) { $0 + 3.squareRoot() / 2 * ($1 + 0.4) * ($1 + 0.4) }
         XCTAssertEqual(try area(holder, at: 3) - (try area(holder, at: 10)), pockets, accuracy: 0.05)
         XCTAssertEqual(holder.bounds.max.z, 19, accuracy: 1e-6)
+    }
+
+    // MARK: Second expansion: text and signs
+
+    private func text(_ id: String, _ text: String, _ changes: [String: Double] = [:]) throws -> Workspace {
+        let template = try XCTUnwrap(TemplateCatalog.template(id))
+        var values = template.defaults
+        values.texts["text"] = text
+        for (key, value) in changes { values[key] = value }
+        return try template.workspace(values)
+    }
+
+    private func refusal(_ id: String, _ value: String, _ changes: [String: Double] = [:], file: StaticString = #filePath, line: UInt = #line) -> String? {
+        do { let workspace = try text(id, value, changes); _ = try build(workspace, id); return nil } catch let error as TemplateError {
+            guard case .tooSmall(let message) = error else { XCTFail("\(error)", file: file, line: line); return nil }
+            return message
+        } catch { XCTFail("\(error)", file: file, line: line); return nil }
+    }
+
+    func testTemplateTextIsKeptAsTypedAndRefusedWhenItCantBeUsed() throws {
+        let template = try XCTUnwrap(TemplateCatalog.template("signs.key-tag"))
+        XCTAssertEqual(template.defaults.text("text"), "Keys")
+        var values = template.defaults
+        values.texts["text"] = "  Shed 2"
+        XCTAssertEqual(template.clamped(values).text("text"), "  Shed 2", "spaces are kept")
+        XCTAssertTrue(TemplateCatalog.template("parts.knob")!.defaults.texts.isEmpty)
+        XCTAssertEqual(template.name(template.clamped(values)), "Key Tag   Shed 2")
+        XCTAssertNotNil(refusal("signs.key-tag", "   "))
+        XCTAssertNotNil(refusal("signs.key-tag", "Two\nlines"))
+        XCTAssertNotNil(refusal("signs.key-tag", "Tab\there"))
+        XCTAssertEqual(refusal("signs.key-tag", String(repeating: "W", count: 19)), "The text is 19 characters long; it can be at most 18.")
+        XCTAssertTrue(refusal("signs.key-tag", "Ab🌿")?.contains("🌿") == true, "a character the font can't draw is named")
+        XCTAssertTrue(refusal("signs.key-tag", "WWWWWWWWWWWW")?.hasPrefix("The text is") == true, "text too wide for the tag")
+        // Accents, descenders, and a combining mark fit and build.
+        for word in ["Café", "Jüpg", "Cafe\u{301}"] { XCTAssertNil(refusal("signs.key-tag", word), word) }
+    }
+
+    func testRaisedAndRecessedLettersJoinTheirPart() throws {
+        let plain = 60.0 * 25 - (4 - .pi) * 16, ring = Double.pi * 2.5 * 2.5
+        let raised = try XCTUnwrap(try build(try text("signs.key-tag", "Keys"), "raised").first)
+        let recessed = try XCTUnwrap(try build(try text("signs.key-tag", "Keys", ["relief": 1]), "recessed").first)
+        XCTAssertGreaterThan(raised.volume, (plain - ring) * 3 + 1)
+        XCTAssertLessThan(recessed.volume, (plain - ring) * 3 - 1)
+        XCTAssertEqual(raised.bounds.max.z, 3.6, accuracy: 1e-6)
+        // Fonts that kern letters into each other ("Al" in Georgia and American Typewriter) still make one solid.
+        for font in [7.0, 8] {
+            for relief in [0.0, 1] { try build(try text("signs.nameplate", "Alex", ["font": font, "relief": relief]), "kerned \(font)") }
+        }
+    }
+
+    func testSignTextIsCenteredInItsRoom() throws {
+        let workspace = try text("signs.mounting-sign", "Workshop")
+        let sign = try XCTUnwrap(try build(workspace, "sign").first)
+        let spec = try XCTUnwrap(workspace.bodies[0].cuts.compactMap(\.text).first)
+        let points = spec.loops.flatMap { [$0.start] + $0.segments.flatMap(\.points) }
+        XCTAssertEqual((points.map(\.x).min()! + points.map(\.x).max()!) / 2, 0, accuracy: 1e-6)
+        XCTAssertEqual((points.map(\.y).min()! + points.map(\.y).max()!) / 2, 0, accuracy: 1e-6)
+        for x in [-52.0, 52] { XCTAssertFalse(sign.contains(SIMD3(x, 0, 1.5))) }
+        XCTAssertTrue(refusal("signs.mounting-sign", "Hi", ["radius": 15, "height": 25])?.contains("corner radius") == true)
+        XCTAssertNil(refusal("signs.mounting-sign", "Hi", ["mounting": 0, "width": 40]))
+    }
+
+    func testNameplateFaceSlopesAtItsAngle() throws {
+        let workspace = try text("signs.nameplate", "Alex")
+        let plate = try XCTUnwrap(try build(workspace, "nameplate").first)
+        XCTAssertEqual(plate.bounds.max.z, 3 + 35 * sin(.pi / 3), accuracy: 1e-6)
+        let cut = try XCTUnwrap(workspace.bodies[0].cuts.first { $0.text != nil })
+        let normal = cut.profile.plane.normalAxis
+        XCTAssertEqual(acos(normal.z) * 180 / .pi, 60, accuracy: 1e-6, "the face is 60° from the desk, so its normal is 60° from upright")
+        XCTAssertLessThan(normal.y, 0, "facing the front")
+        XCTAssertTrue(refusal("signs.nameplate", "Alex", ["angle": 45, "faceHeight": 60])?.contains("base") == true)
+    }
+
+    func testKeyTagAndPlantMarker() throws {
+        let tag = try XCTUnwrap(try build(try text("signs.key-tag", "Keys"), "tag").first)
+        XCTAssertFalse(tag.contains(SIMD3(-23, 0, 1.5)), "the ring hole")
+        XCTAssertNotNil(refusal("signs.key-tag", "Keys", ["inset": 4]))
+        let marker = try XCTUnwrap(try build(try text("signs.plant-marker", "Basil"), "marker").first)
+        XCTAssertEqual(marker.bounds.max.y - marker.bounds.min.y, 125, accuracy: 1e-6)
+        XCTAssertTrue(marker.contains(SIMD3(5.5, -12.5 - 50, 1)))
+        XCTAssertFalse(marker.contains(SIMD3(6.5, -12.5 - 50, 1)), "a 12 mm spike")
+        XCTAssertNotNil(refusal("signs.plant-marker", "Basil", ["tip": 40, "spike": 40]))
+    }
+
+    // MARK: Second expansion: racks, trays
+
+    func testScrewdriverRackHolesAndMounting() throws {
+        let rack = try XCTUnwrap(try build(try workspace("workshop.screwdriver-rack"), "rack").first)
+        let rail = SIMD3(0.0, 4, 0)
+        for index in 0..<6 { XCTAssertFalse(rack.contains(SIMD3((Double(index) - 2.5) * 26, rail.y, 15)), "shaft hole \(index)") }
+        XCTAssertTrue(rack.contains(SIMD3(0, 4, 15)), "rail between holes")
+        XCTAssertEqual(rack.bounds.max.x - rack.bounds.min.x, 5 * 26 + 20 + 2 * 12.5, accuracy: 1e-6)
+        for x in [-(87.5 - 6.25), 87.5 - 6.25] { XCTAssertFalse(rack.contains(SIMD3(x, 19, 2))) }
+    }
+
+    func testPaintRackSteps() throws {
+        let rack = try XCTUnwrap(try build(try workspace("workshop.paint-rack"), "paint").first)
+        XCTAssertEqual(rack.bounds.max.z, 32, accuracy: 1e-6)
+        let front = try area(rack, at: 9), back = try area(rack, at: 25)
+        XCTAssertEqual(front - (try area(rack, at: 2)), -4 * .pi * 13.2 * 13.2, accuracy: 0.05)
+        XCTAssertEqual(back, (30.4 + 3) * 120.6 - 4 * .pi * 13.2 * 13.2, accuracy: 0.05)
+    }
+
+    func testPrototypeTrayStandoffsKeepAMillimeterUnderTheirBores() throws {
+        let workspace = try workspace("electronics.prototype-tray")
+        let tray = try XCTUnwrap(try build(workspace, "tray").first)
+        let bores = workspace.bodies[0].cuts.filter { $0.hole != nil }
+        XCTAssertEqual(bores.count, 8)
+        XCTAssertTrue(bores.allSatisfy { $0.depth == 5 })
+        // Board centers ±40, holes 3.5 in from a 70 × 45 board's corners.
+        XCTAssertFalse(tray.contains(SIMD3(-40 - 31.5, -19, 8)))
+        XCTAssertTrue(tray.contains(SIMD3(-40 - 31.5, -19, 3.5)))
+        XCTAssertNotNil(refusalOfNumbers("electronics.prototype-tray", ["fixing": 1]))
+        try build(try self.workspace("electronics.prototype-tray", ["fixing": 1, "standoff": 8]), "inserts")
+    }
+
+    private func refusalOfNumbers(_ id: String, _ changes: [String: Double]) -> String? {
+        do { _ = try build(try workspace(id, changes), id); return nil } catch { return error.localizedDescription }
+    }
+
+    func testDrainingTrayInsertRestsOnTheLedges() throws {
+        let workspace = try workspace("home.draining-tray")
+        let solids = try build(workspace, "draining")
+        XCTAssertEqual(workspace.bodies.map(\.name), ["Catch Tray", "Slotted Insert"])
+        let insert = solids[1].bounds
+        XCTAssertEqual(insert.max.x - insert.min.x, 140 - 0.4, accuracy: 1e-6)
+        XCTAssertEqual(insert.max.y - insert.min.y, 90 - 0.4, accuracy: 1e-6)
+        // An unbroken floor, the ledges up to the gap, and room above for the insert under the rim.
+        XCTAssertEqual(try area(solids[0], at: 1), roundedSquareArea(144.8, 94.8, radius: 4), accuracy: 0.05)
+        XCTAssertTrue(solids[0].contains(SIMD3(-70 + 1.5, 0, 2.4 + 5)))
+        XCTAssertFalse(solids[0].contains(SIMD3(-70 + 1.5, 0, 2.4 + 7)))
+        XCTAssertGreaterThan(workspace.bodies[1].cuts.count, 10)
     }
 }
 

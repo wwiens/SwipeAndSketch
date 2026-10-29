@@ -199,6 +199,25 @@ extension SolidKernel {
     }
 
     static func applyText(_ operation: ExtrusionCut, to solid: KernelSolid) throws -> KernelSolid {
+        do {
+            return try applyLetters(operation, to: solid)
+        } catch {
+            // Letters a font kerns into each other (Georgia's "Al") are separate solids that
+            // overlap, which one boolean can't take: apply them a letter at a time instead.
+            guard let spec = operation.text else { throw error }
+            let glyphs = Array(Set(spec.loops.map(\.glyph))).sorted()
+            guard glyphs.count > 1 else { throw error }
+            var result = solid
+            for glyph in glyphs {
+                var letter = operation
+                letter.text?.loops = spec.loops.filter { $0.glyph == glyph }
+                result = try applyLetters(letter, to: result)
+            }
+            return result
+        }
+    }
+
+    private static func applyLetters(_ operation: ExtrusionCut, to solid: KernelSolid) throws -> KernelSolid {
         let tool = try textTool(for: operation)
         if operation.depth > 0 {
             let result = try boolean(solid, tool, .union)

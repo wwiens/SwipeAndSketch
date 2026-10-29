@@ -213,6 +213,9 @@ struct TemplateSetup: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     Text(template.summary).font(.system(size: 15)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
+                    ForEach(template.textParameters.filter { $0.isShown(values) }) { parameter in
+                        TextParameterRow(parameter: parameter, text: Binding(get: { values.text(parameter.id) }, set: { values.texts[parameter.id] = $0 }))
+                    }
                     ForEach(template.parameters.filter { $0.isShown(values) }) { parameter in
                         ParameterRow(parameter: parameter, value: binding(parameter), unit: unit)
                     }
@@ -327,6 +330,35 @@ private struct TemplateNotesView: View {
         }
         if let text = measurement.text { words.append(text) }
         return words.joined(separator: " ")
+    }
+}
+
+/// A line of text a template is set up with, such as a sign's words (October 28, 2026). It is kept
+/// exactly as typed; the preview says why when it can't be used (blank, too long, or a character
+/// the font can't draw).
+private struct TextParameterRow: View {
+    let parameter: TemplateTextParameter
+    @Binding var text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(parameter.title).font(.system(size: 16)).foregroundStyle(ink)
+                Spacer()
+                Text("\(text.count)/\(parameter.maxLength)").font(.system(size: 13).monospacedDigit())
+                    .foregroundStyle(text.count > parameter.maxLength ? coral : muted)
+            }
+            TextField(parameter.defaultText, text: $text)
+                .font(.system(size: 17, weight: .medium)).foregroundStyle(ink)
+                .submitLabel(.done)
+                .padding(.horizontal, 12).padding(.vertical, 10)
+                .background(canvas, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(hairline))
+                .accessibilityIdentifier("templates.text.\(parameter.id)")
+            if let note = parameter.note {
+                Text(note).font(.system(size: 12)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 
