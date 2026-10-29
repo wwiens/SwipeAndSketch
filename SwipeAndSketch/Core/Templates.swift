@@ -85,12 +85,13 @@ struct ProjectTemplate: Identifiable, Sendable {
     enum Category: String, CaseIterable, Sendable {
         case gridfinity, electronics, enclosures
         // The library's first expansion (October 28, 2026).
-        case parts, tests
+        case organizers, parts, tests
         var title: String {
             switch self {
             case .gridfinity: "Gridfinity"
             case .electronics: "Electronics"
             case .enclosures: "Boxes & Enclosures"
+            case .organizers: "Drawer & Storage Organizers"
             case .parts: "Replacement Parts"
             case .tests: "Fit & Print Tests"
             }
@@ -100,6 +101,7 @@ struct ProjectTemplate: Identifiable, Sendable {
             case .gridfinity: "Modular storage on a 42 mm grid: baseplates and the bins that click into them."
             case .electronics: "Mounting plates and cases sized to the holes of common boards."
             case .enclosures: "Boxes sized by their inside, with lids that screw on or slip on."
+            case .organizers: "Trays, bins, and dividers sized to the drawer you measure."
             case .parts: "Knobs, handles, plugs, and spacers made to the measurements of the part you're replacing."
             case .tests: "Small prints that find the clearances and hole sizes your printer and material need."
             }
@@ -202,8 +204,8 @@ enum TemplateCatalog {
     /// Every template, in gallery order. Computed, so templates that start from an app preference
     /// (the Fit clearance) read its current value.
     static var all: [ProjectTemplate] {
-        Gridfinity.templates + BoardTemplates.templates + BoxTemplates.templates + PartTemplates.templates +
-            PrintTestTemplates.templates
+        Gridfinity.templates + BoardTemplates.templates + BoxTemplates.templates + OrganizerTemplates.templates +
+            PartTemplates.templates + PrintTestTemplates.templates
     }
 
     static func template(_ id: String) -> ProjectTemplate? { all.first { $0.id == id } }

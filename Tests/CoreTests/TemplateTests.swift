@@ -105,6 +105,7 @@ final class TemplateTests: XCTestCase {
         "parts.knob": ["height=8.0", "shaftSize=20.0", "flat=3.0", "boreDepth=35.0"],
         "parts.handle": ["centers=40.0", "gripWidth=160.0", "sectionWidth=8.0", "sectionThickness=16.0", "hole=8.0"],
         "parts.spacers": ["outside=5.0", "bore=20.0"],
+        "organizers.pocket-insert": ["width=40.0", "depth=30.0", "height=6.0", "object=60.0", "pocketDepth=50.0", "columns=12.0", "rows=8.0"],
     ]
 
     /// The gallery's pictures show what each template makes now. When this fails, a template was
@@ -484,6 +485,65 @@ final class TemplateTests: XCTestCase {
         assertRefused("parts.handle", ["centers": 80])
     }
 
+    // MARK: Drawer & Storage Organizers
+
+    func testFittedTrayLeavesTheClearanceAndEqualCompartments() throws {
+        let tray = try XCTUnwrap(try build(try workspace("organizers.fitted-tray"), "tray").first)
+        let b = tray.bounds
+        XCTAssertEqual(b.max.x - b.min.x, 199, accuracy: 1e-6)
+        XCTAssertEqual(b.max.y - b.min.y, 149, accuracy: 1e-6)
+        XCTAssertEqual(b.max.z, 38, accuracy: 1e-6)
+        let outline = roundedSquareArea(199, 149, radius: 3)
+        XCTAssertEqual(try area(tray, at: 0.5), outline, accuracy: 0.05)
+        let cell = roundedSquareArea((199 - 4 * 1.6) / 3, (149 - 3 * 1.6) / 2, radius: 1)
+        XCTAssertEqual(try area(tray, at: 20), outline - 6 * cell, accuracy: 0.05)
+        // More compartments keep the outside.
+        let more = try XCTUnwrap(try build(try workspace("organizers.fitted-tray", ["columns": 5, "rows": 4]), "tray 5 × 4").first)
+        XCTAssertEqual(more.bounds.max.x - more.bounds.min.x, 199, accuracy: 1e-6)
+        assertRefused("organizers.fitted-tray", ["width": 50, "columns": 8])
+    }
+
+    func testBinSetFillsTheDrawerWithSeparateBins() throws {
+        let workspace = try workspace("organizers.bin-set")
+        let solids = try build(workspace, "bins")
+        XCTAssertEqual(workspace.bodies.map(\.name), ["Bin A1", "Bin A2", "Bin A3", "Bin B1", "Bin B2", "Bin B3"])
+        let low = SIMD3(solids.map(\.bounds.min.x).min()!, solids.map(\.bounds.min.y).min()!, 0)
+        let high = SIMD3(solids.map(\.bounds.max.x).max()!, solids.map(\.bounds.max.y).max()!, solids.map(\.bounds.max.z).max()!)
+        XCTAssertEqual(high.x - low.x, 199, accuracy: 1e-6)
+        XCTAssertEqual(high.y - low.y, 149, accuracy: 1e-6)
+        XCTAssertEqual(high.z, 38, accuracy: 1e-6)
+        // Neighbors 1 mm apart.
+        XCTAssertEqual(solids[1].bounds.min.x - solids[0].bounds.max.x, 1, accuracy: 1e-6)
+        XCTAssertEqual(solids[3].bounds.min.y - solids[0].bounds.max.y, 1, accuracy: 1e-6)
+    }
+
+    func testDividerSlotsInterlockWithTheJointClearance() throws {
+        let template = try XCTUnwrap(TemplateCatalog.template("organizers.dividers"))
+        let workspace = try template.workspace(template.defaults)
+        let solids = try build(workspace, "dividers")
+        XCTAssertEqual(solids.count, 3)
+        let dividers = OrganizerTemplates.Dividers(template.defaults)
+        XCTAssertEqual(dividers.slotWidth, 2.4, accuracy: 1e-9)
+        // The two halves of each crossing leave the joint clearance between them.
+        XCTAssertEqual(2 * dividers.slotDepth - 30, 0.2, accuracy: 1e-9)
+        XCTAssertEqual(solids[0].volume, 199 * 30 * 2 - 1 * 2.4 * 15.1 * 2, accuracy: 0.01)
+        XCTAssertEqual(solids[2].volume, 149 * 30 * 2 - 2 * 2.4 * 15.1 * 2, accuracy: 0.01)
+        // Side-to-side strips are slotted from the top, front-to-back ones from the bottom.
+        XCTAssertFalse(solids[0].contains(SIMD3(0, 29, 1)))
+        XCTAssertTrue(solids[0].contains(SIMD3(0, 1, 1)))
+        let strip = solids[2].bounds.min.y
+        XCTAssertFalse(solids[2].contains(SIMD3(-149 / 2 + 149.0 / 3, strip + 1, 1)))
+        assertRefused("organizers.dividers", ["across": 0, "along": 0])
+    }
+
+    func testPocketInsertSpreadsItsPocketsEvenly() throws {
+        let insert = try XCTUnwrap(try build(try workspace("organizers.pocket-insert"), "insert").first)
+        let outline = roundedSquareArea(150, 100, radius: 3)
+        XCTAssertEqual(insert.volume, outline * 18 - 15 * .pi * 6.2 * 6.2 * 14, accuracy: 0.5)
+        XCTAssertNotNil(insert.face(near: SIMD3(-60 + 6.2, -100.0 / 3, 10)))
+        let one = try XCTUnwrap(try build(try workspace("organizers.pocket-insert", ["columns": 1, "rows": 1]), "one pocket").first)
+        XCTAssertNotNil(one.face(near: SIMD3(6.2, 0, 10)), "a single pocket is centered")
+    }
 
 
 
