@@ -49,6 +49,7 @@ final class ImportedShapes: @unchecked Sendable {
     static let shared = ImportedShapes()
     private let lock = NSRecursiveLock()
     private var data: [UUID: Data] = [:]
+    private var names: [UUID: String] = [:]
     private var solids: [UUID: KernelSolid] = [:]
     private var edges: [UUID: [EdgeSamples]] = [:]
     private var grids: [UUID: EdgeGrid] = [:]
@@ -104,6 +105,28 @@ final class ImportedShapes: @unchecked Sendable {
             data[shape.id] = shape.data
             solids[shape.id] = nil; edges[shape.id] = nil; grids[shape.id] = nil
         }
+        for shape in shapes { names[shape.id] = shape.name }
+    }
+
+    /// Registers shapes whose solids are already built (a template's openGrid board), so they
+    /// need not be read back from their bytes.
+    func register(_ shapes: [ImportedShape], solids built: [UUID: KernelSolid]) {
+        lock.lock(); defer { lock.unlock() }
+        register(shapes)
+        for (id, solid) in built where data[id] != nil && solids[id] == nil { solids[id] = solid }
+    }
+
+    /// The registered shape with this id, with its name, for reuse; nil when unknown.
+    func storedShape(_ id: UUID) -> ImportedShape? {
+        lock.lock(); defer { lock.unlock() }
+        guard let bytes = data[id] else { return nil }
+        return ImportedShape(id: id, name: names[id] ?? "Imported solid", data: bytes)
+    }
+
+    /// The shape's solid, registering it first.
+    func solid(registering shape: ImportedShape) throws -> KernelSolid {
+        register([shape])
+        return try solid(shape.id)
     }
 
     func contains(_ id: UUID) -> Bool {

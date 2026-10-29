@@ -1,6 +1,6 @@
 # Swipe & Sketch
 
-Swipe & Sketch is an iPad CAD app for designing 3D-printable parts with Apple Pencil. You sketch lines, rectangles, circles, arcs, slots, ellipses, polygons, and splines on a plane or a face, dimension them, and turn them into solids with extrude, revolve, loft, sweep, fillet, chamfer, shell, holes, threads, and boolean tools, or start from a template (Gridfinity, electronics mounts and cases, enclosures) or an imported STEP, STL, or 3MF file. Then you export 3MF or STL, or send the model straight to your slicer. Solids are built by the [Open CASCADE Technology](https://dev.opencascade.org) modeling kernel. An optional AI assistant, running on Apple Foundation Models, can answer questions about a model and change it.
+Swipe & Sketch is an iPad CAD app for designing 3D-printable parts with Apple Pencil. You sketch lines, rectangles, circles, arcs, slots, ellipses, polygons, and splines on a plane or a face, dimension them, and turn them into solids with extrude, revolve, loft, sweep, fillet, chamfer, shell, holes, threads, and boolean tools, or start from a template (Gridfinity, openGrid, electronics mounts and cases, enclosures) or an imported STEP, STL, or 3MF file. Then you export 3MF or STL, or send the model straight to your slicer. Solids are built by the [Open CASCADE Technology](https://dev.opencascade.org) modeling kernel. An optional AI assistant, running on Apple Foundation Models, can answer questions about a model and change it.
 
 ![A shaded solid in Swipe & Sketch](Docs/ShadedSolid.png)
 

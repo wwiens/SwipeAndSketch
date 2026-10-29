@@ -28,6 +28,9 @@
 		AF745B24C4459DA5EF65ECE8 /* SwipeAndSketch/Core/TemplatesGridfinity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 984D1A095D013A9113E4FFD8 /* SwipeAndSketch/Core/TemplatesGridfinity.swift */; };
 		D44C808239C9C6941328760B /* SwipeAndSketch/Core/TemplatesBoards.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8C23EC73BEDB0781C2E40B5 /* SwipeAndSketch/Core/TemplatesBoards.swift */; };
 		D8985BD8C18FD25DC92C31A7 /* SwipeAndSketch/Core/TemplatesBoxes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A7BC91FFF07B9D1CE003615 /* SwipeAndSketch/Core/TemplatesBoxes.swift */; };
+		7499F543C5C395654F08CF26 /* SwipeAndSketch/Core/OpenGridGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 777A4D4D65EA0AED60968409 /* SwipeAndSketch/Core/OpenGridGeometry.swift */; };
+		B8A33882B9003C1319BD3ABF /* SwipeAndSketch/Core/OpenGridPartData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34126EA4EF0FAD4F089311AE /* SwipeAndSketch/Core/OpenGridPartData.swift */; };
+		3C0468879D175FA2AF58442D /* SwipeAndSketch/Core/TemplatesOpenGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878E4A49F4C005035C96682A /* SwipeAndSketch/Core/TemplatesOpenGrid.swift */; };
 		F9EBD2EC05CA01DF3D0C3A7E /* SwipeAndSketch/Core/TemplatesSigns.swift in Sources */ = {isa = PBXBuildFile; fileRef = C53B67C16105086C7072ABDB /* SwipeAndSketch/Core/TemplatesSigns.swift */; };
 		3F32FCD30108037651C2C5CB /* SwipeAndSketch/Core/TemplatesHome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EA2C75FF1433ACC8DFBAFB4 /* SwipeAndSketch/Core/TemplatesHome.swift */; };
 		CB61CB5BBEB811ED3615710B /* SwipeAndSketch/Core/TemplatesDesk.swift in Sources */ = {isa = PBXBuildFile; fileRef = E84DB15CFE35F9EC60A3B2B2 /* SwipeAndSketch/Core/TemplatesDesk.swift */; };
@@ -189,6 +192,9 @@
 		984D1A095D013A9113E4FFD8 /* SwipeAndSketch/Core/TemplatesGridfinity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesGridfinity.swift; sourceTree = SOURCE_ROOT; };
 		C8C23EC73BEDB0781C2E40B5 /* SwipeAndSketch/Core/TemplatesBoards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesBoards.swift; sourceTree = SOURCE_ROOT; };
 		6A7BC91FFF07B9D1CE003615 /* SwipeAndSketch/Core/TemplatesBoxes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesBoxes.swift; sourceTree = SOURCE_ROOT; };
+		777A4D4D65EA0AED60968409 /* SwipeAndSketch/Core/OpenGridGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/OpenGridGeometry.swift; sourceTree = SOURCE_ROOT; };
+		34126EA4EF0FAD4F089311AE /* SwipeAndSketch/Core/OpenGridPartData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/OpenGridPartData.swift; sourceTree = SOURCE_ROOT; };
+		878E4A49F4C005035C96682A /* SwipeAndSketch/Core/TemplatesOpenGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesOpenGrid.swift; sourceTree = SOURCE_ROOT; };
 		C53B67C16105086C7072ABDB /* SwipeAndSketch/Core/TemplatesSigns.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesSigns.swift; sourceTree = SOURCE_ROOT; };
 		1EA2C75FF1433ACC8DFBAFB4 /* SwipeAndSketch/Core/TemplatesHome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesHome.swift; sourceTree = SOURCE_ROOT; };
 		E84DB15CFE35F9EC60A3B2B2 /* SwipeAndSketch/Core/TemplatesDesk.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesDesk.swift; sourceTree = SOURCE_ROOT; };
@@ -383,6 +389,9 @@
 				984D1A095D013A9113E4FFD8 /* SwipeAndSketch/Core/TemplatesGridfinity.swift */,
 				C8C23EC73BEDB0781C2E40B5 /* SwipeAndSketch/Core/TemplatesBoards.swift */,
 				6A7BC91FFF07B9D1CE003615 /* SwipeAndSketch/Core/TemplatesBoxes.swift */,
+				777A4D4D65EA0AED60968409 /* SwipeAndSketch/Core/OpenGridGeometry.swift */,
+				34126EA4EF0FAD4F089311AE /* SwipeAndSketch/Core/OpenGridPartData.swift */,
+				878E4A49F4C005035C96682A /* SwipeAndSketch/Core/TemplatesOpenGrid.swift */,
 				C53B67C16105086C7072ABDB /* SwipeAndSketch/Core/TemplatesSigns.swift */,
 				1EA2C75FF1433ACC8DFBAFB4 /* SwipeAndSketch/Core/TemplatesHome.swift */,
 				E84DB15CFE35F9EC60A3B2B2 /* SwipeAndSketch/Core/TemplatesDesk.swift */,
@@ -752,6 +761,9 @@
 				AF745B24C4459DA5EF65ECE8 /* SwipeAndSketch/Core/TemplatesGridfinity.swift in Sources */,
 				D44C808239C9C6941328760B /* SwipeAndSketch/Core/TemplatesBoards.swift in Sources */,
 				D8985BD8C18FD25DC92C31A7 /* SwipeAndSketch/Core/TemplatesBoxes.swift in Sources */,
+				7499F543C5C395654F08CF26 /* SwipeAndSketch/Core/OpenGridGeometry.swift in Sources */,
+				B8A33882B9003C1319BD3ABF /* SwipeAndSketch/Core/OpenGridPartData.swift in Sources */,
+				3C0468879D175FA2AF58442D /* SwipeAndSketch/Core/TemplatesOpenGrid.swift in Sources */,
 				F9EBD2EC05CA01DF3D0C3A7E /* SwipeAndSketch/Core/TemplatesSigns.swift in Sources */,
 				3F32FCD30108037651C2C5CB /* SwipeAndSketch/Core/TemplatesHome.swift in Sources */,
 				CB61CB5BBEB811ED3615710B /* SwipeAndSketch/Core/TemplatesDesk.swift in Sources */,

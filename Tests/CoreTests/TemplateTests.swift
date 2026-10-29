@@ -40,12 +40,15 @@ final class TemplateTests: XCTestCase {
     }
 
     /// The plain Gridfinity Baseplate and Bin are free, and carry none of the Pro pair's magnet or
-    /// divider options; so are the Spacer Set and the Fit & Print Tests (October 28, 2026).
+    /// divider options; so are the Spacer Set and the Fit & Print Tests (October 28, 2026), and the
+    /// openGrid templates that carry its own CC BY parts (October 29, 2026).
     func testOnlyTheStarterTemplatesAreFree() throws {
         let free = TemplateCatalog.all.filter { !$0.needsPro }
         XCTAssertEqual(Set(free.map(\.id)), ["gridfinity.baseplate", "gridfinity.bin", "parts.spacers",
                                              "tests.peg-fit", "tests.slide-fit", "tests.hole-ladder", "tests.insert-block",
-                                             "gridfinity.label-bin", "desk.stylus-rest", "signs.key-tag"])
+                                             "gridfinity.label-bin", "desk.stylus-rest", "signs.key-tag",
+                                             "opengrid.board", "opengrid.connector-pegs", "opengrid.mounting-snaps", "opengrid.screw-snaps",
+                                             "opengrid.fit-test"])
         for template in free where template.category == .gridfinity {
             XCTAssertTrue(Set(template.parameters.map(\.id)).isDisjoint(with: ["magnets", "dividersX", "dividersY"]), template.id)
         }
@@ -55,15 +58,15 @@ final class TemplateTests: XCTestCase {
         XCTAssertEqual(Set(divided.parameters.map(\.id)), ["columns", "rows", "height", "dividersX", "dividersY", "lip", "magnets"])
     }
 
-    /// The library's expansions (October 28, 2026): 54 templates in twelve categories.
+    /// The library's expansions (October 28, 2026) and openGrid (October 29): 67 templates in thirteen categories.
     func testTheLibraryHasItsCategories() {
-        XCTAssertEqual(TemplateCatalog.all.count, 54)
+        XCTAssertEqual(TemplateCatalog.all.count, 67)
         XCTAssertEqual(ProjectTemplate.Category.allCases.map(\.title),
-                       ["Gridfinity", "Electronics", "Boxes & Enclosures", "Drawer & Storage Organizers", "Brackets & Mounts",
+                       ["Gridfinity", "openGrid", "Electronics", "Boxes & Enclosures", "Drawer & Storage Organizers", "Brackets & Mounts",
                         "Cable Management", "Replacement Parts", "Fit & Print Tests", "Desk & Device Stands", "Workshop & Jigs",
                         "Signs & Labels", "Home & Garden"])
         let counts = Dictionary(grouping: TemplateCatalog.all, by: \.category).mapValues(\.count)
-        XCTAssertEqual(counts, [.gridfinity: 8, .electronics: 8, .enclosures: 4, .organizers: 4, .mounts: 4, .cables: 4, .parts: 4,
+        XCTAssertEqual(counts, [.gridfinity: 8, .opengrid: 13, .electronics: 8, .enclosures: 4, .organizers: 4, .mounts: 4, .cables: 4, .parts: 4,
                                 .tests: 4, .desk: 4, .workshop: 4, .signs: 4, .home: 2])
         // Each new template lists what decides its fit and how it prints.
         let original: Set = ["gridfinity.baseplate", "gridfinity.magnet-baseplate", "gridfinity.bin", "gridfinity.divided-bin"]
@@ -152,7 +155,13 @@ final class TemplateTests: XCTestCase {
         "home.draining-tray": ["fit=2.0", "gap=15.0", "slotWidth=8.0", "slotPitch=5.0"],
         "enclosures.sliding-lid-box": ["wall=2.0", "engagement=2.0", "fit=2.0"],
         "workshop.drilling-jig": ["spacing=8.0", "offset=5.0", "thickness=8.0", "drill=12.0", "bushingOutside=3.0", "bushingOutside=20.0", "bushingLength=25.0"],
-        "home.planter": ["diameter=35.0"]
+        "home.planter": ["diameter=35.0"],
+        "opengrid.mounting-plate": ["rows=1.0"],
+        "opengrid.hook": ["projection=15.0"],
+        "opengrid.shelf": ["lip=20.0"],
+        "opengrid.bin": ["height=30.0", "front=100.0"],
+        "opengrid.tool-rack": ["handle=8.0", "handle=45.0", "pitch=12.0"],
+        "opengrid.gridfinity-shelf": ["lip=15.0"]
     ]
 
     /// The gallery's pictures show what each template makes now. When this fails, a template was

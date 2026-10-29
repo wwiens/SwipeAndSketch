@@ -102,12 +102,18 @@ struct TemplateNotes: Sendable {
 struct TemplatePart: Sendable {
     var name: String
     var body: SolidBody
+    /// The exact shape an imported-shape body is built from (openGrid boards and parts), stored once
+    /// in the project however many bodies share it. Nil for bodies built from extrusions.
+    var shape: ImportedShape?
 }
 
 /// A starting point in the New Project gallery.
 struct ProjectTemplate: Identifiable, Sendable {
     enum Category: String, CaseIterable, Sendable {
-        case gridfinity, electronics, enclosures
+        case gridfinity
+        // openGrid (October 29, 2026), shown after Gridfinity.
+        case opengrid
+        case electronics, enclosures
         // The library's first expansion (October 28, 2026).
         case organizers, mounts, cables, parts, tests
         // The second (October 28, 2026).
@@ -115,6 +121,7 @@ struct ProjectTemplate: Identifiable, Sendable {
         var title: String {
             switch self {
             case .gridfinity: "Gridfinity"
+            case .opengrid: "openGrid"
             case .electronics: "Electronics"
             case .enclosures: "Boxes & Enclosures"
             case .organizers: "Drawer & Storage Organizers"
@@ -131,6 +138,7 @@ struct ProjectTemplate: Identifiable, Sendable {
         var summary: String {
             switch self {
             case .gridfinity: "Modular storage on a 42 mm grid: baseplates and the bins that click into them."
+            case .opengrid: "Boards, mounts, and accessories for a modular wall or under-desk setup."
             case .electronics: "Mounting plates and cases sized to the holes of common boards."
             case .enclosures: "Boxes sized by their inside, with lids that screw on or slip on."
             case .organizers: "Trays, bins, and dividers sized to the drawer you measure."
@@ -148,11 +156,14 @@ struct ProjectTemplate: Identifiable, Sendable {
         var notice: String? {
             switch self {
             case .gridfinity: Self.gridfinityCredit
+            case .opengrid: Self.openGridCredit
             case .electronics: Self.boardTrademarks
             default: nil
             }
         }
         static let gridfinityCredit = "Gridfinity is the open modular storage system created by Zack Freedman (Voidstar Lab) and released under the MIT License. Swipe & Sketch is not affiliated with or endorsed by Zack Freedman or Voidstar Lab."
+        /// openGrid's core files are CC BY 4.0, which asks for the credit, the license, and what was changed.
+        static let openGridCredit = "Based on openGrid by David D (opengrid.world), used under the Creative Commons Attribution 4.0 license (creativecommons.org/licenses/by/4.0). The boards are rebuilt from openGrid's published dimensions; the connectors, mounts, and screw snaps are its official parts from printables.com/model/1214361 and /1217921, laid out for printing. The accessories are Swipe & Sketch's own. Swipe & Sketch is not affiliated with or endorsed by the openGrid creators."
         static let boardTrademarks = "Raspberry Pi is a trademark of Raspberry Pi Ltd. Arduino® is a trademark of Arduino S.r.l. Swipe & Sketch is not affiliated with or endorsed by either."
     }
     var id: String
@@ -164,8 +175,9 @@ struct ProjectTemplate: Identifiable, Sendable {
     var name: @Sendable (TemplateValues) -> String
     var make: @Sendable (TemplateValues) throws -> [TemplatePart]
     /// Making it needs Swipe & Sketch Pro. The plain Gridfinity Baseplate and Bin, the Spacer Set,
-    /// and the Fit & Print Tests are free (user decision, October 28, 2026). A template is free or
-    /// Pro as a whole, never one option inside it.
+    /// and the Fit & Print Tests are free (user decision, October 28, 2026), and so are the openGrid
+    /// templates that carry its CC BY parts (October 29, 2026). A template is free or Pro as a
+    /// whole, never one option inside it.
     var needsPro = true
     /// What setup lists under the controls for these values: the sizes that matter, the hardware,
     /// and how to print it.
@@ -199,6 +211,10 @@ struct ProjectTemplate: Identifiable, Sendable {
         let group = ItemGroup(name: ItemNames.cleaned(name(values)))
         var workspace = Workspace()
         workspace.groups = [group]
+        for shape in parts.compactMap(\.shape) where !workspace.importedShapes.contains(where: { $0.id == shape.id }) {
+            workspace.importedShapes.append(shape)
+        }
+        ImportedShapes.shared.register(workspace.importedShapes)
         for part in parts {
             var body = part.body
             body.name = ItemNames.cleaned(part.name)
@@ -253,7 +269,7 @@ enum TemplateCatalog {
     /// Every template, in gallery order. Computed, so templates that start from an app preference
     /// (the Fit clearance) read its current value.
     static var all: [ProjectTemplate] {
-        Gridfinity.templates + BoardTemplates.templates + BoxTemplates.templates + OrganizerTemplates.templates +
+        Gridfinity.templates + OpenGridTemplates.templates + BoardTemplates.templates + BoxTemplates.templates + OrganizerTemplates.templates +
             MountTemplates.templates + CableTemplates.templates + PartTemplates.templates + PrintTestTemplates.templates +
             DeskTemplates.templates + WorkshopTemplates.templates + SignTemplates.templates + HomeTemplates.templates
     }

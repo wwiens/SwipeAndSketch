@@ -227,7 +227,7 @@ struct TemplateSetup: View {
                     }
                     if needsPro {
                         // Every template sets up and previews for free; making this one needs Pro.
-                        Text("Set it up and preview it for free. Making this template needs Swipe & Sketch Pro; templates without the PRO label, such as the Gridfinity Baseplate, the Key Tag, and the Fit & Print Tests, are free.")
+                        Text("Set it up and preview it for free. Making this template needs Swipe & Sketch Pro; templates without the PRO label, such as the Gridfinity Baseplate, the openGrid Board and snaps, the Key Tag, and the Fit & Print Tests, are free.")
                             .font(.system(size: 13, weight: .medium)).foregroundStyle(violet).fixedSize(horizontal: false, vertical: true)
                     }
                 }

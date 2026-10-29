@@ -223,12 +223,13 @@ struct HomeView: View {
     }
 
     /// The brand's category tints: lime for Gridfinity, coral for electronics, lavender for boxes,
-    /// and the same three in turn for the categories after them.
+    /// and the same three in turn for the categories after them (openGrid, between Gridfinity and
+    /// electronics, takes lavender).
     private static func tint(_ category: ProjectTemplate.Category) -> Color {
         switch category {
         case .gridfinity, .organizers, .parts, .workshop: Color("ss-limeSoft")
         case .electronics, .mounts, .tests, .signs: Color("ss-coralSoft")
-        case .enclosures, .cables, .desk, .home: Color("ss-lavender")
+        case .opengrid, .enclosures, .cables, .desk, .home: Color("ss-lavender")
         }
     }
 

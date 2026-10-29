@@ -15,6 +15,8 @@ struct AboutView: View {
     static let openCascade = URL(string: "https://dev.opencascade.org")
     static let privacy = URL(string: "https://swipesketch.com/privacy/")
     static let support = URL(string: "https://swipesketch.com/support/")
+    static let openGrid = URL(string: "https://www.printables.com/model/1214361-opengrid-walldesk-mounting-framework-and-ecosystem")
+    static let ccBy = URL(string: "https://creativecommons.org/licenses/by/4.0/")
 
     static var version: String {
         let info = Bundle.main.infoDictionary
@@ -67,6 +69,15 @@ struct AboutView: View {
                 }
                 Section("Templates") {
                     Text(ProjectTemplate.Category.gridfinityCredit)
+                    Text(ProjectTemplate.Category.openGridCredit)
+                    if let openGrid = Self.openGrid {
+                        Link(destination: openGrid) { Text("openGrid").foregroundStyle(violet) }
+                            .accessibilityIdentifier("about.opengrid")
+                    }
+                    if let license = Self.ccBy {
+                        Link(destination: license) { Text("Creative Commons Attribution 4.0").foregroundStyle(violet) }
+                            .accessibilityIdentifier("about.ccby")
+                    }
                     Text(ProjectTemplate.Category.boardTrademarks)
                 }
             }
