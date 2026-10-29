@@ -39,12 +39,13 @@ final class TemplateTests: XCTestCase {
         }
     }
 
-    /// Only the plain Gridfinity Baseplate and Bin are free, and they carry none of the
-    /// Pro pair's magnet or divider options.
-    func testOnlyThePlainGridfinityPairIsFree() throws {
+    /// The plain Gridfinity Baseplate and Bin are free, and carry none of the Pro pair's magnet or
+    /// divider options; so are the Spacer Set and the Fit & Print Tests (October 28, 2026).
+    func testOnlyTheStarterTemplatesAreFree() throws {
         let free = TemplateCatalog.all.filter { !$0.needsPro }
-        XCTAssertEqual(Set(free.map(\.id)), ["gridfinity.baseplate", "gridfinity.bin"])
-        for template in free {
+        XCTAssertEqual(Set(free.map(\.id)), ["gridfinity.baseplate", "gridfinity.bin",
+                                             "tests.peg-fit", "tests.slide-fit", "tests.hole-ladder", "tests.insert-block"])
+        for template in free where template.category == .gridfinity {
             XCTAssertTrue(Set(template.parameters.map(\.id)).isDisjoint(with: ["magnets", "dividersX", "dividersY"]), template.id)
         }
         let magnet = try XCTUnwrap(TemplateCatalog.all.first { $0.id == "gridfinity.magnet-baseplate" })
@@ -82,15 +83,26 @@ final class TemplateTests: XCTestCase {
                     // Gridfinity's largest grids are covered by testLargestGridfinityBuildsQuickly.
                     if template.category == .gridfinity, ["columns", "rows"].contains(parameter.id), end > 4 { continue }
                     let label = "\(template.id) \(parameter.id)=\(end)"
-                    do { try build(try template.workspace(values), label) } catch let error as TemplateError {
+                    let conflicts = Self.conflictingEnds[template.id]?.contains("\(parameter.id)=\(end)") == true
+                    do {
+                        try build(try template.workspace(values), label)
+                        XCTAssertFalse(conflicts, "\(label) was expected to be refused")
+                    } catch let error as TemplateError {
                         // Too many dividers for the default bin's size is reported, not built.
                         if case .tooSmall = error, template.category == .gridfinity, parameter.id.hasPrefix("dividers") { continue }
+                        if case .tooSmall = error, conflicts { continue }
                         XCTFail("\(label): \(error.localizedDescription)")
                     }
                 }
             }
         }
     }
+
+    /// Single sizes at their ends that conflict with the other sizes' defaults: setup explains each
+    /// (TemplateError.tooSmall) instead of making something, as the specification asks.
+    private static let conflictingEnds: [String: Set<String>] = [
+        "tests.insert-block": ["insertLength=15.0", "depth=2.0"],
+    ]
 
     /// The gallery's pictures show what each template makes now. When this fails, a template was
     /// added or changed: run Scripts/render_template_pictures.sh to draw its picture again.
@@ -340,6 +352,87 @@ final class TemplateTests: XCTestCase {
         XCTAssertEqual(worldPosts, worldHoles)
         XCTAssertTrue(solids.allSatisfy(\.isValidSolid))
     }
+
+    // MARK: Fit & Print Tests
+
+    private func workspace(_ id: String, _ changes: [String: Double] = [:]) throws -> Workspace {
+        let template = try XCTUnwrap(TemplateCatalog.template(id))
+        var values = template.defaults
+        for (key, value) in changes { values[key] = value }
+        return try template.workspace(values)
+    }
+
+    private func assertRefused(_ id: String, _ changes: [String: Double], file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertThrowsError(try workspace(id, changes), file: file, line: line) { error in
+            guard case .tooSmall = error as? TemplateError else { return XCTFail("\(id): \(error)", file: file, line: line) }
+        }
+    }
+
+    private func holeDiameters(_ body: SolidBody) -> [Double] { body.cuts.compactMap { $0.hole?.diameter } }
+    private func labels(_ body: SolidBody) -> [String] { body.cuts.compactMap { $0.text?.text } }
+
+    func testPegFitTestHolesAreThePegPlusTwiceEachClearance() throws {
+        let workspace = try workspace("tests.peg-fit")
+        let solids = try build(workspace, "peg fit")
+        XCTAssertEqual(workspace.bodies.map(\.name), ["Hole Plate", "Peg"])
+        // The Fit Test's sequence: 0.10 to 0.40 mm a side round a 6 mm peg.
+        XCTAssertEqual(labels(workspace.bodies[0]), ["0.10", "0.15", "0.20", "0.25", "0.30", "0.35", "0.40"])
+        for (diameter, clearance) in zip(holeDiameters(workspace.bodies[0]), FitTest.clearances) { XCTAssertEqual(diameter, 6 + 2 * clearance, accuracy: 1e-9) }
+        XCTAssertEqual(holeDiameters(workspace.bodies[0]).count, 7)
+        // The peg is exactly its diameter, 8 mm tall on a 3 mm tab.
+        XCTAssertEqual(solids[1].bounds.max.z, 11, accuracy: 1e-6)
+        XCTAssertEqual(try area(solids[1], at: 6), .pi * 9, accuracy: 0.05)
+        XCTAssertLessThan(solids[1].bounds.max.y, solids[0].bounds.min.y)
+        // The last clearance stays within Fit's 2 mm.
+        assertRefused("tests.peg-fit", ["start": 1, "increment": 0.2, "samples": 10])
+    }
+
+    func testSlidingFitChannelsAreTheSliderPlusTwiceEachClearance() throws {
+        let workspace = try workspace("tests.slide-fit")
+        let solids = try build(workspace, "slide fit")
+        XCTAssertEqual(workspace.bodies.map(\.name), ["Carrier", "Slider"])
+        let fit = PrintTestTemplates.SlideFit(try XCTUnwrap(TemplateCatalog.template("tests.slide-fit")).defaults)
+        let layout = fit.layout(try fit.clearances.get())
+        XCTAssertEqual(layout.channels.count, 5)
+        for (channel, expected) in zip(layout.channels, [10.2, 10.3, 10.4, 10.5, 10.6]) { XCTAssertEqual(channel, expected, accuracy: 1e-9) }
+        // 2 mm walls between and outside the channels, a 2 mm floor, and 30 mm of engagement in each.
+        XCTAssertEqual(layout.carrierWidth, 52 + 12, accuracy: 1e-9)
+        let depth = 30 + layout.band
+        XCTAssertEqual(try area(solids[0], at: 1), layout.carrierWidth * depth - 4.5, accuracy: 0.05)
+        XCTAssertEqual(try area(solids[0], at: 3.5), layout.carrierWidth * depth - 4.5 - 30 * 52, accuracy: 0.05)
+        XCTAssertEqual(labels(workspace.bodies[0]), ["0.10", "0.15", "0.20", "0.25", "0.30"])
+        XCTAssertEqual(solids[1].bounds.max.y - solids[1].bounds.min.y, 30 + 15, accuracy: 1e-6)
+    }
+
+    func testHoleLadderEngravesWholeDiameters() throws {
+        let workspace = try workspace("tests.hole-ladder")
+        try build(workspace, "ladder")
+        let diameters = holeDiameters(workspace.bodies[0])
+        XCTAssertEqual(diameters.count, 7)
+        XCTAssertEqual(diameters.first ?? 0, 2.9, accuracy: 1e-9)
+        XCTAssertEqual(diameters.last ?? 0, 3.2, accuracy: 1e-9)
+        XCTAssertEqual(labels(workspace.bodies[0]), ["2.90", "2.95", "3.00", "3.05", "3.10", "3.15", "3.20"])
+    }
+
+    func testInsertBlockBoresAreBlindOverATwoMillimeterFloor() throws {
+        let template = try XCTUnwrap(TemplateCatalog.template("tests.insert-block"))
+        let solids = try build(try template.workspace(template.defaults), "insert block")
+        let block = PrintTestTemplates.InsertBlock(template.defaults)
+        let plate = block.plate(try block.diameters.get())
+        XCTAssertEqual(solids[0].bounds.max.z, 7, accuracy: 1e-6)
+        let full = plate.width * plate.depthAcross - 4.5
+        XCTAssertEqual(try area(solids[0], at: 1), full, accuracy: 0.05)
+        let bores = [4.1, 4.15, 4.2, 4.25, 4.3].reduce(0) { $0 + .pi * $1 * $1 / 4 }
+        XCTAssertEqual(try area(solids[0], at: 4), full - bores, accuracy: 0.05)
+        // At least 3 mm between bores; and deeper than the insert by 0.5 mm.
+        XCTAssertGreaterThanOrEqual(plate.pitch - plate.widest, 3 - 1e-9)
+        assertRefused("tests.insert-block", ["insertLength": 6])
+    }
+
+
+
+
+
 }
 
 /// Templates built at their defaults, by id.

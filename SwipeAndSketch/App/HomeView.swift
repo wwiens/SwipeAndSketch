@@ -215,18 +215,19 @@ struct HomeView: View {
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 12))
             VStack(alignment: .leading, spacing: 1) {
-                Text(category.title).font(.system(size: 16, weight: .semibold)).foregroundStyle(ink).lineLimit(1)
+                Text(category.title).font(.system(size: 16, weight: .semibold)).foregroundStyle(ink).lineLimit(1).minimumScaleFactor(0.75)
                 Text("\(count) templates").font(.system(size: 13)).foregroundStyle(muted)
             }
         }
         .cardStyle()
     }
 
-    /// The brand's category tints: lime for Gridfinity, coral for electronics, lavender for boxes.
+    /// The brand's category tints: lime for Gridfinity, coral for electronics, lavender for boxes,
+    /// and the same three in turn for the categories after them.
     private static func tint(_ category: ProjectTemplate.Category) -> Color {
         switch category {
         case .gridfinity: Color("ss-limeSoft")
-        case .electronics: Color("ss-coralSoft")
+        case .electronics, .tests: Color("ss-coralSoft")
         case .enclosures: Color("ss-lavender")
         }
     }

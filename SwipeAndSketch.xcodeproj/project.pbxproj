@@ -28,6 +28,7 @@
 		AF745B24C4459DA5EF65ECE8 /* SwipeAndSketch/Core/TemplatesGridfinity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 984D1A095D013A9113E4FFD8 /* SwipeAndSketch/Core/TemplatesGridfinity.swift */; };
 		D44C808239C9C6941328760B /* SwipeAndSketch/Core/TemplatesBoards.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8C23EC73BEDB0781C2E40B5 /* SwipeAndSketch/Core/TemplatesBoards.swift */; };
 		D8985BD8C18FD25DC92C31A7 /* SwipeAndSketch/Core/TemplatesBoxes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A7BC91FFF07B9D1CE003615 /* SwipeAndSketch/Core/TemplatesBoxes.swift */; };
+		879B215DBB9481CBB5CFD6B0 /* SwipeAndSketch/Core/TemplatesPrintTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB7BC46F7B057C0C8E6CEE48 /* SwipeAndSketch/Core/TemplatesPrintTests.swift */; };
 		D1581AE27866C1EA4D7AE989 /* SwipeAndSketch/Canvas/ModelPicture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 500B62A91E8768DF802070F0 /* SwipeAndSketch/Canvas/ModelPicture.swift */; };
 		939839D0F80D544076BD82A0 /* SwipeAndSketch/App/TemplateGallery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 928E59A00BA577811C11A1D8 /* SwipeAndSketch/App/TemplateGallery.swift */; };
 		FC0929F62D58473989BB4A69 /* SwipeAndSketch/App/RecentProjects.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AC32679AD6445D0ACF6993D /* SwipeAndSketch/App/RecentProjects.swift */; };
@@ -180,6 +181,7 @@
 		984D1A095D013A9113E4FFD8 /* SwipeAndSketch/Core/TemplatesGridfinity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesGridfinity.swift; sourceTree = SOURCE_ROOT; };
 		C8C23EC73BEDB0781C2E40B5 /* SwipeAndSketch/Core/TemplatesBoards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesBoards.swift; sourceTree = SOURCE_ROOT; };
 		6A7BC91FFF07B9D1CE003615 /* SwipeAndSketch/Core/TemplatesBoxes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesBoxes.swift; sourceTree = SOURCE_ROOT; };
+		FB7BC46F7B057C0C8E6CEE48 /* SwipeAndSketch/Core/TemplatesPrintTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/TemplatesPrintTests.swift; sourceTree = SOURCE_ROOT; };
 		500B62A91E8768DF802070F0 /* SwipeAndSketch/Canvas/ModelPicture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Canvas/ModelPicture.swift; sourceTree = SOURCE_ROOT; };
 		928E59A00BA577811C11A1D8 /* SwipeAndSketch/App/TemplateGallery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/TemplateGallery.swift; sourceTree = SOURCE_ROOT; };
 		0AC32679AD6445D0ACF6993D /* SwipeAndSketch/App/RecentProjects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/RecentProjects.swift; sourceTree = SOURCE_ROOT; };
@@ -365,6 +367,7 @@
 				984D1A095D013A9113E4FFD8 /* SwipeAndSketch/Core/TemplatesGridfinity.swift */,
 				C8C23EC73BEDB0781C2E40B5 /* SwipeAndSketch/Core/TemplatesBoards.swift */,
 				6A7BC91FFF07B9D1CE003615 /* SwipeAndSketch/Core/TemplatesBoxes.swift */,
+				FB7BC46F7B057C0C8E6CEE48 /* SwipeAndSketch/Core/TemplatesPrintTests.swift */,
 				500B62A91E8768DF802070F0 /* SwipeAndSketch/Canvas/ModelPicture.swift */,
 				928E59A00BA577811C11A1D8 /* SwipeAndSketch/App/TemplateGallery.swift */,
 				0AC32679AD6445D0ACF6993D /* SwipeAndSketch/App/RecentProjects.swift */,
@@ -725,6 +728,7 @@
 				AF745B24C4459DA5EF65ECE8 /* SwipeAndSketch/Core/TemplatesGridfinity.swift in Sources */,
 				D44C808239C9C6941328760B /* SwipeAndSketch/Core/TemplatesBoards.swift in Sources */,
 				D8985BD8C18FD25DC92C31A7 /* SwipeAndSketch/Core/TemplatesBoxes.swift in Sources */,
+				879B215DBB9481CBB5CFD6B0 /* SwipeAndSketch/Core/TemplatesPrintTests.swift in Sources */,
 				D1581AE27866C1EA4D7AE989 /* SwipeAndSketch/Canvas/ModelPicture.swift in Sources */,
 				939839D0F80D544076BD82A0 /* SwipeAndSketch/App/TemplateGallery.swift in Sources */,
 				FC0929F62D58473989BB4A69 /* SwipeAndSketch/App/RecentProjects.swift in Sources */,

@@ -216,6 +216,7 @@ struct TemplateSetup: View {
                     ForEach(template.parameters.filter { $0.isShown(values) }) { parameter in
                         ParameterRow(parameter: parameter, value: binding(parameter), unit: unit)
                     }
+                    TemplateNotesView(notes: template.notes(template.clamped(values)), unit: unit)
                     Text("Once made, these are ordinary solids: change them with any tool.")
                         .font(.system(size: 13)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
                     if let notice = template.category.notice {
@@ -223,7 +224,7 @@ struct TemplateSetup: View {
                     }
                     if needsPro {
                         // Every template sets up and previews for free; making this one needs Pro.
-                        Text("Set it up and preview it for free. Making this template needs Swipe & Sketch Pro; the plain Gridfinity Baseplate and Bin are free.")
+                        Text("Set it up and preview it for free. Making this template needs Swipe & Sketch Pro; templates without the PRO label, such as the Gridfinity Baseplate and the Fit & Print Tests, are free.")
                             .font(.system(size: 13, weight: .medium)).foregroundStyle(violet).fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -262,6 +263,69 @@ struct TemplateSetup: View {
     }
 }
 
+/// Millimeters shown in the display unit, without trailing zeros.
+private func formatLength(_ millimeters: Double, _ unit: LengthUnit) -> String {
+    let shown = millimeters / unit.millimeters
+    let formatter = NumberFormatter()
+    formatter.minimumFractionDigits = 0
+    formatter.maximumFractionDigits = unit.fractionDigits
+    formatter.usesGroupingSeparator = false
+    return formatter.string(from: NSNumber(value: shown)) ?? String(shown)
+}
+
+/// What a template makes at the current values (October 28, 2026): the sizes that decide its fit,
+/// the hardware it needs, and how it prints, worked out from the same numbers as its solids.
+private struct TemplateNotesView: View {
+    let notes: TemplateNotes
+    let unit: LengthUnit
+
+    var body: some View {
+        if !notes.measurements.isEmpty || notes.hardware != nil || notes.printing != nil {
+            VStack(alignment: .leading, spacing: 14) {
+                if !notes.measurements.isEmpty {
+                    section("Measurements") {
+                        ForEach(notes.measurements.indices, id: \.self) { index in
+                            let measurement = notes.measurements[index]
+                            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                                Text(measurement.title).foregroundStyle(muted)
+                                Spacer(minLength: 8)
+                                Text(value(measurement)).foregroundStyle(ink).multilineTextAlignment(.trailing).monospacedDigit()
+                            }
+                            .font(.system(size: 14))
+                        }
+                    }
+                }
+                if let hardware = notes.hardware { section("Hardware") { paragraph(hardware) } }
+                if let printing = notes.printing { section("Printing") { paragraph(printing) } }
+            }
+            .padding(14)
+            .background(canvas, in: RoundedRectangle(cornerRadius: 12))
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("templates.notes")
+        }
+    }
+
+    private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(ink).accessibilityAddTraits(.isHeader)
+            content()
+        }
+    }
+
+    private func paragraph(_ text: String) -> some View {
+        Text(text).font(.system(size: 14)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func value(_ measurement: TemplateMeasurement) -> String {
+        var words: [String] = []
+        if !measurement.lengths.isEmpty {
+            words.append(measurement.lengths.map { formatLength($0, unit) }.joined(separator: measurement.separator) + " " + unit.symbol)
+        }
+        if let text = measurement.text { words.append(text) }
+        return words.joined(separator: " ")
+    }
+}
+
 /// One size or choice of a template.
 private struct ParameterRow: View {
     let parameter: TemplateParameter
@@ -296,7 +360,7 @@ private struct ParameterRow: View {
                         .font(.system(size: 17, weight: .semibold).monospacedDigit()).foregroundStyle(ink)
                         .frame(width: 64)
                         .onSubmit(commit)
-                    Text(unit.symbol).font(.system(size: 15)).foregroundStyle(muted)
+                    Text(unit.symbol).font(.system(size: 15)).foregroundStyle(muted).fixedSize()
                 }
             } onIncrement: { value = value + step } onDecrement: { value = value - step }
             .onAppear { text = format(value) }
@@ -344,15 +408,7 @@ private struct ParameterRow: View {
 
     private var title: some View { Text(parameter.title).font(.system(size: 16)).foregroundStyle(ink).layoutPriority(1) }
 
-    /// Millimeters shown in the display unit, without trailing zeros.
-    private func format(_ millimeters: Double) -> String {
-        let shown = millimeters / unit.millimeters
-        let formatter = NumberFormatter()
-        formatter.minimumFractionDigits = 0
-        formatter.maximumFractionDigits = unit.fractionDigits
-        formatter.usesGroupingSeparator = false
-        return formatter.string(from: NSNumber(value: shown)) ?? String(shown)
-    }
+    private func format(_ millimeters: Double) -> String { formatLength(millimeters, unit) }
 
     /// A typed value (it may carry a unit, or be a sum) in the display unit, kept within range.
     private func commit() {
@@ -412,8 +468,20 @@ private struct ModelPreviewView: UIViewRepresentable {
     final class Coordinator { var shown = -1 }
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    func makeUIView(context: Context) -> SCNView {
-        let view = SCNView()
+    /// Fits the model across the view's narrower side: the picture's scale is set for its height,
+    /// so a view taller than wide (setup in portrait) fits its width instead.
+    final class FittingView: SCNView {
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            fitCamera()
+        }
+        func fitCamera() {
+            pointOfView?.camera?.projectionDirection = bounds.width < bounds.height ? .horizontal : .vertical
+        }
+    }
+
+    func makeUIView(context: Context) -> FittingView {
+        let view = FittingView()
         view.backgroundColor = UIColor(named: "ss-canvas")
         view.antialiasingMode = .multisampling4X
         view.allowsCameraControl = true
@@ -424,7 +492,7 @@ private struct ModelPreviewView: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ view: SCNView, context: Context) {
+    func updateUIView(_ view: FittingView, context: Context) {
         guard context.coordinator.shown != version else { return }
         context.coordinator.shown = version
         guard let drawn = ModelPicture.scene(parts: parts, pixels: 0.85 * Double(view.contentScaleFactor)) else { view.scene = nil; return }
@@ -435,6 +503,7 @@ private struct ModelPreviewView: UIViewRepresentable {
         }
         view.scene = drawn.scene
         view.pointOfView = drawn.camera
+        view.fitCamera()
         view.defaultCameraController.target = SCNVector3(drawn.center)
     }
 }
