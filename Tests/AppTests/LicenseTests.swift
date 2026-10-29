@@ -9,9 +9,9 @@ import XCTest
         super.tearDown()
     }
 
-    func testStatusNamesTheTier() {
-        XCTAssertEqual(LicenseAccess().status, "Free")
-        XCTAssertEqual(LicenseAccess(ownsPro: true).status, "Swipe & Sketch Pro")
+    func testPlanNameNamesTheTier() {
+        XCTAssertEqual(LicenseAccess().planName, "Free")
+        XCTAssertEqual(LicenseAccess(ownsPro: true).planName, "Pro")
     }
 
     func testProToolsAreTheListedOnes() {

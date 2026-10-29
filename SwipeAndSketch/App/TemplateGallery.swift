@@ -222,7 +222,7 @@ struct TemplateSetup: View {
                         Text(notice).font(.system(size: 12)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
                     }
                     if needsPro {
-                        // Decision 8: every template sets up and previews for free; making this one needs Pro.
+                        // Every template sets up and previews for free; making this one needs Pro.
                         Text("Set it up and preview it for free. Making this template needs Swipe & Sketch Pro; the plain Gridfinity Baseplate and Bin are free.")
                             .font(.system(size: 13, weight: .medium)).foregroundStyle(violet).fixedSize(horizontal: false, vertical: true)
                     }

@@ -188,7 +188,7 @@ import XCTest
         XCTAssertEqual(assistant.messages[1].text, "Here are the changes.")
     }
 
-    /// Decision 8: a free user asks and sees the changes on the canvas; Keep waits for Swipe & Sketch
+    /// A free user asks and sees the changes on the canvas; Keep waits for Swipe & Sketch
     /// Pro, and buying it keeps them.
     func testFreeUsersSeeTheChangesAndKeepingThemNeedsPro() async throws {
         let session = boxScene()

@@ -345,7 +345,8 @@ struct WorkspaceView: View {
                 Divider()
                 menuButton("Reset View", icon: .resetView) { session.requestCamera(.reset) }
                 menuButton("Controls", icon: .help) { session.showHelp = true }
-                menuButton("Purchases · \(license.access.status)", icon: .brand) { license.isShowingStore = true }
+                menuButton("Your Plan: \(license.access.planName)", icon: .brand) { license.isShowingStore = true }
+                    .accessibilityIdentifier("project.plan")
                     .accessibilityIdentifier("project.purchases")
                 menuButton("About Swipe & Sketch", icon: .brand) { showAbout = true }.accessibilityIdentifier("project.about")
             } label: { SSIconGlyph(icon: .more, size: 25, color: ink) }
@@ -392,6 +393,19 @@ struct WorkspaceView: View {
             .disabled(session.workspace.bodies.isEmpty && !session.xrayAll)
             dockTile("Snap", icon: session.snapEnabled ? .snapOn : .snapOff, selected: false, id: "snap.toggle",
                      subtitle: session.snapEnabled ? "On" : "Off") { session.snapEnabled.toggle() }
+            if !license.access.ownsPro {
+                // On the free plan: the way to Your Plan, styled like the PRO marks on the Pro tools.
+                Rectangle().fill(hairline).frame(width: 40, height: 1).padding(.vertical, 4)
+                Button { openGroup = nil; license.isShowingStore = true } label: {
+                    VStack(spacing: 3) {
+                        Text("PRO").font(.system(size: 15, weight: .heavy, design: .rounded)).foregroundStyle(paper)
+                            .frame(width: 43, height: 43).background(violet, in: RoundedRectangle(cornerRadius: 12))
+                        Text("Get Pro").font(.system(size: 11, weight: .medium)).foregroundStyle(ink).lineLimit(1)
+                    }
+                    .frame(minWidth: 54).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain).accessibilityLabel("Get Swipe & Sketch Pro").accessibilityIdentifier("rail.pro")
+            }
         }
         .frame(width: railWidth - 12)
         .padding(.horizontal, 6).padding(.vertical, 8)
@@ -2111,7 +2125,7 @@ struct WorkspaceView: View {
                     Text("Create and open .swipesketch projects in Files, on your iPad or in iCloud Drive. Completed changes save automatically. Use the project menu for New Project, Open Project, Save, or Save As; the home button returns to the Home screen.")
                     Text("Save As creates and opens a separate editable copy. New Project opens the template gallery: Blank Project, or a template set up with a few sizes; the current project stays saved. Canceled file pickers leave your current project open. Finish an extrusion with Done before saving it.")
                 }
-                Section("Free and Pro") { Text("Swipe & Sketch is free for good, with no limit on projects or exports. Swipe & Sketch Pro, a one-time purchase in Purchases (project menu), adds the tools marked PRO: Shell, Draft, Split Body, Pattern, Project, Loft, Sweep, Rib, Thread, Matching Part, Screw Lid, Peg & Socket, Fit Test, and Text, every template but the Gridfinity Baseplate and Bin, Import STEP, and keeping the assistant's changes. A Pro tool works and previews as usual; its Done says Keep with Pro. Files that use Pro features open, change with the free tools, and export for everyone.") }
+                Section("Free and Pro") { Text("Swipe & Sketch is free for good, with no limit on projects or exports. Swipe & Sketch Pro, a one-time purchase in Your Plan (the project menu, or the Pro tile under Snap), adds the tools marked PRO: Shell, Draft, Split Body, Pattern, Project, Loft, Sweep, Rib, Thread, Matching Part, Screw Lid, Peg & Socket, Fit Test, and Text, every template but the Gridfinity Baseplate and Bin, Import STEP, and keeping the assistant's changes. A Pro tool works and previews as usual; its Done says Keep with Pro. Files that use Pro features open, change with the free tools, and export for everyone.") }
                 Section("Import") { Text("Import STEP in the project menu brings in the solids of a .step or .stp file from Files, each as a solid of its own, where the file put them, converted to millimeters, together in a Model Tree group named after the file (hide or show them all with its eye). Open surfaces are joined into solids where they close. Imported solids are ordinary solids: move, rotate, mirror, align, cut, drill, shell, fillet any edge, combine, split, sketch on their faces, and export them. Their exact shapes are saved in the project, so it does not need the STEP file again. Import Mesh brings in STL and 3MF files the same way, such as downloaded models to remix: each closed mesh becomes a solid whose flat areas are single faces (a mesh with holes in it is left out; repair it in a mesh tool first).") }
                 Section("Export") { Text("Export 3MF in the project menu makes a print-ready file: choose all visible solids or the selection (a solid, several picked solids, or a group), Arrange on Plate (side by side, each resting on the plate) or As Modeled, and your printer's plate. Each part is named as in the Model Tree, and a picture of the view is the file's preview. Export STL saves every visible solid in one watertight millimeter file. Both open the share sheet for AirDrop, Files, or a slicer app.") }
                 Section("Send to Slicer") { Text("Send to Slicer in the project menu makes the same print-ready 3MF and saves it into a print folder you choose once, such as a folder in iCloud Drive that the slicer on your Mac opens. Each send replaces the file there, so the newest version is always the one you open. Or share it with AirDrop or another app.") }

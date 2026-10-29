@@ -444,7 +444,7 @@ import simd
 
     // MARK: Shell
 
-    /// Decision 8: without Pro, Shell previews as usual and its Keep with Pro waits; buying Pro
+    /// Without Pro, Shell previews as usual and its Keep with Pro waits; buying Pro
     /// finishes it as Done would.
     func testShellPreviewsForFreeAndKeepsOnceProIsBought() throws {
         let (session, controller) = boxScene()

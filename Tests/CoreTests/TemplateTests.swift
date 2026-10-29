@@ -39,7 +39,7 @@ final class TemplateTests: XCTestCase {
         }
     }
 
-    /// Decision 8: only the plain Gridfinity Baseplate and Bin are free, and they carry none of the
+    /// Only the plain Gridfinity Baseplate and Bin are free, and they carry none of the
     /// Pro pair's magnet or divider options.
     func testOnlyThePlainGridfinityPairIsFree() throws {
         let free = TemplateCatalog.all.filter { !$0.needsPro }

@@ -172,7 +172,7 @@ struct HomeView: View {
             Spacer(minLength: 12)
             if LicenseStore.enforcesPurchases {
                 Button { showPurchases = true } label: {
-                    Text(license.access.ownsPro ? license.access.status : "Free · Get Pro").font(.system(size: 13, weight: .semibold)).foregroundStyle(violet)
+                    Text(license.access.ownsPro ? "Pro" : "Free · Get Pro").font(.system(size: 13, weight: .semibold)).foregroundStyle(violet)
                         .padding(.horizontal, 12).padding(.vertical, 7)
                         .background(Color("ss-lavender"), in: Capsule())
                 }

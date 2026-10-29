@@ -8,8 +8,8 @@ import StoreKit
 struct LicenseAccess: Equatable, Sendable {
     var ownsPro = false
 
-    /// One line for the project menu, Home, and the purchases screen.
-    var status: String { ownsPro ? "Swipe & Sketch Pro" : "Free" }
+    /// The plan's short name, for the project menu, Home, and Your Plan.
+    var planName: String { ownsPro ? "Pro" : "Free" }
 }
 
 /// The App Store side of `LicenseAccess`: loads the Pro product, buys, restores, and redeems offer
@@ -39,7 +39,7 @@ struct LicenseAccess: Equatable, Sendable {
     @Published private(set) var busy: String?
     /// The last problem or note to show on the purchases screen.
     @Published var message: String?
-    /// Opens the purchases screen from anywhere (a Pro tool's Keep, the assistant, the project menu).
+    /// Opens Your Plan from anywhere (a Pro tool's Keep, the assistant, the project menu, the rail's Pro tile).
     @Published var isShowingStore = false
 
     private var updates: Task<Void, Never>?

@@ -167,7 +167,7 @@ struct AssistantPanel: View {
                 Text(assistant.modelStatus.title).font(.system(size: 12)).foregroundStyle(Color("ss-coral"))
                     .fixedSize(horizontal: false, vertical: true)
             } else if !license.access.ownsPro {
-                // Decision 8: questions are free; the changes preview, and keeping them needs Pro.
+                // Questions are free; the changes preview, and keeping them needs Pro.
                 Text("Ask anything for free. You can see the changes it suggests; keeping them needs Swipe & Sketch Pro.")
                     .font(.system(size: 12)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("assistant.proNote")

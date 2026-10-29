@@ -157,7 +157,7 @@ import XCTest
         XCTAssertEqual(app.textFields.firstMatch.value as? String, "Untitled Project")
     }
 
-    /// Decision 8: without Pro, a Pro template sets up and previews, and its button asks for Pro;
+    /// Without Pro, the rail offers Pro, and a Pro template sets up and previews, and its button asks for Pro;
     /// the plain Gridfinity Bin is free to make.
     func testProTemplatesAskForProWhenFree() {
         continueAfterFailure = false
@@ -166,6 +166,13 @@ import XCTest
         app.launch()
         XCTAssertTrue(app.staticTexts["project.title"].waitForExistence(timeout: 20))
         XCTAssertFalse(app.buttons["purchases.done"].waitForExistence(timeout: 2), "Purchases never opens by itself")
+        // On the free plan the rail ends with a Pro tile that opens Your Plan.
+        let proTile = app.buttons["rail.pro"]
+        XCTAssertTrue(proTile.exists)
+        proTile.tap()
+        XCTAssertTrue(app.staticTexts["purchases.status"].waitForExistence(timeout: 10))
+        app.buttons["purchases.done"].tap()
+        XCTAssertTrue(app.buttons["project.title"].exists || app.staticTexts["project.title"].exists)
         app.buttons["Project menu"].tap(); app.buttons["project.new"].tap()
         let divided = app.buttons["templates.gridfinity.divided-bin"]
         XCTAssertTrue(divided.waitForExistence(timeout: 10))
