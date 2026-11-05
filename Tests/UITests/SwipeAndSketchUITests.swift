@@ -286,7 +286,10 @@ import XCTest
         XCTAssertFalse(title.exists, "Look Around closes it")
         // About shows it again, ending with Done.
         app.buttons["home.about"].tap()
-        app.buttons["about.quickStart"].tap()
+        // About's list is taller than the sheet since the trial and purchase rows; scroll to Help.
+        let aboutQuickStart = app.buttons["about.quickStart"]
+        for _ in 0..<6 where !(aboutQuickStart.exists && aboutQuickStart.isHittable) { app.swipeUp() }
+        aboutQuickStart.tap()
         XCTAssertTrue(title.waitForExistence(timeout: 5))
         app.buttons["quickstart.next"].tap()
         XCTAssertFalse(app.buttons["quickstart.blank"].exists, "From About there is no project to start")

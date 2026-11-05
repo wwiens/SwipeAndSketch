@@ -393,7 +393,7 @@ struct QuickStartView: View {
             }
             Text("Stuck? Tap the help button beside the hint at the top for help with what you are doing, or Controls at the bottom right for the whole guide.")
                 .font(.system(size: 14)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
-            Text("The entire app is free permanently, including all tools and templates. This is experimental software; keep backups of important projects. Bug reports are welcome, and support is provided as time allows.")
+            Text("Try every tool and template free for 14 days, starting when you choose Start 14-Day Trial. A one-time purchase then keeps you creating and editing, and your projects always stay available to view and export. This is experimental software; keep backups of important projects. Bug reports are welcome, and support is provided as time allows.")
                 .font(.system(size: 14)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
         }
     }
