@@ -47,6 +47,12 @@ enum PurchaseOutcome: Sendable {
         if arguments.contains("--ui-testing") || NSClassFromString("XCTestCase") != nil {
             return AppAccessStore(unrestricted: true)
         }
+        // Debug builds have full access so anyone building the MIT source can model. Only the
+        // "SwipeAndSketch Purchases" scheme, which sets this for its local test store, checks
+        // StoreKit in Debug.
+        if ProcessInfo.processInfo.environment["SS_STOREKIT_TESTING"] != "1" {
+            return AppAccessStore(unrestricted: true)
+        }
         #endif
         return AppAccessStore(client: StoreKitPurchaseClient(), cache: KeychainAccessCache())
         #endif

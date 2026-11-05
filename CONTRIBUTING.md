@@ -10,6 +10,7 @@ Bug reports and contributions are reviewed as time allows. There is no guarantee
 2. Open `SwipeAndSketch.xcodeproj` in Xcode 27.
 3. Under **Signing & Capabilities**, pick your own team and bundle identifier. Don't commit those changes.
 4. If your team doesn't have the Private Cloud Compute entitlement, remove it locally from `SwipeAndSketch/SwipeAndSketch.entitlements`, and don't commit that either. The assistant then falls back to the on-device model. The app never calls the cloud model from a build without the entitlement (`PrivateCloudEntitlement`).
+5. Run with the **SwipeAndSketch** scheme: Debug builds have full access, with no trial or purchase. Use the **SwipeAndSketch Purchases** scheme (local test store) only to work on the trial and purchase screens; its Purchases sheet has a Debug-only **Reset Test Access** button. If you distribute your own build, add `SWIPE_SKETCH_SELF_BUILD` to Release's Active Compilation Conditions (and don't commit it), since the App Store products exist only for the official app.
 
 ## Hardware
 

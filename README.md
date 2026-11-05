@@ -28,6 +28,8 @@ There are no accounts. The app reaches the network only for the optional assista
 4. **Private Cloud Compute:** the app's entitlements file requests `com.apple.developer.private-cloud-compute`. If your team doesn't have that entitlement, remove it from `SwipeAndSketch/SwipeAndSketch.entitlements` (or remove the capability in Xcode). The assistant then uses the on-device model only. The app checks for the entitlement (`PrivateCloudEntitlement`) and never calls the cloud model without it.
 5. Connect your iPad, trust the Mac, turn on Developer Mode if asked, choose the iPad as the run destination, and press **Run** (⌘R).
 
+**Trial and purchase in your build:** Debug builds run from Xcode with the **SwipeAndSketch** scheme have full access, with no trial or purchase. The **SwipeAndSketch Purchases** scheme uses a local test store (`SwipeAndSketch/Purchases.storekit`) for working on the purchase screens. A Release build (an archive) asks the App Store, and the products exist only for the official app, so to distribute your own build add `SWIPE_SKETCH_SELF_BUILD` to **Active Compilation Conditions** (`SWIFT_ACTIVE_COMPILATION_CONDITIONS`) for Release; it then runs with full access.
+
 The simulator is useful for checking the interface, but Pencil input needs a real iPad.
 
 ## Relinking with a modified Open CASCADE
