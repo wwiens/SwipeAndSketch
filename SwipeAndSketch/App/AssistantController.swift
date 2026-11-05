@@ -169,7 +169,10 @@ import Combine
 
     func send(_ text: String? = nil) {
         let request = (text ?? draft).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !request.isEmpty, !isWorking, !session.isReadOnly, !session.isProjectBusy else { return }
+        guard !request.isEmpty, !isWorking, !session.isProjectBusy else { return }
+        // Questions remain available in viewing mode. Only a request begun with editing access
+        // can produce a draft, including when its response arrives after the trial ends.
+        let mayEdit = session.hasEditingAccess && !session.isReadOnly
         // The model must not change under the request; drafts and tools end first.
         if !session.isReviewingAssistant { session.cancelTransient() }
         if text == nil { draft = "" }
@@ -193,7 +196,7 @@ import Combine
             } catch {
                 failure = (error as? AssistantFailure) ?? AssistantFailure(message: error.localizedDescription)
             }
-            self?.finish(id, epoch: epoch, turn: turn, failure: failure, cancelled: cancelled)
+            self?.finish(id, epoch: epoch, turn: turn, failure: failure, cancelled: cancelled, mayEdit: mayEdit)
         }
     }
 
@@ -202,7 +205,7 @@ import Combine
         change(&messages[index])
     }
 
-    private func finish(_ id: Message.ID, epoch: Int, turn: AssistantEngine.Turn?, failure: AssistantFailure?, cancelled: Bool) {
+    private func finish(_ id: Message.ID, epoch: Int, turn: AssistantEngine.Turn?, failure: AssistantFailure?, cancelled: Bool, mayEdit: Bool) {
         isWorking = false
         // A request can use up the cloud quota.
         refreshModelStatus()
@@ -234,8 +237,17 @@ import Combine
             if turn.bench.hasChanges || !turn.requirements.results.isEmpty { message.requirements = turn.requirements }
         }
         guard !cancelled, failure == nil, let turn, turn.bench.hasChanges else { return }
+        guard mayEdit else {
+            update(id) { message in
+                message.text = "Creating and editing require an active trial or purchase. Your project has not changed. You can still ask questions about it."
+                message.changes = []
+                message.requirements = nil
+            }
+            if !session.hasEditingAccess { session.showPurchaseOffer = true }
+            return
+        }
         // The review covers every reply since the last Keep or Discard.
-        guard session.showAssistantPreview(turn.bench.workspace, focus: turn.bench.focus) else {
+        guard session.showAssistantPreview(turn.bench.workspace, focus: turn.bench.focus, authorizedBeforeExpiration: mayEdit) else {
             update(id) { message in
                 message.text += "\n\nThese changes could not be used, so they were left out."
                     + (session.isReviewingAssistant ? " The earlier changes are still under review." : "")

@@ -26,6 +26,12 @@ import SwiftUI
             }
             .preferredColorScheme(.light)
             .onChange(of: scenePhase) { _, phase in if phase != .active { home.autosaveActiveProject() } }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    AppAccessStore.shared.refreshClock()
+                    Task { await AppAccessStore.shared.refresh() }
+                }
+            }
         }
     }
 }

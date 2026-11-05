@@ -25,11 +25,13 @@ enum HelpTopic: String, CaseIterable, Identifiable {
     case assistantTemplate
     case notes
     case radialToolbar
+    case purchases
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
+        case .purchases: "Purchases and Trial"
         case .notes: "Project Notes"
         case .radialToolbar: "Radial Toolbar"
         case .gettingStarted: "Getting Started"
@@ -109,6 +111,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
 
     var icon: SSIcon {
         switch self {
+        case .purchases: .brand
         case .notes: .text
         case .radialToolbar: .more
         case .gettingStarted: .help
@@ -178,6 +181,11 @@ enum HelpTopic: String, CaseIterable, Identifiable {
     /// What it is, how to do it, and what is worth knowing, in plain words.
     var overview: HelpOverview {
         switch self {
+        case .purchases:
+            HelpOverview(
+                summary: "Try the complete app free for 14 days, then make a one-time purchase to continue creating and editing. There is no subscription or automatic charge.",
+                steps: ["Open Purchases from the project menu, or tap the access card on Home.", "Read the current App Store price and terms, then choose Start 14-Day Trial when you are ready. The trial starts after activation succeeds and runs for 14 consecutive days.", "Choose Buy Swipe & Sketch to unlock every tool, template, import, export, and assistant editing feature.", "On a new installation or another device, choose Restore Purchases using the Apple Account that made the purchase."],
+                tips: ["After the trial, projects remain available to open, view, measure, share, and export at full quality. Your project files remain editable in an unlocked app.", "Previously verified access works offline; starting a trial or restoring may require an App Store connection.", "An edit already underway when a trial ends can finish safely. Accepted edits and recovery saves are preserved.", "Apple Pencil and iPadOS 27 or later are required. Assistant availability depends on hardware and model settings; optional Claude usage is billed separately to your Anthropic API account.", "Support is provided as time allows, without a guaranteed response or feature schedule."])
         case .notes:
             HelpOverview(
                 summary: "Keep requirements, design decisions, links, and print observations inside your project.",

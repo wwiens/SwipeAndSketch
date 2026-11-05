@@ -10,6 +10,7 @@ private let violet = Color("ss-violet")
 struct AboutView: View {
     var onDone: () -> Void
     @State private var showQuickStart = false
+    @State private var showPurchases = false
 
     static let repository = URL(string: "https://github.com/wwiens/SwipeAndSketch")
     static let openCascade = URL(string: "https://dev.opencascade.org")
@@ -37,8 +38,10 @@ struct AboutView: View {
                     .padding(.vertical, 4)
                 }
                 Section("Availability and support") {
-                    Text("Swipe & Sketch is free and open source. Every tool, template, import, export, and assistant edit is included.")
+                    Text("Try every feature free for 14 days. A one-time purchase unlocks the complete app for creating and editing, with no subscription. After the trial, you can still open, view, share, and export projects at full quality. The source code remains open source under MIT.")
                         .accessibilityIdentifier("about.availability")
+                    Button("Purchases and Trial") { showPurchases = true }
+                        .accessibilityIdentifier("about.purchases")
                     Text("This is experimental software. Bug reports are welcome; support and fixes are provided as time allows, without a guaranteed response or schedule. Keep backups of important projects.")
                         .accessibilityIdentifier("about.supportPolicy")
                 }
@@ -98,6 +101,9 @@ struct AboutView: View {
             .navigationTitle("About").navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showQuickStart) {
                 QuickStartView(startBlank: nil) { showQuickStart = false }.presentationSizing(.form).preferredColorScheme(.light)
+            }
+            .sheet(isPresented: $showPurchases) {
+                PurchaseView(access: .shared) { showPurchases = false }.presentationSizing(.page)
             }
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done", action: onDone) } }
         }

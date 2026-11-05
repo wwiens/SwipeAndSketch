@@ -63,7 +63,8 @@ struct NotesPanel: View {
                         .font(.body).foregroundStyle(muted).padding(16).allowsHitTesting(false)
                 }
             }
-            Text(session.isReadOnly ? "This file can't be changed right now · Close with ×" : "Changes save automatically · Close with ×")
+            Text(session.isReadOnly ? "This file can't be changed right now · Close with ×" :
+                 !session.hasEditingAccess ? "Viewing notes · Unlock Swipe & Sketch to edit" : "Changes save automatically · Close with ×")
                 .font(.system(size: 12)).foregroundStyle(muted).frame(maxWidth: .infinity, alignment: .leading)
                 .padding(12)
         }

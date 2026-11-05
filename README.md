@@ -1,6 +1,6 @@
 # Swipe & Sketch
 
-Swipe & Sketch is a free, open-source experimental iPad CAD app for designing 3D-printable parts with Apple Pencil. You sketch lines, rectangles, circles, arcs, slots, ellipses, polygons, and splines on a plane or a face, dimension them, and turn them into solids with extrude, revolve, loft, sweep, fillet, chamfer, shell, holes, threads, and boolean tools, or start from a template (Gridfinity, openGrid, electronics mounts and cases, enclosures) or an imported STEP, STL, or 3MF file. Then you export 3MF or STL, or send the model straight to your slicer. Solids are built by the [Open CASCADE Technology](https://dev.opencascade.org) modeling kernel. An optional AI assistant, running on Apple Foundation Models or, with your own API key, Claude, can answer questions about a model and change it.
+Swipe & Sketch is an open-source experimental iPad CAD app for designing 3D-printable parts with Apple Pencil. You sketch lines, rectangles, circles, arcs, slots, ellipses, polygons, and splines on a plane or a face, dimension them, and turn them into solids with extrude, revolve, loft, sweep, fillet, chamfer, shell, holes, threads, and boolean tools, or start from a template (Gridfinity, openGrid, electronics mounts and cases, enclosures) or an imported STEP, STL, or 3MF file. Then you export 3MF or STL, or send the model straight to your slicer. Solids are built by the [Open CASCADE Technology](https://dev.opencascade.org) modeling kernel. An optional AI assistant, running on Apple Foundation Models or, with your own API key, Claude, can answer questions about a model and change it.
 
 ![A shaded solid in Swipe & Sketch](Docs/ShadedSolid.png)
 
@@ -9,7 +9,7 @@ There are no accounts. The app reaches the network only for the optional assista
 ## Status
 
 - Version 1.0, experimental and in preparation for the App Store.
-- Free and open source: every current and future feature is included. Optional Claude usage is billed separately by Anthropic to your own API account.
+- Planned App Store pricing: free download, full 14-day trial, then a $19.99 USD one-time purchase to continue creating and editing. One complete product, with no subscription or separate feature tiers. Viewing, sharing, and full-quality export remain available after the trial. The source remains MIT licensed. Optional Claude usage is billed separately by Anthropic to your own API account.
 - Bug reports are welcome. Support and fixes are provided as time allows; there is no guaranteed response time or fix schedule. Keep backups of important projects. Known data-loss defects block release; see [release policy](Docs/ReleasePolicy.md).
 - iPad only, iPadOS 27 or later.
 - **Apple Pencil is required.** The Pencil draws, selects, and drags geometry. Fingers move the view and press buttons. There is no finger-drawing mode.

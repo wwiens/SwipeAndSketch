@@ -20,7 +20,8 @@
 			</array>
 		</dict>
 		<dict>
-			<!-- CACurrentMediaTime: double-tap windows and camera animations, on the device only. -->
+			<!-- CACurrentMediaTime and systemUptime: double-tap windows, camera animations, and
+			     elapsed trial time to resist clock rollback during a session; on the device only. -->
 			<key>NSPrivacyAccessedAPIType</key>
 			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
 			<key>NSPrivacyAccessedAPITypeReasons</key>

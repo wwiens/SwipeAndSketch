@@ -853,6 +853,51 @@ struct DimensionEdit: Identifiable {
 }
 
 @MainActor final class ModelingSession: ObservableObject {
+    let access: AppAccessStore
+    @Published var showPurchaseOffer = false
+    /// One operation already underway may finish after expiration. New operations always consult
+    /// `requireNewEditingAccess`, even while this continuation can commit its single undo step.
+    private var canFinishAuthorizedEdit = false
+    private var hadEditingAccess = false
+    private var accessObservation: AnyCancellable?
+    var hasEditingAccess: Bool { access.canEdit }
+    @discardableResult func requireNewEditingAccess() -> Bool {
+        access.refreshClock()
+        guard access.canEdit else { showPurchaseOffer = true; return false }
+        return true
+    }
+    private var purchaseBlocksEditing: Bool { !access.canEdit && !canFinishAuthorizedEdit }
+
+    private var editingOperationPending: Bool {
+        isPencilDown || dragContext != nil || transformDrag != nil || trimBase != nil ||
+            dimensionEdit != nil && dimensionEdit?.target != .sectionOffset || isResizingDimension ||
+            isAssistantBusy || isImportingGeometry || isDeletingHole || isMakingMatingPart || isBuildingScrewLidTest ||
+            hasOperationInProgress && section == nil && tool != .measure
+    }
+    private func accessChanged(_ state: AppAccessState) {
+        if hadEditingAccess && !state.canEdit {
+            canFinishAuthorizedEdit = editingOperationPending
+            // Flush already accepted typing, then close the notebook to further keystrokes.
+            endEditingNotes()
+            save()
+            if !canFinishAuthorizedEdit {
+                cancelTransient()
+                endSketchMode()
+                tool = .select
+            }
+        }
+        if state.canEdit { canFinishAuthorizedEdit = false }
+        hadEditingAccess = state.canEdit
+        objectWillChange.send()
+    }
+    private var isImportingGeometry = false
+    private func finishExpiredPencilOperation() {
+        guard !access.canEdit, !editingOperationPending else { return }
+        canFinishAuthorizedEdit = false
+        cancelTransient()
+        endSketchMode()
+        tool = .select
+    }
     let viewCube = ViewCubeState()
     @Published private(set) var history: WorkspaceHistory
     @Published private(set) var isResizingDimension = false
@@ -972,7 +1017,9 @@ struct DimensionEdit: Identifiable {
     /// After Sketch is tapped with nothing selected: three translucent world planes wait for a tap.
     @Published private(set) var isPickingPlane = false
     /// The Pencil is down on the canvas (a stroke or drag in progress); the dock ignores touches then.
-    @Published var isPencilDown = false
+    @Published var isPencilDown = false {
+        didSet { if oldValue && !isPencilDown { finishExpiredPencilOperation() } }
+    }
     /// A finger tapped the canvas; menus floating over it put themselves away.
     let canvasTapped = PassthroughSubject<Void, Never>()
     /// Move/Rotate widget: each drag makes a copy (the original stays) while this is on.
@@ -1159,14 +1206,18 @@ struct DimensionEdit: Identifiable {
     var onSaveAs: (() -> Void)?
     var hasProjectFile: Bool { document != nil }
     /// Editing waits while the assistant works on a request or its changes are under review.
-    var isEditingBlocked: Bool { isReadOnly || isViewingBlocked }
+    var isEditingBlocked: Bool { isReadOnly || purchaseBlocksEditing || isViewingBlocked }
     /// Looking at the model (Measure, the section view) waits only for the project and the assistant;
     /// a read-only file still shows it.
     var isViewingBlocked: Bool { isProjectBusy || isResizingDimension || isAssistantWorking || assistantPreview != nil || isEditingNotes }
     /// The Pencil may still pick while measuring or moving the section's cut when editing is blocked.
-    var acceptsPencil: Bool { !isEditingBlocked || !isViewingBlocked && (tool == .measure || section != nil) }
+    var acceptsPencil: Bool { !isEditingBlocked || !isViewingBlocked && (tool == .select || tool == .measure || section != nil) }
     /// Whether a dimension value can be typed: the section's offset changes only the view.
-    func canEditDimension(_ target: DimensionTarget) -> Bool { target == .sectionOffset ? !isViewingBlocked : !isEditingBlocked }
+    func canEditDimension(_ target: DimensionTarget) -> Bool {
+        if target == .sectionOffset { return !isViewingBlocked }
+        guard !isEditingBlocked else { return false }
+        return access.canEdit || dimensionEdit?.target == target || target.isOperationValue && hasOperationInProgress
+    }
 
     var projectName: String { document?.fileURL.deletingPathExtension().lastPathComponent ?? "Untitled Project" }
     var workspace: Workspace { history.workspace }
@@ -1691,7 +1742,7 @@ struct DimensionEdit: Identifiable {
     }
 
     /// Row edits wait while the Pencil is down too: a drag commits the model it started from at lift.
-    var canEditGroups: Bool { !isEditingBlocked && !hasOperationInProgress && !isPencilDown }
+    var canEditGroups: Bool { access.canEdit && !isEditingBlocked && !hasOperationInProgress && !isPencilDown }
 
     /// A new group (in `parent`), holding `item` when given (one undo step). Returns its id so the
     /// Model Tree can offer to name it.
@@ -2104,7 +2155,7 @@ struct DimensionEdit: Identifiable {
     /// its number.
     /// Renaming, recoloring, or deleting a row waits for the operation in progress: its preview
     /// was built from the model as it was, so Done would put the old names and colors back.
-    var canChangeRows: Bool { !isEditingBlocked && !hasOperationInProgress && !isPencilDown }
+    var canChangeRows: Bool { access.canEdit && !isEditingBlocked && !hasOperationInProgress && !isPencilDown }
 
     func rename(_ item: ModelSelection, to name: String) {
         guard canChangeRows else { return }
@@ -2167,6 +2218,7 @@ struct DimensionEdit: Identifiable {
     /// Adds the copied solids and sketches where they were copied from (one undo step) and selects
     /// the first, ready to move.
     func paste() {
+        guard requireNewEditingAccess() else { return }
         guard canPaste, let result = workspace.pasting(ModelClipboard.shared) else { return }
         cancelTransient()
         endSketchMode()
@@ -2179,6 +2231,7 @@ struct DimensionEdit: Identifiable {
 
     /// A copy of the selected solid or sketch (or an item row's) right where it is, selected.
     func duplicate(_ item: ModelSelection? = nil) {
+        guard requireNewEditingAccess() else { return }
         if case .group(let id)? = item ?? selection {
             // The whole group, nested groups included, as a new group beside it.
             guard !isEditingBlocked, let result = workspace.duplicatingGroup(id) else { return }
@@ -2204,6 +2257,7 @@ struct DimensionEdit: Identifiable {
     /// Shows or hides a solid or sketch (one undo step). Hidden items leave the canvas, and a
     /// selection or sketch inside them ends.
     func toggleHidden(_ item: ModelSelection) {
+        guard requireNewEditingAccess() else { return }
         guard canToggleVisibility else { return }
         var next = workspace
         var sketchID: UUID?, bodyID: UUID?
@@ -2342,10 +2396,10 @@ struct DimensionEdit: Identifiable {
     }
 
     /// Hiding or showing waits for the operation in progress (it would end it).
-    var canToggleVisibility: Bool { !isEditingBlocked && !hasOperationInProgress && !isPencilDown }
+    var canToggleVisibility: Bool { access.canEdit && !isEditingBlocked && !hasOperationInProgress && !isPencilDown }
 
     var canSelectItems: Bool {
-        (tool == .measure ? !isViewingBlocked : !isEditingBlocked) && (tool == .measure || projectionDraft != nil || splitDraft != nil || mirrorDraft != nil || patternDraft != nil || scaleDraft != nil || unionDraft != nil || subtractDraft != nil || alignDraft != nil || revolveDraft != nil || !isExtruding && !isRevolving && !isFinishing && !isShelling && !isPlacingHole && !isPlacingPeg && !isThreading && !isPlacingText && planeDraft == nil && tool != .deleteFace &&
+        (tool == .measure || tool == .select ? !isViewingBlocked : !isEditingBlocked) && (tool == .measure || projectionDraft != nil || splitDraft != nil || mirrorDraft != nil || patternDraft != nil || scaleDraft != nil || unionDraft != nil || subtractDraft != nil || alignDraft != nil || revolveDraft != nil || !isExtruding && !isRevolving && !isFinishing && !isShelling && !isPlacingHole && !isPlacingPeg && !isThreading && !isPlacingText && planeDraft == nil && tool != .deleteFace &&
             primitiveDraft == nil && constructionDraft == nil && shapeToolDraft == nil && screwLidDraft == nil)
     }
 
@@ -2767,7 +2821,9 @@ struct DimensionEdit: Identifiable {
 
     /// A session on `document`, or on an unsaved workspace when there is none. `inMemory` only labels
     /// test sessions (a session without a document never saves); it changes nothing.
-    init(inMemory: Bool = false, document: ProjectDocument? = nil) {
+    init(inMemory: Bool = false, document: ProjectDocument? = nil, access: AppAccessStore = .shared) {
+        self.access = access
+        hadEditingAccess = access.canEdit
         self.document = document
         history = WorkspaceHistory(workspace: document?.project.workspace ?? Workspace())
         if document?.project.workspace.bodies.isEmpty == false { cameraAction = .reset }
@@ -2794,6 +2850,7 @@ struct DimensionEdit: Identifiable {
         document?.onReloadFailure = { [weak self] in self?.documentStateChanged() }
         document?.onError = { [weak self] error in self?.status = "Not saved"; self?.saveError = error.localizedDescription }
         isReadOnly = document?.isReadOnly ?? false
+        accessObservation = access.$state.dropFirst().sink { [weak self] state in self?.accessChanged(state) }
         #if DEBUG
         if Self.isRunningUITests && document == nil { loadUITestFixture() }
         #endif
@@ -2848,6 +2905,7 @@ struct DimensionEdit: Identifiable {
     }
 
     func chooseTool(_ value: ModelingTool) {
+        guard value == .select || value == .measure || requireNewEditingAccess() else { return }
         // Before a plane is picked, a drawing tool waits for the first stroke; putting the tool down leaves.
         if isPickingPlane, value.shapeKind != nil || value.isSketchEditTool { tool = value; return }
         if value == .measure { beginMeasure(); return }
@@ -2947,6 +3005,7 @@ struct DimensionEdit: Identifiable {
     /// The Sketch tile: on a selected flat face or construction plane, sketch on it; otherwise show
     /// the three world planes (and any construction planes) to pick from.
     func beginSketch() {
+        guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked else { return }
         if selectedFace?.plane != nil { beginFaceSketch(); return }
         if let plane = selectedConstructionPlane { startPlaneSketch(plane, tool: .line); return }
@@ -2984,6 +3043,7 @@ struct DimensionEdit: Identifiable {
 
     /// Sketches on a construction plane, looking straight at it.
     func startPlaneSketch(_ construction: ConstructionPlane, tool value: ModelingTool = .line) {
+        guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked else { return }
         cancelTransient()
         plane = construction.plane
@@ -3006,6 +3066,7 @@ struct DimensionEdit: Identifiable {
     /// Offset Plane or Midplane. A selected flat face, sketch region, or plane becomes the first
     /// reference.
     func beginPlaneTool(_ value: ModelingTool) {
+        guard requireNewEditingAccess() else { return }
         guard value.isPlaneTool, !isEditingBlocked else { return }
         let reference = selectedPlaneReference
         cancelTransient()
@@ -3070,6 +3131,7 @@ struct DimensionEdit: Identifiable {
     // MARK: Plane at Angle, 3-Point Plane, Tangent Plane, and Axis (October 24, 2026)
 
     func beginConstruction(_ value: ModelingTool) {
+        guard requireNewEditingAccess() else { return }
         guard value.isConstructionTool, !isEditingBlocked else { return }
         cancelTransient()
         endSketchMode()
@@ -3202,6 +3264,7 @@ struct DimensionEdit: Identifiable {
     // MARK: Draft, Loft, Sweep, and Rib (October 24, 2026)
 
     func beginShapeTool(_ value: ModelingTool) {
+        guard requireNewEditingAccess() else { return }
         guard value.isShapeTool, !isEditingBlocked else { return }
         // A selected region starts a loft or sweep; a selected line, a rib.
         let region = selectedProfiles.first, line = selectedShape.flatMap { $0.kind == .line ? $0.id : nil }
@@ -3355,6 +3418,7 @@ struct DimensionEdit: Identifiable {
     /// Split Body. A selected solid (or its face or edge) is the first solid to split, and a
     /// selected construction plane the first tool.
     func beginSplit() {
+        guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked else { return }
         let bodyID: UUID?
         switch selection {
@@ -3458,6 +3522,7 @@ struct DimensionEdit: Identifiable {
     /// Mirror. A selected solid (or its face or edge) or sketch is the first item, and a selected
     /// construction plane the mirror plane.
     func beginMirror() {
+        guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked else { return }
         var draft = MirrorDraft()
         switch selection {
@@ -3562,6 +3627,7 @@ struct DimensionEdit: Identifiable {
 
     /// Pattern. A selected solid (or its face or edge) or sketch is the first item.
     func beginPattern() {
+        guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked else { return }
         var draft = PatternDraft()
         switch selection {
@@ -3760,6 +3826,7 @@ struct DimensionEdit: Identifiable {
 
     /// Scale. A selected solid (or its face or edge) or sketch is the first item.
     func beginScale() {
+        guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked else { return }
         var draft = ScaleDraft()
         switch selection {
@@ -3908,6 +3975,7 @@ struct DimensionEdit: Identifiable {
     /// Project (sketch projections). Whatever is selected becomes the first item, and the surface is
     /// picked next. Inside a sketch, the projection goes into that sketch.
     func beginProjection() {
+        guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked else { return }
         let picked = selection.flatMap(projectionItem(for:))
         let plane = selectedConstructionPlane
@@ -4163,6 +4231,7 @@ struct DimensionEdit: Identifiable {
     }
 
     func cancelTransient() {
+        canFinishAuthorizedEdit = false
         isPickingPlane = false
         planeDraft = nil
         planePreview = nil
@@ -4206,6 +4275,7 @@ struct DimensionEdit: Identifiable {
     /// Adds a drawn shape to the open sketch, starting a new sketch with the first shape. (Outside
     /// sketch mode, as in tests, it joins the last sketch on its plane.)
     func addShape(_ shape: SketchShape) {
+        guard access.canEdit || canFinishAuthorizedEdit && isPencilDown else { showPurchaseOffer = true; return }
         preview = nil
         snapLabel = ""
         guard shape.isValid, let next = adding([shape]) else { return }
@@ -4254,6 +4324,7 @@ struct DimensionEdit: Identifiable {
     /// Draws a regular polygon of `polygonSides` sides, centered on `center` with a corner at `vertex`,
     /// as joined lines (one undo step); its number of sides can then be typed.
     func addPolygon(center: Point2, vertex: Point2) {
+        guard access.canEdit || canFinishAuthorizedEdit && isPencilDown else { return }
         preview = nil
         snapLabel = ""
         let lines = SketchTools.polygon(center: center, vertex: vertex, sides: polygonSides, plane: plane)
@@ -4296,6 +4367,7 @@ struct DimensionEdit: Identifiable {
     /// Makes the selected shape construction geometry (a dashed reference that bounds no region),
     /// or ordinary again. One undo step.
     func toggleConstruction() {
+        guard requireNewEditingAccess() else { return }
         guard let shape = selectedShape, shape.kind != .point, !isEditingBlocked,
               let index = workspace.shapes.firstIndex(where: { $0.id == shape.id }) else { return }
         var next = workspace
@@ -4306,6 +4378,7 @@ struct DimensionEdit: Identifiable {
 
     /// Extend: carries the line's nearer end on to the next shape it meets.
     func extend(_ shapeID: UUID, near point: Point2) {
+        guard requireNewEditingAccess() else { return }
         guard tool == .extend, !isEditingBlocked else { return }
         // A face's edges count while sketching on its plane.
         let edges = workspace.shapes.first { $0.id == shapeID }?.plane == sketchMode?.plane ? sketchGuideLines : []
@@ -4447,6 +4520,7 @@ struct DimensionEdit: Identifiable {
     /// Starts extruding the selected region. The camera stays put; the arrow
     /// turns upright when the view looks straight along the extrusion.
     func beginExtrusion() {
+        guard requireNewEditingAccess() else { return }
         guard canExtrude else { return }
         faceExtrusion = nil
         endSketchMode()
@@ -4469,6 +4543,7 @@ struct DimensionEdit: Identifiable {
     /// Extrudes the selected flat face from where it is: starting at 0 mm, pulling out joins the
     /// solid and pushing in cuts it. The camera stays put, since the face was just tapped in view.
     func beginFaceExtrusion() {
+        guard requireNewEditingAccess() else { return }
         guard canExtrudeSelectedFace, let face = selectedFace,
               let body = workspace.bodies.first(where: { $0.id == face.bodyID }) else { return }
         guard let source = FaceExtrusionSource(body: body, face: face.face, tapped: face.point ?? face.center) else {
@@ -4547,11 +4622,13 @@ struct DimensionEdit: Identifiable {
     /// Imports a STEP file (read off the main thread): each closed solid in it becomes a solid,
     /// where the file put it, in millimeters, as one undo step. A single solid is selected.
     func importSTEP(from url: URL) {
+        guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked else { return }
         cancelTransient()
         endSketchMode()
         selection = nil
         isProjectBusy = true
+        isImportingGeometry = true
         status = "Importing \(url.lastPathComponent)…"
         let name = url.deletingPathExtension().lastPathComponent
         Task.detached(priority: .userInitiated) { [weak self] in
@@ -4565,11 +4642,13 @@ struct DimensionEdit: Identifiable {
     /// Imports an STL or 3MF file (read off the main thread): each closed mesh becomes a solid of
     /// its own, its flat areas single faces, as one undo step, like a STEP import.
     func importMesh(from url: URL) {
+        guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked else { return }
         cancelTransient()
         endSketchMode()
         selection = nil
         isProjectBusy = true
+        isImportingGeometry = true
         status = "Importing \(url.lastPathComponent)…"
         let name = url.deletingPathExtension().lastPathComponent
         Task.detached(priority: .userInitiated) { [weak self] in
@@ -4583,11 +4662,13 @@ struct DimensionEdit: Identifiable {
     /// Imports another project (read off the main thread): everything in it, in a new group named
     /// after the file, where the file had it, as one undo step, with the group selected.
     func importProject(from url: URL) {
+        guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked else { return }
         cancelTransient()
         endSketchMode()
         selection = nil
         isProjectBusy = true
+        isImportingGeometry = true
         status = "Importing \(url.lastPathComponent)…"
         let name = url.deletingPathExtension().lastPathComponent
         Task.detached(priority: .userInitiated) { [weak self] in
@@ -4599,6 +4680,7 @@ struct DimensionEdit: Identifiable {
     }
 
     private func finishProjectImport(_ result: Result<ProjectImport.Result, any Error>) {
+        defer { isImportingGeometry = false }
         isProjectBusy = false
         switch result {
         case .failure(let error):
@@ -4625,6 +4707,7 @@ struct DimensionEdit: Identifiable {
     }
 
     private func finishImport(_ result: Result<STEPImport.Result, any Error>, meshes: Bool = false) {
+        defer { isImportingGeometry = false }
         isProjectBusy = false
         switch result {
         case .failure(let error):
@@ -4667,6 +4750,7 @@ struct DimensionEdit: Identifiable {
     /// Starts revolving the selected sketch region or flat face. The axis is
     /// picked next, then the angle is dragged or typed.
     func beginRevolve() {
+        guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked else { return }
         var face: FaceExtrusionSource?
         let profile: SketchProfile
@@ -4990,6 +5074,7 @@ struct DimensionEdit: Identifiable {
     }
 
     @discardableResult func beginTransform(_ handle: TransformHandle) -> Bool {
+        guard requireNewEditingAccess() else { return false }
         guard let target = transformWidgetTarget, transformDrag == nil, !isEditingBlocked,
               let frame = transformFrame(of: target) else { return false }
         dimensionEdit = nil
@@ -5245,6 +5330,7 @@ struct DimensionEdit: Identifiable {
     /// Align. A selected solid is the one to move; a selected flat face or straight or round edge
     /// is also what gets aligned, so the target comes next.
     func beginAlign() {
+        guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked else { return }
         var draft = AlignDraft()
         switch selection {
@@ -5371,6 +5457,7 @@ struct DimensionEdit: Identifiable {
 
     /// Subtract. A selected solid (or its face or edge) is the first target; the tools come next.
     func beginSubtract() {
+        guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked else { return }
         let picked = pickedBodies
         let bodyID: UUID?
@@ -5486,6 +5573,7 @@ struct DimensionEdit: Identifiable {
 
     /// Union (or Intersect). A selected solid (or its face or edge) is the first one picked.
     func beginUnion(intersect: Bool = false) {
+        guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked else { return }
         let bodyID: UUID?
         switch selection {
@@ -5590,6 +5678,7 @@ struct DimensionEdit: Identifiable {
     /// Adds or removes a face (any face, by its index on the committed solid and a point on it) to
     /// leave open. Picking a face of another solid starts over there.
     func toggleShellFace(bodyID: UUID, face: Int, at point: SIMD3<Double>) {
+        guard shellDraft != nil || requireNewEditingAccess() else { return }
         guard tool == .shell, !isEditingBlocked, let body = workspace.bodies.first(where: { $0.id == bodyID }) else { return }
         dimensionEdit = nil
         var draft = shellDraft?.bodyID == bodyID ? shellDraft! : ShellDraft(bodyID: bodyID, openings: [], thickness: lastShellThickness)
@@ -5607,6 +5696,7 @@ struct DimensionEdit: Identifiable {
 
     /// Shell from the adaptive menu: a selected face opens straight away; a selected solid waits for faces.
     func shellSelection() {
+        guard requireNewEditingAccess() else { return }
         let face = selectedFace, body = selectedBody?.id ?? face?.bodyID
         chooseTool(.shell)
         guard let body else { return }
@@ -5693,6 +5783,7 @@ struct DimensionEdit: Identifiable {
 
     /// Delete Face. A selected face is the first one picked.
     func beginDeleteFace() {
+        guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked else { return }
         let face = selectedFace
         cancelTransient()
@@ -5755,6 +5846,7 @@ struct DimensionEdit: Identifiable {
 
     /// Places (or moves) a hole at `center` on the face being sketched.
     func placeHole(at center: Point2) {
+        guard holeDraft != nil || requireNewEditingAccess() else { return }
         guard tool == .hole, let face = sketchMode?.face, let plane = face.plane, !isEditingBlocked else { return }
         dimensionEdit = nil
         var draft = holeDraft ?? HoleDraft(bodyID: face.bodyID, plane: plane, center: center,
@@ -5831,6 +5923,7 @@ struct DimensionEdit: Identifiable {
 
     /// Places (or moves) the chosen primitive standing on `plane` at `center`.
     func placePrimitive(on plane: SketchPlane, at center: Point2) {
+        guard primitiveDraft != nil || requireNewEditingAccess() else { return }
         guard let kind = tool.primitiveKind, !isEditingBlocked else { return }
         dimensionEdit = nil
         let sizes = primitiveDraft.flatMap { $0.kind == kind ? $0.sizes : nil } ?? lastPrimitiveSizes[kind] ?? kind.sizes.map(\.value)
@@ -5872,6 +5965,7 @@ struct DimensionEdit: Identifiable {
 
     /// Places (or moves) a peg at `center` on the face being sketched.
     func placePeg(at center: Point2) {
+        guard pegDraft != nil || requireNewEditingAccess() else { return }
         guard tool == .peg, let face = sketchMode?.face, let plane = face.plane, !isEditingBlocked else { return }
         dimensionEdit = nil
         var draft = pegDraft ?? PegDraft(bodyID: face.bodyID, plane: plane, center: center, spec: lastPeg)
@@ -5947,6 +6041,7 @@ struct DimensionEdit: Identifiable {
 
     /// Places (or moves) text centered at `center` on the face being sketched.
     func placeText(at center: Point2) {
+        guard textDraft != nil || requireNewEditingAccess() else { return }
         guard tool == .text, let face = sketchMode?.face, let plane = face.plane, !isEditingBlocked else { return }
         dimensionEdit = nil
         var draft = textDraft ?? TextDraft(bodyID: face.bodyID, plane: plane, center: center, text: lastText.text, font: lastText.font,
@@ -6056,6 +6151,7 @@ struct DimensionEdit: Identifiable {
 
     /// Sets up a thread on a solid's cylindrical face (a hole or round boss), sized from the face.
     func beginThread(bodyID: UUID, face: Int) {
+        guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked, let body = workspace.bodies.first(where: { $0.id == bodyID }),
               let solid = try? SolidKernel.solid(for: body) else { return }
         guard let spec = body.threadSpec(onFace: face, of: solid, clearance: fitClearance, preferInch: lengthUnit == .inches) else {
@@ -6262,6 +6358,7 @@ struct DimensionEdit: Identifiable {
 
     /// Starts Screw Lid on a round boss: the neck's thread and its lid, at the usual settings.
     func beginScrewLid(bodyID: UUID, face: Int) {
+        guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked, workspace.bodies.contains(where: { $0.id == bodyID }) else { return }
         cancelTransient()
         endSketchMode()
@@ -6337,6 +6434,7 @@ struct DimensionEdit: Identifiable {
     /// Adds the thread fit test for the neck at the current settings beside the model, as its own
     /// undo step, and keeps Screw Lid open (its preview rebuilt on the new model) to finish after.
     func addScrewLidFitTest() {
+        guard requireNewEditingAccess() else { return }
         guard let draft = screwLidDraft, !isBuildingScrewLidTest, !isEditingBlocked,
               let body = workspace.bodies.first(where: { $0.id == draft.bodyID }) else { return }
         let base = workspace, origin = FitTest.origin(beside: workspace)
@@ -6397,6 +6495,7 @@ struct DimensionEdit: Identifiable {
     /// Adds a `kind` part that screws onto the selected thread, already screwed on so the fit shows,
     /// as one undo step, and selects it. Built in the background; a change meanwhile drops it.
     func makeMatingPart(_ kind: ThreadMate) {
+        guard requireNewEditingAccess() else { return }
         guard !isMakingMatingPart, let target = selectedThread, let body = workspace.bodies.first(where: { $0.id == target.bodyID }) else { return }
         cancelTransient()
         endSketchMode()
@@ -6443,6 +6542,7 @@ struct DimensionEdit: Identifiable {
     /// the solid's definition, with a thread cut into it and fillets on its rim; a hole no step
     /// made (an imported solid's) is closed with Delete Face. Worked out in the background.
     func deleteSelectedHole() {
+        guard requireNewEditingAccess() else { return }
         guard canDeleteSelectedHole, let target = selectedHoleProbe else { return }
         cancelTransient()
         let base = workspace, body = target.body, probe = target.probe
@@ -6481,7 +6581,7 @@ struct DimensionEdit: Identifiable {
     private func canFinishBuild(from base: Workspace) -> Bool {
         workspace.hasSameModel(as: base) && !isBlockedApartFromNotes
     }
-    private var isBlockedApartFromNotes: Bool { isReadOnly || isProjectBusy || isResizingDimension || isAssistantWorking || assistantPreview != nil }
+    private var isBlockedApartFromNotes: Bool { isReadOnly || purchaseBlocksEditing || isProjectBusy || isResizingDimension || isAssistantWorking || assistantPreview != nil }
 
     /// Keeps a part built in the background, even while Notes has the keyboard: the typing so far
     /// is saved first as its own step, so the part is one undo step of its own.
@@ -6504,6 +6604,7 @@ struct DimensionEdit: Identifiable {
     /// Takes the selected face's fillet or chamfer out of its solid (one undo step): its edges are
     /// sharp again, every edge it rounded or beveled included.
     func deleteSelectedFinish() {
+        guard requireNewEditingAccess() else { return }
         guard canDeleteSelectedFinish, let finish = selectedFinish, let index = workspace.bodies.firstIndex(where: { $0.id == finish.bodyID }) else { return }
         cancelTransient()
         guard let removed = workspace.bodies[index].removingFinish(finish.source) else {
@@ -6569,6 +6670,7 @@ struct DimensionEdit: Identifiable {
     /// Reopens the selected feature in its tool with the values it was made with; Done puts the
     /// changed one in its place (one undo step), and Cancel leaves it as it was.
     func editSelectedFeature() {
+        guard requireNewEditingAccess() else { return }
         guard let feature = selectedFeature else { return }
         switch feature {
         case .hole(let body, let cut): editHole(bodyID: body, cut: cut)
@@ -6579,6 +6681,7 @@ struct DimensionEdit: Identifiable {
     }
 
     func editHole(bodyID: UUID, cut: Int) {
+        guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked, let body = workspace.bodies.first(where: { $0.id == bodyID }), body.cuts.indices.contains(cut),
               let spec = body.cuts[cut].hole, let circle = body.cuts[cut].profile.circle else { return }
         let operation = body.cuts[cut]
@@ -6588,6 +6691,7 @@ struct DimensionEdit: Identifiable {
     }
 
     func editText(bodyID: UUID, cut: Int) {
+        guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked, let body = workspace.bodies.first(where: { $0.id == bodyID }), body.cuts.indices.contains(cut),
               let spec = body.cuts[cut].text else { return }
         let operation = body.cuts[cut]
@@ -6597,6 +6701,7 @@ struct DimensionEdit: Identifiable {
     }
 
     func editThread(bodyID: UUID, cut: Int) {
+        guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked, let body = workspace.bodies.first(where: { $0.id == bodyID }) else { return }
         guard let setup = body.threadSetup(at: cut) else {
             status = "The face this thread is on is gone, so it cannot be edited. Delete it with Undo or Delete Hole."
@@ -6610,6 +6715,7 @@ struct DimensionEdit: Identifiable {
     }
 
     func editPeg(_ id: UUID, from bodyID: UUID?) {
+        guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked, let old = PegJoint.existing(id, in: workspace, preferring: bodyID, clearance: fitClearance) else { return }
         guard enterFeatureSketch(bodyID: old.bodyID, plane: old.plane, at: old.center, tool: .peg) else { return }
         updatePeg(PegDraft(bodyID: old.bodyID, plane: old.plane, center: old.center, spec: old.spec, editing: old))
@@ -6653,6 +6759,7 @@ struct DimensionEdit: Identifiable {
 
     /// Adds the Fit Test coupon beside the model as one undo step, selected and in view.
     func addFitTest() {
+        guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked else { return }
         cancelTransient()
         endSketchMode()
@@ -6680,6 +6787,7 @@ struct DimensionEdit: Identifiable {
     /// Rounds the corner at `vertex` (where two lines of a sketch on the current plane meet) to the
     /// current corner radius, as one undo step; the radius can then be typed.
     func roundCorner(at vertex: Point2) {
+        guard requireNewEditingAccess() else { return }
         guard tool == .cornerFillet, !isEditingBlocked else { return }
         let owners = visibleWorkspace.shapes.filter { shape in
             shape.plane == plane && (shape.kind == .line || shape.kind == .rectangle) &&
@@ -6798,6 +6906,7 @@ struct DimensionEdit: Identifiable {
 
     /// Removes a kept dimension from its sketch; the shapes stay as they are.
     func removeKeptDimension(_ id: UUID) {
+        guard requireNewEditingAccess() else { return }
         dimensionEdit = nil
         guard !isEditingBlocked, let next = workspace.removingKeptDimension(id) else { return }
         commit(next)
@@ -6941,6 +7050,7 @@ struct DimensionEdit: Identifiable {
     }
 
     func updateDimensions(first: Double, second: Double?) {
+        guard requireNewEditingAccess() else { return }
         guard var shape = selectedShape else { return }
         switch shape.kind {
         case .line: guard let updated = SketchEditing.dimension(.length, value: first, of: shape) else { return }; shape = updated
@@ -7015,6 +7125,10 @@ struct DimensionEdit: Identifiable {
     }
 
     func openDimension(_ target: DimensionTarget, at anchor: CGPoint) {
+        guard canEditDimension(target) else {
+            if !access.canEdit { showPurchaseOffer = true }
+            return
+        }
         guard let value = dimensionValue(target), dragContext == nil else { return }
         dimensionError = nil
         preview = nil
@@ -7288,6 +7402,7 @@ struct DimensionEdit: Identifiable {
             commit(next)
         }
         dimensionEdit = nil
+        if !editingOperationPending { canFinishAuthorizedEdit = false }
         return true
     }
 
@@ -7345,6 +7460,7 @@ struct DimensionEdit: Identifiable {
     }
 
     func beginSketchDrag(shapeID: UUID, handle: SketchHandle) {
+        guard requireNewEditingAccess() && !isEditingBlocked else { return }
         guard !isExtruding, let shape = workspace.shapes.first(where: { $0.id == shapeID }) else { return }
         dimensionEdit = nil
         preview = nil
@@ -7387,6 +7503,7 @@ struct DimensionEdit: Identifiable {
     }
 
     func deleteSelection() {
+        guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked else { return }
         var next = workspace
         // Several picked sketch items go together, as one step.
@@ -7460,12 +7577,14 @@ struct DimensionEdit: Identifiable {
 
     /// Shows the assistant's changes on the canvas for review. Tools and drafts end first. A draft
     /// that is not a valid model is not shown, and what was under review stays (returns false).
-    @discardableResult func showAssistantPreview(_ preview: Workspace, focus: AssistantItem?) -> Bool {
+    @discardableResult func showAssistantPreview(_ preview: Workspace, focus: AssistantItem?, authorizedBeforeExpiration: Bool = false) -> Bool {
+        guard access.canEdit || authorizedBeforeExpiration else { return false }
         var preview = preview
         preview.normalizeSketches()
         preview.pruneImportedShapes()
         guard preview.isValid else { return false }
         cancelTransient()
+        if authorizedBeforeExpiration && !access.canEdit { canFinishAuthorizedEdit = true }
         dimensionEdit = nil
         if sketchMode != nil { endSketchMode() }
         tool = .select
@@ -7479,7 +7598,7 @@ struct DimensionEdit: Identifiable {
     /// Returns false (the changes stay under review) when the document cannot change.
     @discardableResult func keepAssistantChanges() -> Bool {
         guard let preview = assistantPreview, !isAssistantWorking, !isProjectBusy else { return false }
-        guard !isReadOnly else {
+        guard !isReadOnly, !purchaseBlocksEditing else {
             saveError = "This file cannot be changed right now, so the assistant's changes are still under review. Resolve the file first, or Discard them."
             return false
         }
@@ -7499,10 +7618,11 @@ struct DimensionEdit: Identifiable {
         guard !isAssistantWorking else { return }
         assistantPreview = nil
         assistantFocus = nil
+        canFinishAuthorizedEdit = false
     }
 
-    func undo() { guard !isEditingBlocked else { return }; cancelTransient(); selection = nil; history.undo(); revalidateSelectedNote(); revalidateSketchMode(); prunePicked(); save() }
-    func redo() { guard !isEditingBlocked else { return }; cancelTransient(); selection = nil; history.redo(); revalidateSelectedNote(); revalidateSketchMode(); prunePicked(); save() }
+    func undo() { guard requireNewEditingAccess(), !isEditingBlocked else { return }; cancelTransient(); selection = nil; history.undo(); revalidateSelectedNote(); revalidateSketchMode(); prunePicked(); save() }
+    func redo() { guard requireNewEditingAccess(), !isEditingBlocked else { return }; cancelTransient(); selection = nil; history.redo(); revalidateSelectedNote(); revalidateSketchMode(); prunePicked(); save() }
 
     /// Undo, redo, and holes can remove or renumber what a sketch mode is on: follow its face to the
     /// face's new number (by the point it was picked at), or leave sketch mode when it is gone.
@@ -7535,6 +7655,7 @@ struct DimensionEdit: Identifiable {
         let count = separated.added.values.reduce(0) { $0 + $1.count + 1 }
         if count > 0 { status = "Separated into \(count) solids" }
         history.commit(updated)
+        canFinishAuthorizedEdit = false
         save()
     }
     private func documentStateChanged() {
@@ -7556,7 +7677,9 @@ struct DimensionEdit: Identifiable {
             saveError = "This file cannot be overwritten right now. Use Save As to keep your work in a separate file."
             completion?(false); return
         }
-        if withThumbnail { document.setPreview(projectThumbnailProvider?()) }
+        if withThumbnail, access.canEdit || document.hasUnsavedChanges || document.project.workspace != workspace {
+            document.setPreview(projectThumbnailProvider?())
+        }
         do {
             try document.updateWorkspace(workspace)
             status = "Saving…"

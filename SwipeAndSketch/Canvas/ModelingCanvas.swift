@@ -1711,6 +1711,12 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         session.viewCube.pencilActive = true
         session.isPencilDown = true
         pencilStartScreen = point
+        if !session.hasEditingAccess && session.tool == .select {
+            // Viewing still uses Pencil selection, with the same finger navigation and palm
+            // rejection. Never enter a transform or sketch-handle drag from this path.
+            select(at: point)
+            return
+        }
         // Picking a plane: a tap on a plane or face starts the sketch there; a stroke in open space
         // starts it on the grid and carries on drawing below.
         if session.isPickingPlane, pickPlane(at: point) { return }

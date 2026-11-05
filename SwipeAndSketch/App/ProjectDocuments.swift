@@ -149,6 +149,7 @@ final class FilesBrowserController: UIDocumentBrowserViewController {
 /// the owner of the open project: it opens, creates, saves as, and closes projects, presenting the
 /// editor over Home.
 @MainActor final class HomeController: UIViewController, @preconcurrency UIDocumentBrowserViewControllerDelegate, UIDocumentPickerDelegate {
+    private let access: AppAccessStore
     private let browser = FilesBrowserController()
     private let home = HomeModel()
     private var activeDocument: ProjectDocument?
@@ -161,7 +162,8 @@ final class FilesBrowserController: UIDocumentBrowserViewController {
     private var pickerCompletion: ((URL) -> Void)?
     private let fileTests: Bool
 
-    init() {
+    init(access: AppAccessStore = .shared) {
+        self.access = access
         #if DEBUG
         fileTests = ProcessInfo.processInfo.arguments.contains("--ui-testing-documents")
         #else
@@ -179,7 +181,7 @@ final class FilesBrowserController: UIDocumentBrowserViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        let hosting = UIHostingController(rootView: HomeView(model: home, browser: browser))
+        let hosting = UIHostingController(rootView: HomeView(model: home, browser: browser, access: access))
         hosting.overrideUserInterfaceStyle = .light
         addChild(hosting)
         hosting.view.frame = view.bounds
@@ -293,7 +295,7 @@ final class FilesBrowserController: UIDocumentBrowserViewController {
             }
             self.scopedURL = scoped ? url : nil
             guard let document = self.activeDocument else { return }
-            let session = ModelingSession(document: document)
+            let session = ModelingSession(document: document, access: self.access)
             if self.fileTests, ProcessInfo.processInfo.arguments.contains("--select-document-sketch"), let shape = session.workspace.shapes.first {
                 session.selection = .shape(shape.id)
             }
@@ -373,6 +375,12 @@ final class FilesBrowserController: UIDocumentBrowserViewController {
 
     /// Asks where to save a new project (named `name`), then opens it. Home goes back to its start.
     private func create(_ project: Project, name: String) {
+        access.refreshClock()
+        guard access.canEdit else {
+            if let session = activeSession { session.showPurchaseOffer = true }
+            else { home.showPurchaseOffer = true }
+            return
+        }
         do {
             try presentFilePicker(project: project, name: Self.fileName(name), title: "New Project")
         } catch { showError("Could not create project", error.localizedDescription) }

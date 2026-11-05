@@ -18,6 +18,7 @@ private let card = Color("ss-white")
     @Published private(set) var filesShown = false
     /// Changed after a template is made, so Templates starts from its gallery again.
     @Published var galleryID = UUID()
+    @Published var showPurchaseOffer = false
 
     var newBlankProject: () -> Void = { }
     var create: (Project, String) -> Void = { _, _ in }
@@ -31,6 +32,7 @@ private let card = Color("ss-white")
 struct HomeView: View {
     @ObservedObject var model: HomeModel
     let browser: UIViewController
+    @ObservedObject var access: AppAccessStore
     @ObservedObject private var recents = RecentProjects.shared
     @StateObject private var thumbnails = TemplateThumbnails.shared
     @State private var showAbout = false
@@ -65,6 +67,9 @@ struct HomeView: View {
         .background(canvas.ignoresSafeArea())
         .tint(violet)
         .sheet(isPresented: $showAbout) { AboutView { showAbout = false } }
+        .sheet(isPresented: $model.showPurchaseOffer) {
+            PurchaseView(access: access) { model.showPurchaseOffer = false }.presentationSizing(.page)
+        }
         .sheet(isPresented: $showSettings) { AssistantSettingsView { showSettings = false } }
         .sheet(isPresented: $showQuickStart, onDismiss: {
             if blankAfterQuickStart { blankAfterQuickStart = false; model.newBlankProject() }
@@ -131,6 +136,10 @@ struct HomeView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 30) {
                 header
+                if !access.isUnrestricted {
+                    AccessStatusButton(access: access) { model.showPurchaseOffer = true }
+                    TrialReminder(access: access) { model.showPurchaseOffer = true }
+                }
                 VStack(alignment: .leading, spacing: 12) {
                     sectionTitle("Start something")
                     LazyVGrid(columns: shelfColumns, alignment: .leading, spacing: 14) {

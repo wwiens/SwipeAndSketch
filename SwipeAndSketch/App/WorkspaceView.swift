@@ -14,6 +14,7 @@ private let lavender = Color("ss-lavender")
 
 struct WorkspaceView: View {
     @ObservedObject var session: ModelingSession
+    @ObservedObject private var access: AppAccessStore
     @StateObject private var assistant: AssistantController
     @StateObject private var keyboard = KeyboardInset()
     @State private var showItems = false
@@ -59,6 +60,7 @@ struct WorkspaceView: View {
 
     init(session: ModelingSession) {
         self.session = session
+        _access = ObservedObject(wrappedValue: session.access)
         _assistant = StateObject(wrappedValue: AssistantController(session: session))
     }
     /// Sketch tools show while sketching, and from the moment Sketch is tapped (before a plane is picked).
@@ -112,6 +114,15 @@ struct WorkspaceView: View {
                 VStack(spacing: 10) {
                     // The project tab hangs from the top edge of the screen; the hint floats below it.
                     projectBar(topInset: geometry.safeAreaInsets.top)
+                    if !access.canEdit && !access.isUnrestricted {
+                        Button { session.showPurchaseOffer = true } label: {
+                            Text("Viewing mode · Unlock to create and edit")
+                                .font(.callout.weight(.semibold)).foregroundStyle(violet)
+                                .padding(10).background(paper, in: Capsule())
+                        }
+                        .buttonStyle(.plain).accessibilityIdentifier("workspace.unlock")
+                        .allowsHitTesting(!session.isPencilDown)
+                    }
                     hintBox
                 }
                 .frame(maxWidth: .infinity)
@@ -222,12 +233,16 @@ struct WorkspaceView: View {
         }
         .onAppear {
             if ModelingSession.isRunningUITests {
+                if ProcessInfo.processInfo.arguments.contains("--ui-testing-purchases") { session.showPurchaseOffer = true }
                 radialToolbarEnabled = ProcessInfo.processInfo.arguments.contains("--radial-toolbar")
                 radialOpen = radialToolbarEnabled
                 radialToolbarX = -1; radialToolbarY = -1
             }
         }
         .sheet(isPresented: $session.showHelp) { ControlsGuide { session.showHelp = false }.presentationSizing(.page) }
+        .sheet(isPresented: $session.showPurchaseOffer) {
+            PurchaseView(access: access) { session.showPurchaseOffer = false }.presentationSizing(.page)
+        }
         .sheet(isPresented: $showAbout) { AboutView { showAbout = false } }
         .sheet(isPresented: $showSettings) { AssistantSettingsView { showSettings = false } }
         .sheet(item: $session.exportItem) { item in ShareSheet(url: item.url).ignoresSafeArea() }
@@ -432,6 +447,7 @@ struct WorkspaceView: View {
                 }
                 .accessibilityIdentifier("tools.layout")
                 menuButton("Settings", icon: .assistant) { showSettings = true }.accessibilityIdentifier("project.settings")
+                menuButton("Purchases", icon: .brand) { session.showPurchaseOffer = true }.accessibilityIdentifier("project.purchases")
                 menuButton("About Swipe & Sketch", icon: .brand) { showAbout = true }.accessibilityIdentifier("project.about")
             } label: { SSIconGlyph(icon: .more, size: 25, color: ink) }
             .accessibilityLabel("Project menu")

@@ -35,7 +35,7 @@ Add tests with your change: core tests in `Tests/CoreTests` for geometry and fil
 - **Files:** `.swipesketch` files store millimeters and a format version. Never silently replace an unreadable or newer-version file with an empty model. See [Docs/ProjectFiles.md](Docs/ProjectFiles.md).
 - **Editing:** a drag previews live and commits one undo step when the Pencil lifts. Numeric edits are validated before they change the document.
 - **New modeling tools** get an `AssistantWorkbench` operation (so the assistant can use them) and a help topic in `HelpTopics.swift`.
-- **Availability:** every current and future feature is available to everyone. Don't add feature gates.
+- **Availability:** follow the agreed pricing and trial model (`SwipeAndSketch/Core/AppAccess.swift`, `SwipeAndSketch/App/AppAccessStore.swift`): a full 14-day trial and a $19.99 USD one-time purchase, with every current and future feature in the same product and no separate feature tiers. Viewing, sharing, full-quality export, and recovery saves remain available without editing access. Keep the source MIT licensed.
 - **Wording:** use standard CAD terms in the interface.
 - **Look:** app chrome uses the Swipe & Sketch icons and colors in `Assets.xcassets` (`ss-*`), not SF Symbols.
 
