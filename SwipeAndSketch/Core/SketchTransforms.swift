@@ -68,7 +68,8 @@ extension Workspace {
             result.sketches[index].dropFixedDimensions()
             for i in result.shapes.indices where result.shapes[i].sketch == id { result.shapes[i].plane = plane }
         }
-        return result.isValid ? (result, movedID) : nil
+        // Only planes changed, so the solids need no second look (`isValidApartFromBodies`).
+        return result.isValidApartFromBodies ? (result, movedID) : nil
     }
 }
 
@@ -132,7 +133,9 @@ extension Workspace {
             result.bodies[index] = moved
         }
         SolidCache.shared.seed(moved, from: bodies[index], by: transform)
-        guard result.isValid, (try? SolidKernel.solid(for: moved)) != nil else { return nil }
+        // `transformed` checked every plane it moved and changed nothing else, so the solid is as valid
+        // as before; this runs on every step of a drag (`isValidApartFromBodies`).
+        guard result.isValidApartFromBodies, (try? SolidKernel.solid(for: moved)) != nil else { return nil }
         return (result, moved.id)
     }
 
@@ -197,7 +200,7 @@ extension Workspace {
     /// Moves or turns one shape within its sketch (only along the sketch and about its normal), or
     /// a copy of it. A rectangle turned off square becomes its four lines (the first moves on).
     func transformingShape(_ id: UUID, by transform: RigidTransform, copy: Bool) -> (workspace: Workspace, shapeID: UUID)? {
-        guard let moved = movingShape(id, by: transform, copy: copy), moved.workspace.isValid else { return nil }
+        guard let moved = movingShape(id, by: transform, copy: copy), moved.workspace.isValidApartFromBodies else { return nil }
         return (moved.workspace, moved.pieces[0])
     }
 
@@ -211,7 +214,7 @@ extension Workspace {
             result = step.workspace
             moved += step.pieces
         }
-        return result.isValid ? (result, moved) : nil
+        return result.isValidApartFromBodies ? (result, moved) : nil
     }
 
     /// One shape moved (or copied) by `transform` within its sketch, and the ids of what it became.
@@ -334,17 +337,23 @@ extension Workspace {
     /// A copy of group `id` with its nested groups and everything in them, next to it in the same
     /// parent group: new solids, sketches, and planes after the rest. Returns the copy's id.
     func duplicatingGroup(_ id: UUID) -> (workspace: Workspace, group: UUID)? {
+        guard let copied = copyingGroup(id), copied.workspace.isValid else { return nil }
+        return copied
+    }
+
+    /// `duplicatingGroup` without the check, for callers that check the result themselves.
+    private func copyingGroup(_ id: UUID) -> (workspace: Workspace, group: UUID)? {
         guard let original = group(id) else { return nil }
         var result = self
         let ids = result.appendCopies(from: self, groups: groupAndDescendants(id), into: original.parent)
-        let copy = ids[id]!
-        return result.isValid ? (result, copy) : nil
+        return (result, ids[id]!)
     }
 
     /// Moves or turns everything in group `id` (or, with `copy`, a copy of the group, leaving the
     /// original in place). Returns the group that moved; nil when a solid no longer builds.
     func transformingGroup(_ id: UUID, by transform: RigidTransform, copy: Bool) -> (workspace: Workspace, group: UUID)? {
-        var (result, moved) = copy ? (duplicatingGroup(id) ?? (self, id)) : (self, id)
+        // The copies' solids are exact copies, so they are checked with the rest below, not on their own.
+        var (result, moved) = copy ? (copyingGroup(id) ?? (self, id)) : (self, id)
         guard !copy || moved != id else { return nil }
         let contents = result.contents(of: moved)
         for bodyID in contents.bodies {
@@ -363,7 +372,8 @@ extension Workspace {
                   let plane = result.constructionPlanes[index].plane.transformed(by: transform) else { return nil }
             result.constructionPlanes[index].plane = plane
         }
-        guard result.isValid, contents.bodies.allSatisfy({ id in result.bodies.first { $0.id == id }.map { (try? SolidKernel.solid(for: $0)) != nil } ?? false }) else { return nil }
+        // Solids only moved rigidly (see `transformingBody`); the kernel still has to build each one.
+        guard result.isValidApartFromBodies, contents.bodies.allSatisfy({ id in result.bodies.first { $0.id == id }.map { (try? SolidKernel.solid(for: $0)) != nil } ?? false }) else { return nil }
         return (result, moved)
     }
 }

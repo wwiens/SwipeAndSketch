@@ -74,6 +74,26 @@ final class BodyTransformTests: XCTestCase {
         XCTAssertEqual(workspace.transforming(.body(body.id), by: .move(.init(1, 0, 0)), copy: false)?.target, .body(body.id))
     }
 
+    /// A drag step checks the solids it moves only through their planes (it used to check every
+    /// solid's outlines and cuts again on each step); what it allows is still a valid model in full,
+    /// and a move the document cannot hold is still refused (November 5, 2026).
+    func testMovesCheckedOnlyThroughTheirPlanesStayValidInFull() throws {
+        let body = try featuredBox()
+        let sketchShape = SketchShape(kind: .circle, plane: .front, start: .init(x: 0, y: 0), end: .init(x: 5, y: 0))
+        var workspace = Workspace(shapes: [sketchShape], bodies: [body])
+        workspace.normalizeSketches()
+        XCTAssertTrue(workspace.isValid)
+        let turn = RigidTransform.rotate(degrees: 37, about: .init(1, 2, 3), through: .init(5, 5, 5))
+        for copy in [false, true] {
+            XCTAssertTrue(try XCTUnwrap(workspace.transformingBody(body.id, by: turn, copy: copy)).workspace.isValid)
+            let sketchID = try XCTUnwrap(workspace.sketches.first?.id)
+            XCTAssertTrue(try XCTUnwrap(workspace.transformingSketch(sketchID, by: turn, copy: copy)).workspace.isValid)
+            XCTAssertTrue(try XCTUnwrap(workspace.transformingItems(bodies: [body.id], sketches: [sketchID], by: turn, copy: copy)).workspace.isValid)
+        }
+        XCTAssertNil(workspace.transformingBody(body.id, by: .move(.init(0, 0, 99_999)), copy: false), "Past the coordinate limits")
+        XCTAssertNil(workspace.transformingBody(body.id, by: .move(.init(.nan, 0, 0)), copy: false))
+    }
+
     func testWidgetCenterSnapsToCornersEdgesAndCenters() throws {
         let shape = SketchShape(kind: .rectangle, plane: .top, start: .init(x: -30, y: -20), end: .init(x: 30, y: 20))
         let body = SolidBody(profile: try XCTUnwrap(Geometry.profiles(in: [shape], on: .top).first), depth: 20)

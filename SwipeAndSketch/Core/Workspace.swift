@@ -103,8 +103,16 @@ struct Workspace: Equatable, Sendable {
         return self == model
     }
 
-    var isValid: Bool {
-        notesAreValid && shapes.allSatisfy(\.isValid) && bodies.allSatisfy(\.isValid) &&
+    var isValid: Bool { bodies.allSatisfy(\.isValid) && isValidApartFromBodies }
+
+    /// Everything `isValid` checks except each solid's own definition: for a change that leaves
+    /// every solid as it was, or only carries solids by a rigid motion (which moves their planes,
+    /// each checked as it moves, and leaves the rest of their definition as it was). Checking each
+    /// solid's outlines and cuts again on every step of a live drag took the whole frame on a
+    /// project whose solids had about 75 steps each (November 5, 2026). Results are still checked
+    /// in full when they are kept (`WorkspaceHistory.commit` and `amend`).
+    var isValidApartFromBodies: Bool {
+        notesAreValid && shapes.allSatisfy(\.isValid) &&
         Set(shapes.map(\.id)).count == shapes.count && Set(bodies.map(\.id)).count == bodies.count && sketchesAreValid &&
         constructionPlanes.count <= 1_000 && constructionPlanes.allSatisfy(\.isValid) &&
         Set(constructionPlanes.map(\.id)).count == constructionPlanes.count &&
