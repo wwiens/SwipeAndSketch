@@ -1,0 +1,1631 @@
+import XCTest
+
+@MainActor final class SwipeAndSketchUITests: XCTestCase {
+    func testLargeGridfinityFaceDimensionAppliesAndControlsRespond() {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app(arguments: ["--ui-testing-gridfinity-resize"])
+        let apply = app.buttons["keypad.confirm"]
+        XCTAssertTrue(apply.waitForExistence(timeout: 15))
+        app.buttons["keypad.+"].tap()
+        app.buttons["keypad.5"].tap()
+        apply.tap()
+        XCTAssertTrue(apply.waitForNonExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Resized"].waitForExistence(timeout: 5))
+        app.buttons["notes.toggle"].tap()
+        XCTAssertTrue(app.buttons["notes.close"].waitForExistence(timeout: 5))
+        app.buttons["notes.close"].tap()
+        app.buttons.matching(NSPredicate(format: "identifier == %@", "Undo")).element.tap()
+        app.buttons["items.toggle"].tap()
+        XCTAssertTrue(app.buttons["item.Body 01"].waitForExistence(timeout: 5))
+    }
+
+    func testRadialAndNotesControlsRespondAfterBackgrounding() {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app(arguments: ["--ui-testing-solid", "--radial-toolbar"])
+        let hub = app.buttons["radial.move"]
+        XCTAssertTrue(hub.waitForExistence(timeout: 15))
+        let start = hub.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        start.press(forDuration: 0.15, thenDragTo: start.withOffset(CGVector(dx: -300, dy: -100)))
+        app.buttons["notes.toggle"].tap()
+        let editor = app.textViews["notes.editor"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        editor.tap(); editor.typeText("Keep this note through interruption")
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(app.buttons["notes.close"].waitForExistence(timeout: 10))
+        app.buttons["notes.close"].tap()
+        app.buttons["items.toggle"].tap()
+        let body = app.buttons["item.Body 01"]
+        XCTAssertTrue(body.waitForExistence(timeout: 5))
+        body.tap()
+        XCTAssertTrue(body.isSelected, "Model Tree selection must respond after leaving the notes editor")
+        app.buttons["items.toggle"].tap()
+        app.buttons["radial.toggle"].tap()
+        XCTAssertTrue(app.otherElements["radial.toolbar"].waitForNonExistence(timeout: 5))
+        app.buttons["radial.toggle"].tap()
+        XCTAssertTrue(hub.waitForExistence(timeout: 5))
+        app.buttons["notes.toggle"].tap()
+        XCTAssertTrue((editor.value as? String ?? "").contains("through interruption"))
+        app.buttons["notes.close"].tap()
+    }
+
+    func testLinkedNotesFromModelTreeHighlightFilterAndPreserveMissingTarget() {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-testing-solid", "--ui-testing-no-animations"]
+        app.launch()
+        app.buttons["items.toggle"].tap()
+        let body = app.buttons["item.Body 01"]
+        XCTAssertTrue(body.waitForExistence(timeout: 5))
+        // iPadOS 27 exposes plain context-menu actions as unlabeled collection cells to XCTest.
+        // Add Note is the second row, after Rename; submenu rows retain their labels.
+        body.press(forDuration: 1)
+        app.collectionViews.firstMatch.cells.element(boundBy: 1).tap()
+        let editor = app.textViews["notes.editor"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        editor.tap(); editor.typeText("Print flat; this wall must resist bending")
+        app.buttons["notes.close"].tap()
+        let bodyIndicator = app.buttons["item.note.Body 01"]
+        XCTAssertTrue(bodyIndicator.waitForExistence(timeout: 5))
+        let sketch = app.buttons["item.Sketch 01"]
+        sketch.press(forDuration: 1); app.collectionViews.firstMatch.cells.element(boundBy: 1).tap()
+        editor.tap(); editor.typeText("Leave 0.3 mm clearance")
+        app.buttons["notes.close"].tap()
+        XCTAssertTrue(app.buttons["item.note.Sketch 01"].waitForExistence(timeout: 5))
+        bodyIndicator.tap()
+        XCTAssertTrue(body.isSelected)
+        XCTAssertTrue((editor.value as? String ?? "").contains("resist bending"))
+        app.segmentedControls["notes.filter"].buttons["Selected Object"].tap()
+        let entries = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "notes.entry."))
+        XCTAssertEqual(entries.count, 1)
+        app.segmentedControls["notes.filter"].buttons["All"].tap()
+        XCTAssertEqual(entries.count, 2)
+        app.buttons["notes.project"].tap()
+        editor.tap(); editor.typeText("Overall project requirements")
+        let bodyEntry = entries.matching(NSPredicate(format: "label == %@", "Body 01")).firstMatch
+        bodyEntry.tap()
+        XCTAssertTrue((editor.value as? String ?? "").contains("resist bending"))
+        app.buttons["notes.close"].tap()
+        body.press(forDuration: 1); app.collectionViews.firstMatch.cells.allElementsBoundByIndex.last!.tap()
+        app.buttons["notes.toggle"].tap()
+        XCTAssertTrue(app.staticTexts["notes.missing"].waitForExistence(timeout: 5))
+        XCTAssertTrue((editor.value as? String ?? "").contains("resist bending"))
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "Linked notebooks preserve notes for a deleted body"; screenshot.lifetime = .keepAlways; add(screenshot)
+        app.buttons["notes.close"].tap()
+        app.buttons.matching(NSPredicate(format: "identifier == %@", "Undo")).element.tap()
+        XCTAssertTrue(body.waitForExistence(timeout: 5))
+        app.buttons["item.note.Body 01"].tap()
+        XCTAssertTrue(body.isSelected)
+        XCTAssertFalse(app.staticTexts["notes.missing"].exists)
+    }
+
+    /// With a solid selected, Notes names the notebook it shows and offers the solid's own; nothing
+    /// changes until the offer is tapped.
+    func testNotesOfferANoteForTheSelectedSolid() {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-testing-solid", "--ui-testing-no-animations"]
+        app.launch()
+        app.buttons["items.toggle"].tap()
+        let body = app.buttons["item.Body 01"]
+        XCTAssertTrue(body.waitForExistence(timeout: 5))
+        body.tap()
+        app.buttons["notes.toggle"].tap()
+        let target = app.staticTexts["notes.target"]
+        XCTAssertTrue(target.waitForExistence(timeout: 5))
+        XCTAssertEqual(target.label, "Project Notes", "Opening Notes keeps the notebook it had")
+        let offer = app.buttons["notes.offer"]
+        XCTAssertEqual(offer.label, "Add Note to Body 01")
+        offer.tap()
+        XCTAssertEqual(target.label, "Note for Body 01")
+        XCTAssertFalse(offer.exists, "No offer for the notebook already open")
+        let editor = app.textViews["notes.editor"]
+        editor.tap(); editor.typeText("Print on its side")
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "A note for the selected solid"; screenshot.lifetime = .keepAlways; add(screenshot)
+        app.buttons["notes.project"].tap()
+        XCTAssertEqual(target.label, "Project Notes")
+        XCTAssertEqual(offer.label, "Open Note for Body 01")
+        XCTAssertFalse((editor.value as? String ?? "").contains("Print on its side"))
+        let offered = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        offered.name = "Project Notes open, offering the selected solid's note"; offered.lifetime = .keepAlways; add(offered)
+        app.buttons["notes.close"].tap()
+        XCTAssertTrue(app.buttons["item.note.Body 01"].waitForExistence(timeout: 5))
+    }
+
+    func testProjectNotesEditReadUndoAndReopenPanel() {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing"]
+        app.launch()
+        let notes = app.buttons["notes.toggle"]
+        XCTAssertTrue(notes.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(notes.frame.minY, app.buttons["assistant.toggle"].frame.maxY)
+        notes.tap()
+        XCTAssertTrue(app.otherElements["notes.panel"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["notes.edit"].exists)
+        XCTAssertFalse(app.buttons["notes.done"].exists)
+        XCTAssertFalse(app.keyboards.firstMatch.exists, "Opening Notes leaves the canvas visible until the text is tapped")
+        let editor = app.textViews["notes.editor"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        editor.tap()
+        editor.typeText("Fit: 0.3 mm\nPrint flat\nhttps://example.com")
+        app.buttons["notes.close"].tap()
+        XCTAssertFalse(app.otherElements["notes.panel"].exists)
+        notes.tap()
+        XCTAssertTrue((editor.value as? String ?? "").contains("Fit: 0.3 mm"))
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "Editable notebook with Notes in the left toolbar"; screenshot.lifetime = .keepAlways; add(screenshot)
+        // A reopened notebook can be edited directly, with no mode switch.
+        editor.tap(); editor.typeText("\nCheck screw clearance")
+        app.buttons["notes.close"].tap()
+        app.buttons.matching(NSPredicate(format: "identifier == %@", "Undo")).element.tap()
+        notes.tap()
+        XCTAssertFalse((editor.value as? String ?? "").contains("Check screw clearance"))
+        XCTAssertTrue((editor.value as? String ?? "").contains("Print flat"))
+        app.buttons["notes.close"].tap()
+        app.buttons.matching(NSPredicate(format: "identifier == %@", "Undo")).element.tap()
+        notes.tap()
+        XCTAssertEqual(editor.value as? String, "")
+        app.buttons["notes.close"].tap()
+        app.buttons.matching(NSPredicate(format: "identifier == %@", "Redo")).element.tap()
+        app.buttons["Project menu"].tap(); app.buttons["project.notes"].tap()
+        XCTAssertTrue((editor.value as? String ?? "").contains("Print flat"))
+        XCUIDevice.shared.orientation = .portrait
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["notes.close"].isHittable)
+    }
+
+    func testFilesProjectSaveAsCancelAndNewProject() {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing-documents", "--reset-document-tests", "--select-document-sketch"]
+        app.launch()
+        let title = app.staticTexts["project.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 20))
+        XCTAssertTrue(title.label.hasPrefix("Document Test "))
+        let originalName = title.label
+        XCTAssertTrue(app.staticTexts["2 sketches · 1 solid"].exists)
+        app.buttons["dimension.width"].tap()
+        app.buttons["keypad.7"].tap(); app.buttons["keypad.5"].tap(); app.buttons["keypad.confirm"].tap()
+        app.buttons["Project menu"].tap(); app.buttons["project.save"].tap()
+        app.buttons["Project menu"].tap(); app.buttons["project.saveAs"].tap()
+        let cancel = app.buttons["Cancel"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 10))
+        let picker = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        picker.name = "Native Files Save As picker"; picker.lifetime = .keepAlways; add(picker)
+        cancel.tap()
+        XCTAssertEqual(title.label, originalName)
+        XCTAssertEqual(app.buttons["dimension.width"].value as? String, "75")
+        app.buttons["Project menu"].tap(); app.buttons["project.new"].tap()
+        // New Project opens the template gallery first.
+        let blank = app.buttons["templates.blank"]
+        XCTAssertTrue(blank.waitForExistence(timeout: 10)); blank.tap()
+        XCTAssertTrue(cancel.waitForExistence(timeout: 10))
+        let name = app.textFields.firstMatch
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.tap()
+        let previous = name.value as? String ?? ""
+        name.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: previous.count) + originalName + " Empty")
+        if app.buttons["done"].exists { app.buttons["done"].tap() }
+        let create = app.buttons["DOCPicker.actionButton"]
+        XCTAssertTrue(create.waitForExistence(timeout: 5))
+        create.tap()
+        let opened = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", originalName + " Empty"), object: title)
+        XCTAssertEqual(XCTWaiter.wait(for: [opened], timeout: 15), .completed)
+        XCTAssertTrue(app.staticTexts["0 sketches · 0 solids"].exists)
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier == %@", "Undo")).element.isEnabled)
+        app.buttons["project.home"].tap()
+        let original = app.buttons["home.recent.\(originalName)"]
+        XCTAssertTrue(original.waitForExistence(timeout: 10))
+        let home = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        home.name = "Home with recent projects"; home.lifetime = .keepAlways; add(home)
+        XCTAssertEqual(app.buttons.matching(identifier: "home.recent.\(originalName)").count, 1, "Opening the project must not leave a same-named duplicate to reopen by mistake")
+        XCTAssertTrue(app.buttons["home.recent.\(originalName) Empty"].exists)
+        original.tap()
+        XCTAssertTrue(title.waitForExistence(timeout: 15))
+        XCTAssertEqual(title.label, originalName)
+        XCTAssertTrue(app.staticTexts["2 sketches · 1 solid"].exists)
+        XCTAssertEqual(app.buttons["dimension.width"].value as? String, "75")
+    }
+    func testNewProjectFromATemplate() {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing-documents", "--reset-document-tests"]
+        app.launch()
+        let title = app.staticTexts["project.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 20))
+        app.buttons["Project menu"].tap(); app.buttons["project.new"].tap()
+        let bin = app.buttons["templates.gridfinity.bin"]
+        XCTAssertTrue(bin.waitForExistence(timeout: 10))
+        // Card pictures ship in the asset catalog, so they are there as soon as the gallery is.
+        let gallery = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        gallery.name = "New Project template gallery"; gallery.lifetime = .keepAlways; add(gallery)
+        app.swipeUp()
+        let more = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        more.name = "Template gallery scrolled"; more.lifetime = .keepAlways; add(more)
+        app.swipeDown()
+        bin.tap()
+        let create = app.buttons["templates.create"]
+        XCTAssertTrue(create.waitForExistence(timeout: 10))
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: create)], timeout: 20), .completed)
+        // One more grid unit across.
+        app.buttons["templates.parameter.columns-Increment"].tap()
+        sleep(1)
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: create)], timeout: 20), .completed)
+        let setup = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        setup.name = "Gridfinity bin set up 3 x 1"; setup.lifetime = .keepAlways; add(setup)
+        create.tap()
+        let save = app.buttons["DOCPicker.actionButton"]
+        XCTAssertTrue(save.waitForExistence(timeout: 10))
+        XCTAssertEqual(app.textFields.firstMatch.value as? String, "Gridfinity Bin 3×1×6")
+        save.tap()
+        let opened = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Gridfinity Bin 3×1×6"), object: title)
+        XCTAssertEqual(XCTWaiter.wait(for: [opened], timeout: 20), .completed)
+        XCTAssertTrue(app.staticTexts["0 sketches · 1 solid"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier == %@", "Undo")).element.exists)
+        sleep(2)
+        let made = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        made.name = "Project made from the Gridfinity bin template"; made.lifetime = .keepAlways; add(made)
+
+        // An electronics template, from Home's Start Something this time; going back leaves nothing behind.
+        app.buttons["project.home"].tap()
+        let electronics = app.buttons["home.category.electronics"]
+        XCTAssertTrue(electronics.waitForExistence(timeout: 10)); electronics.tap()
+        let pi = app.buttons["templates.electronics.pi-case"]
+        XCTAssertTrue(pi.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["templates.notice.electronics"].exists, "The board makers' trademark notice")
+        pi.tap()
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: create)], timeout: 20), .completed)
+        let piShot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        piShot.name = "Raspberry Pi case set up"; piShot.lifetime = .keepAlways; add(piShot)
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(pi.waitForExistence(timeout: 10))
+        app.buttons["home.section.home"].tap()
+        XCTAssertTrue(electronics.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["home.recent.Gridfinity Bin 3×1×6"].exists)
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'home.recent.Case for'")).firstMatch.exists)
+    }
+    func testQuickStartShowsPencilThenAFirstPartAndComesBackFromAbout() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--quick-start"]
+        app.launch()
+        let title = app.staticTexts["quickstart.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 20))
+        XCTAssertEqual(title.label, "Apple Pencil required")
+        app.buttons["quickstart.next"].tap()
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Your first part"), object: title)], timeout: 5), .completed)
+        XCTAssertTrue(app.buttons["quickstart.blank"].exists)
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "Quick start, first part"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["quickstart.back"].tap()
+        XCTAssertTrue(app.buttons["quickstart.next"].waitForExistence(timeout: 5))
+        app.buttons["quickstart.next"].tap()
+        app.buttons["quickstart.done"].tap()
+        XCTAssertTrue(app.buttons["home.blank"].waitForExistence(timeout: 5))
+        XCTAssertFalse(title.exists, "Look Around closes it")
+        // About shows it again, ending with Done.
+        app.buttons["home.about"].tap()
+        // About's list is taller than the sheet since the trial and purchase rows; scroll to Help.
+        let aboutQuickStart = app.buttons["about.quickStart"]
+        for _ in 0..<6 where !(aboutQuickStart.exists && aboutQuickStart.isHittable) { app.swipeUp() }
+        aboutQuickStart.tap()
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        app.buttons["quickstart.next"].tap()
+        XCTAssertFalse(app.buttons["quickstart.blank"].exists, "From About there is no project to start")
+        app.buttons["quickstart.done"].tap()
+        XCTAssertFalse(title.waitForExistence(timeout: 2))
+    }
+
+    func testQuickStartStartsABlankProject() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--quick-start"]
+        app.launch()
+        XCTAssertTrue(app.buttons["quickstart.next"].waitForExistence(timeout: 20))
+        app.buttons["quickstart.next"].tap()
+        app.buttons["quickstart.blank"].tap()
+        // The quick start closes first, then the save sheet asks where the project goes.
+        XCTAssertTrue(app.buttons["DOCPicker.actionButton"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.textFields.firstMatch.value as? String, "Untitled Project")
+    }
+
+    func testAboutExplainsAvailabilityAndExperimentalSupport() {
+        continueAfterFailure = false
+        let app = app(arguments: ["--ui-testing-solid"])
+        XCTAssertTrue(app.staticTexts["project.title"].waitForExistence(timeout: 20))
+        app.buttons["Project menu"].tap()
+        XCTAssertEqual(app.buttons["project.import"].label, "Import…")
+        app.buttons["project.about"].tap()
+        XCTAssertTrue(app.staticTexts["about.availability"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["about.supportPolicy"].exists)
+    }
+
+    func testProjectMenuOpensImportAndExportSheets() {
+        continueAfterFailure = false
+        let app = app(arguments: ["--ui-testing-solid"])
+        XCTAssertTrue(app.staticTexts["project.title"].waitForExistence(timeout: 20))
+        func attach(_ name: String) {
+            let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); shot.name = name; shot.lifetime = .keepAlways; add(shot)
+        }
+        // Units, Fit Clearance, and Tool Layout live in Settings; Reset View and Controls are elsewhere.
+        app.buttons["Project menu"].tap()
+        XCTAssertTrue(app.buttons["project.import"].waitForExistence(timeout: 5))
+        attach("Project menu")
+        for gone in ["project.units", "project.fit", "tools.layout", "project.sendToSlicer", "project.export.3mf", "project.export.stl", "project.importSTEP"] {
+            XCTAssertFalse(app.buttons[gone].exists, gone)
+        }
+        XCTAssertFalse(app.buttons["Reset View"].exists)
+        app.buttons["project.import"].tap()
+        for kind in ["import.step", "import.mesh", "import.project"] {
+            XCTAssertTrue(app.buttons[kind].waitForExistence(timeout: 5), kind)
+        }
+        attach("Import sheet")
+        app.buttons["import.cancel"].tap()
+        XCTAssertFalse(app.buttons["import.step"].waitForExistence(timeout: 2))
+
+        app.buttons["Project menu"].tap()
+        app.buttons["project.export"].tap()
+        let format = app.segmentedControls["export.format"]
+        XCTAssertTrue(format.waitForExistence(timeout: 5))
+        format.buttons["3MF"].tap()
+        XCTAssertTrue(app.buttons["print.bed"].waitForExistence(timeout: 5), "3MF has plate options")
+        XCTAssertTrue(app.buttons["print.share"].exists)
+        XCTAssertTrue(app.buttons["print.chooseFolder"].exists)
+        attach("Export sheet, 3MF")
+        format.buttons["STL"].tap()
+        XCTAssertFalse(app.buttons["print.bed"].waitForExistence(timeout: 2), "STL is exported as modeled")
+        XCTAssertTrue(app.buttons["print.share"].exists)
+        attach("Export sheet, STL")
+        format.buttons["3MF"].tap()
+        app.buttons["Cancel"].tap()
+        XCTAssertFalse(format.waitForExistence(timeout: 2))
+    }
+
+    func testAboutShowsAppLicenseAndKeepsBrandingSeparate() {
+        continueAfterFailure = false
+        let app = app(arguments: ["--ui-testing-solid"])
+        XCTAssertTrue(app.staticTexts["project.title"].waitForExistence(timeout: 20))
+        app.buttons["Project menu"].tap()
+        app.buttons["project.about"].tap()
+        XCTAssertTrue(app.staticTexts["about.license"].waitForExistence(timeout: 5))
+        // Since the trial section (November 5) the license rows start low in the list, which
+        // builds rows only as they scroll into view.
+        let trademarks = app.staticTexts["about.trademarks"]
+        if !trademarks.exists { app.staticTexts["about.license"].swipeUp() }
+        XCTAssertTrue(trademarks.waitForExistence(timeout: 5))
+        XCTAssertTrue(trademarks.label.contains("does not grant trademark rights"))
+        let license = app.buttons["about.appLicense"]
+        XCTAssertTrue(license.exists)
+        license.tap()
+        let text = app.staticTexts["license.text"]
+        XCTAssertTrue(text.waitForExistence(timeout: 5))
+        let notice = text.label.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+        XCTAssertTrue(notice.contains("Required Notice: Copyright 2026 Noventix LLC"))
+        XCTAssertTrue(notice.contains("PolyForm Shield License 1.0.0"))
+        XCTAssertTrue(notice.contains("Noncompete"))
+    }
+
+    func testDividedBinTemplateCreatesAProject() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing-documents", "--reset-document-tests"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["project.title"].waitForExistence(timeout: 20))
+        app.buttons["Project menu"].tap(); app.buttons["project.new"].tap()
+        let divided = app.buttons["templates.gridfinity.divided-bin"]
+        XCTAssertTrue(divided.waitForExistence(timeout: 10))
+        divided.tap()
+        let create = app.buttons["templates.create"]
+        XCTAssertTrue(create.waitForExistence(timeout: 10))
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: create)], timeout: 20), .completed)
+        XCTAssertEqual(create.label, "Create Project")
+        create.tap()
+        XCTAssertTrue(app.buttons["DOCPicker.actionButton"].waitForExistence(timeout: 10))
+    }
+
+    func testControlsGuideHasChaptersAndSearch() {
+        XCUIDevice.shared.appearance = .dark
+        defer { XCUIDevice.shared.appearance = .light }
+        let app = app()
+        let controls = app.buttons.matching(identifier: "Controls").firstMatch
+        XCTAssertTrue(controls.waitForExistence(timeout: 20))
+        controls.tap()
+        XCTAssertTrue(app.staticTexts["How Swipe & Sketch works"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["guide.chapter.fit"].exists, "A chip for each chapter")
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "Controls guide in Dark Mode"; shot.lifetime = .keepAlways; add(shot)
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap()
+        search.typeText("slicer")
+        XCTAssertTrue(app.staticTexts["Send to Slicer"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["How Swipe & Sketch works"].exists, "Searching shows only the topics found")
+        XCTAssertFalse(app.staticTexts["Pencil"].exists)
+        app.buttons["guide.done"].tap()
+        XCTAssertFalse(app.buttons["guide.done"].waitForExistence(timeout: 2))
+    }
+
+    /// Taps a field until it has the keyboard, then types: the Assistant panel's slide-in can
+    /// swallow the first tap.
+    func type(_ text: String, into field: XCUIElement) {
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        for _ in 0..<3 {
+            field.tap()
+            if (field.value(forKey: "hasKeyboardFocus") as? Bool) == true { break }
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        field.typeText(text)
+    }
+
+    func app(arguments: [String] = []) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing"] + arguments
+        app.launch()
+        return app
+    }
+    func testFilesSaveAsCreatesIndependentCopyAndBrowserCreatesNamedProject() {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing-documents", "--reset-document-tests", "--select-document-sketch"]
+        app.launch()
+        let title = app.staticTexts["project.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 20))
+        let originalName = title.label
+        app.buttons["Project menu"].tap()
+        let menu = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        menu.name = "Project menu with Save Save As New and Open"; menu.lifetime = .keepAlways; add(menu)
+        app.buttons["project.saveAs"].tap()
+        XCTAssertTrue(app.buttons["DOCPicker.actionButton"].waitForExistence(timeout: 10))
+        app.buttons["DOCPicker.actionButton"].tap()
+        let copyOpened = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", originalName + " Copy"), object: title)
+        XCTAssertEqual(XCTWaiter.wait(for: [copyOpened], timeout: 15), .completed)
+        app.buttons["dimension.width"].tap()
+        app.buttons["keypad.9"].tap(); app.buttons["keypad.0"].tap(); app.buttons["keypad.confirm"].tap()
+        app.buttons["Project menu"].tap(); app.buttons["project.new"].tap()
+        XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 10))
+        app.buttons["Cancel"].tap()
+        XCTAssertEqual(title.label, originalName + " Copy")
+        XCTAssertEqual(app.buttons["dimension.width"].value as? String, "90")
+        app.buttons["project.home"].tap()
+        let original = app.buttons["home.recent.\(originalName)"]
+        XCTAssertTrue(original.waitForExistence(timeout: 10)); original.tap()
+        XCTAssertTrue(title.waitForExistence(timeout: 15))
+        XCTAssertEqual(title.label, originalName)
+        XCTAssertEqual(app.buttons["dimension.width"].value as? String, "60")
+        app.buttons["project.home"].tap()
+        let copy = app.buttons["home.recent.\(originalName) Copy"]
+        XCTAssertTrue(copy.waitForExistence(timeout: 10)); copy.tap()
+        XCTAssertTrue(title.waitForExistence(timeout: 15))
+        XCTAssertEqual(app.buttons["dimension.width"].value as? String, "90")
+        app.buttons["project.home"].tap()
+        // Files keeps the system browser, with its own + for a new project.
+        let files = app.buttons["home.section.files"]
+        XCTAssertTrue(files.waitForExistence(timeout: 10)); files.tap()
+        let create = app.buttons["FullDocumentManagerViewControllerNavigationBarCreateButtonIdentifier"]
+        XCTAssertTrue(create.waitForExistence(timeout: 10))
+        let browser = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        browser.name = "Projects in the native Files browser inside Home"; browser.lifetime = .keepAlways; add(browser)
+        create.tap()
+        let blank = app.buttons["templates.blank"]
+        XCTAssertTrue(blank.waitForExistence(timeout: 10)); blank.tap()
+        let name = app.textFields.firstMatch
+        XCTAssertTrue(name.waitForExistence(timeout: 5)); name.tap()
+        let previous = name.value as? String ?? ""
+        let newName = originalName + " Browser New"
+        name.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: previous.count) + newName)
+        if app.buttons["done"].exists { app.buttons["done"].tap() }
+        app.buttons["DOCPicker.actionButton"].tap()
+        let namedProject = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", newName), object: title)
+        XCTAssertEqual(XCTWaiter.wait(for: [namedProject], timeout: 15), .completed)
+        XCTAssertTrue(app.staticTexts["0 sketches · 0 solids"].exists)
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier == %@", "Undo")).element.isEnabled)
+    }
+    func testShadedSolidWithVisibleEdgesAndOrbit() {
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app(arguments: ["--ui-testing-solid"])
+        XCTAssertTrue(app.staticTexts["1 sketch · 1 solid"].waitForExistence(timeout: 10))
+        let canvas = app.otherElements["modeling.canvas"]
+        canvas.pinch(withScale: 1.5, velocity: 1)
+        let initial = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        initial.name = "Gray solid with shaded faces and visible borders"
+        initial.lifetime = .keepAlways
+        add(initial)
+        canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.55, dy: 0.55))
+            .press(forDuration: 0.05, thenDragTo: canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.68, dy: 0.58)))
+        XCTAssertTrue(app.staticTexts["1 sketch · 1 solid"].exists)
+        let rotated = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        rotated.name = "Shaded solid after finger orbit"
+        rotated.lifetime = .keepAlways
+        add(rotated)
+    }
+    func testViewCubeFacesFollowOrbitAndDoubleTapResets3DView() {
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app(arguments: ["--ui-testing-solid"])
+        let canvas = app.otherElements["modeling.canvas"]
+        func face(_ name: String) -> XCUIElement { app.buttons["view.cube.\(name)"] }
+        func expectFace(_ name: String) {
+            let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", name.capitalized), object: face(name))
+            XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 4), .completed)
+        }
+        func reset(from name: String) {
+            face(name).doubleTap()
+            XCTAssertTrue(face("top").waitForExistence(timeout: 4))
+            let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '3D'"), object: face("top"))
+            XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 4), .completed)
+            XCTAssertTrue(face("front").exists); XCTAssertTrue(face("right").exists)
+        }
+        XCTAssertTrue(face("front").waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["Sketch plane"].exists)
+        for name in ["top", "front", "right"] { XCTAssertFalse(app.buttons["plane.\(name)"].exists) }
+        for name in ["front", "top", "right"] {
+            face(name).tap(); expectFace(name)
+            reset(from: name)
+        }
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "Rotating orientation cube in default 3D view"
+        screenshot.lifetime = .keepAlways; add(screenshot)
+        canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.6))
+            .press(forDuration: 0.05, thenDragTo: canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.27, dy: 0.6)))
+        XCTAssertTrue(face("back").waitForExistence(timeout: 4))
+        XCTAssertTrue(face("left").exists)
+        let rotated = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        rotated.name = "View cube synchronized after orbit"
+        rotated.lifetime = .keepAlways; add(rotated)
+        face("back").tap(); expectFace("back"); reset(from: "back")
+        canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.65))
+            .press(forDuration: 0.05, thenDragTo: canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)))
+        XCTAssertTrue(face("bottom").waitForExistence(timeout: 4))
+        face("bottom").tap(); expectFace("bottom"); reset(from: "bottom")
+        XCTAssertTrue(app.staticTexts["1 sketch · 1 solid"].exists)
+    }
+    func testItemsAloneTopLeftAndBrandControls() {
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app()
+        func shot(_ name: String) {
+            let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
+        }
+        // Items stands alone at the top left: no brand badge, and no project label beside it.
+        let items = app.buttons["items.toggle"]
+        XCTAssertTrue(items.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.descendants(matching: .any)["brand.badge"].exists, "No S badge on the canvas")
+        XCTAssertLessThan(items.frame.minX, 60, "Items sits at the left edge")
+        let dock = app.otherElements["dock"]
+        XCTAssertTrue(dock.exists)
+        for label in app.staticTexts.matching(identifier: "Project").allElementsBoundByIndex {
+            XCTAssertTrue(dock.frame.contains(label.frame), "The only Project text is the dock's Project tool")
+        }
+        XCTAssertFalse(app.staticTexts["Modeling"].exists)
+        XCTAssertFalse(app.buttons["tool.select"].exists, "No Select tool: with nothing chosen, taps select")
+        shot("Brand workspace")
+        app.buttons["dimension.width"].tap()
+        XCTAssertTrue(app.buttons["keypad.confirm"].waitForExistence(timeout: 5))
+        shot("Brand keypad")
+        app.buttons["keypad.cancel"].tap()
+        app.buttons["Project menu"].tap()
+        XCTAssertTrue(app.buttons["Controls"].waitForExistence(timeout: 5))
+        shot("Brand project menu")
+        // Dismiss the menu (a finger tap on the canvas never creates or selects geometry).
+        app.otherElements["modeling.canvas"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)).tap()
+        XCTAssertTrue(app.buttons["selection.extrude"].waitForExistence(timeout: 5))
+        app.buttons["selection.extrude"].tap()
+        XCTAssertTrue(app.buttons["extrusion.confirm"].waitForExistence(timeout: 5))
+        shot("Brand extrusion actions")
+        app.buttons["extrusion.cancel"].tap()
+        XCTAssertFalse(app.buttons["extrusion.confirm"].exists)
+    }
+
+    func testProjectToolPicksFromItemsAndShowsItsSteps() {
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app(arguments: ["--ui-testing-solid"])
+        let toggle = app.buttons["items.toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+        toggle.tap()
+        let body = app.buttons["item.Body 01"]
+        XCTAssertTrue(body.waitForExistence(timeout: 5))
+        body.tap()
+        // The selected solid becomes the item; the surface comes next.
+        app.buttons["tool.project"].tap()
+        XCTAssertFalse(app.otherElements["dock"].exists, "Project's own controls replace the dock")
+        let step = app.segmentedControls["projection.step"]
+        XCTAssertTrue(step.waitForExistence(timeout: 5))
+        XCTAssertTrue(step.buttons["Geometry · 1"].exists)
+        XCTAssertTrue(step.buttons["Target Plane"].isSelected)
+        XCTAssertTrue(body.isSelected, "The picked solid is highlighted in Items")
+        XCTAssertFalse(app.buttons["projection.confirm"].isEnabled, "No surface yet")
+        // Its own sketch as the surface: the outline is already there, so nothing to add.
+        app.buttons["item.Sketch 01"].tap()
+        XCTAssertTrue(app.staticTexts["Nothing new to project: seen from this surface, the items lie edge-on or are already there."].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["projection.confirm"].isEnabled)
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "Project tool"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["projection.cancel"].tap()
+        XCTAssertTrue(step.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.otherElements["dock"].waitForExistence(timeout: 5), "The dock is back")
+        XCTAssertTrue(app.staticTexts["1 sketch · 1 solid"].exists, "Cancel changes nothing")
+    }
+    func testSplitBodyStartsFromASelectedSolid() {
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app(arguments: ["--ui-testing-solid"])
+        let toggle = app.buttons["items.toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+        toggle.tap()
+        let body = app.buttons["item.Body 01"]
+        XCTAssertTrue(body.waitForExistence(timeout: 5))
+        body.tap()
+        let split = app.buttons["selection.split"]
+        XCTAssertTrue(split.waitForExistence(timeout: 5), "A selected solid offers Split Body")
+        XCTAssertFalse(app.buttons["selection.combine"].exists, "One solid has nothing to combine with")
+        split.tap()
+        XCTAssertFalse(app.otherElements["dock"].exists, "Split's own controls replace the dock")
+        let step = app.segmentedControls["split.step"]
+        XCTAssertTrue(step.waitForExistence(timeout: 5))
+        XCTAssertTrue(step.buttons["Bodies to Split · 1"].exists)
+        XCTAssertTrue(step.buttons["Splitting Tools"].isSelected, "Next, what to split it with")
+        XCTAssertTrue(app.descendants(matching: .any)["split.keepOriginals"].exists)
+        XCTAssertFalse(app.buttons["split.confirm"].isEnabled, "Nothing to split with yet")
+        XCTAssertTrue(body.isSelected, "The solid to split is highlighted in Items")
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "Split Body tool"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["split.cancel"].tap()
+        XCTAssertTrue(step.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["1 sketch · 1 solid"].exists, "Cancel changes nothing")
+    }
+    func testUnionPicksSolidsFromItems() {
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app(arguments: ["--ui-testing-solid"])
+        let toggle = app.buttons["items.toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+        toggle.tap()
+        app.buttons["tool.combine"].tap()
+        XCTAssertTrue(app.buttons["tool.union"].waitForExistence(timeout: 5))
+        app.buttons["tool.union"].tap()
+        XCTAssertFalse(app.otherElements["group.menu"].exists, "Choosing a tool closes the pop-up")
+        XCTAssertTrue(app.staticTexts["Bodies"].waitForExistence(timeout: 5))
+        let body = app.buttons["item.Body 01"]
+        body.tap()
+        XCTAssertTrue(app.staticTexts["Bodies · 1"].waitForExistence(timeout: 5))
+        XCTAssertTrue(body.isSelected, "The picked solid is highlighted in Items")
+        XCTAssertTrue(app.descendants(matching: .any)["union.keepOriginals"].exists)
+        XCTAssertFalse(app.buttons["union.confirm"].isEnabled, "One solid has nothing to unite with")
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "Union tool"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["union.cancel"].tap()
+        XCTAssertTrue(app.buttons["tool.sketch"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["1 sketch · 1 solid"].exists)
+    }
+    func testRadialToolbarCoverageMovementAndPrimitiveOperation() {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app(arguments: ["--ui-testing-solid", "--radial-toolbar"])
+        let wheel = app.otherElements["radial.toolbar"]
+        let toggle = app.buttons["radial.toggle"]
+        XCTAssertTrue(wheel.waitForExistence(timeout: 15))
+        XCTAssertFalse(app.otherElements["dock"].exists)
+        let hub = app.buttons["radial.move"]
+        let initialHub = hub.frame
+        let start = hub.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        start.press(forDuration: 0.15, thenDragTo: start.withOffset(CGVector(dx: -400, dy: -160)))
+        let moved = hub.frame
+        XCTAssertEqual(moved.midX, initialHub.midX - 400, accuracy: 6)
+        XCTAssertEqual(moved.midY, initialHub.midY - 160, accuracy: 6)
+        toggle.tap(); XCTAssertTrue(wheel.waitForNonExistence(timeout: 5))
+        toggle.tap(); XCTAssertTrue(wheel.waitForExistence(timeout: 5))
+        XCTAssertEqual(hub.frame.midX, moved.midX, accuracy: 3)
+        XCTAssertEqual(hub.frame.midY, moved.midY, accuracy: 3)
+        let groups: [(String, [String])] = [
+            ("planes", ["offsetPlane", "midplane", "planeAngle", "plane3Point", "planeTangent", "axis"]),
+            ("create", ["extrude", "revolve", "loft", "sweep", "rib", "primitives"]),
+            ("edges", ["fillet", "chamfer", "shell", "draft", "deleteFace", "split"]),
+            ("combine", ["union", "subtract", "intersect"]),
+            ("transform", ["align", "scale", "mirror", "pattern"]),
+            ("fit", ["peg", "thread", "screwLid", "fitTest"])
+        ]
+        for (group, tools) in groups {
+            app.buttons["tool.\(group)"].tap()
+            for tool in tools { XCTAssertTrue(app.buttons["tool.\(tool)"].isHittable, tool) }
+            XCTAssertTrue(app.frame.insetBy(dx: 1, dy: 1).contains(wheel.frame), "Every expanded ring stays on screen")
+            for tool in tools {
+                XCTAssertTrue(wheel.frame.contains(app.buttons["tool.\(tool)"].frame), "Caption inside menu: " + tool)
+            }
+            let captions = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            captions.name = "Radial captions, " + group; captions.lifetime = .keepAlways; add(captions)
+        }
+        app.buttons["tool.create"].tap(); app.buttons["tool.primitives"].tap()
+        for tool in ["box", "cylinder", "sphere", "torus"] { XCTAssertTrue(app.buttons["tool.\(tool)"].isHittable) }
+        XCTAssertEqual(wheel.frame.width, 552, accuracy: 2, "Three compact concentric rings on the large iPad")
+        XCTAssertFalse(app.staticTexts["Drag to move"].exists)
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "Radial toolbar with three rings"; shot.lifetime = .keepAlways; add(shot)
+        hub.tap()
+        XCTAssertTrue(app.buttons["tool.box"].waitForNonExistence(timeout: 5), "A center tap still goes back after dragging")
+        app.buttons["tool.primitives"].tap()
+        app.buttons["tool.box"].tap()
+        XCTAssertTrue(app.buttons["tool.box"].isSelected, "Box waits for Pencil placement on the canvas")
+        app.buttons["tool.box"].tap()
+        XCTAssertFalse(app.buttons["tool.box"].isSelected)
+        app.buttons["tool.transform"].tap(); app.buttons["tool.mirror"].tap()
+        XCTAssertTrue(app.buttons["mirror.cancel"].waitForExistence(timeout: 5))
+        XCTAssertFalse(wheel.exists, "Operation controls remain usable during setup")
+        app.buttons["mirror.cancel"].tap()
+        XCTAssertTrue(wheel.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["1 sketch · 1 solid"].exists, "Cancel leaves the document intact")
+        // Tapping uncovered canvas must reach the canvas and leave the wheel open.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.22)).tap()
+        XCTAssertTrue(wheel.exists)
+        app.buttons["tool.sketch"].tap()
+        for tool in ["line", "rectangle", "curves", "modify", "dimension", "project"] { XCTAssertTrue(app.buttons["tool.\(tool)"].isHittable) }
+        app.buttons["tool.rectangle"].tap()
+        app.buttons["tool.rectangle"].tap()
+        XCTAssertEqual(app.buttons["tool.rectangle"].value as? String, "Center")
+        app.buttons["tool.curves"].tap()
+        for tool in ["circle", "arc", "slot", "ellipse", "polygon", "spline", "point"] { XCTAssertTrue(app.buttons["tool.\(tool)"].isHittable) }
+        app.buttons["tool.modify"].tap()
+        for tool in ["trim", "extend", "cornerFillet", "offset", "sketchMirror"] { XCTAssertTrue(app.buttons["tool.\(tool)"].isHittable) }
+        app.buttons["sketch.exit"].tap()
+        XCTAssertTrue(app.buttons["tool.create"].waitForExistence(timeout: 5))
+        XCUIDevice.shared.orientation = .portrait
+        XCTAssertTrue(hub.waitForExistence(timeout: 5))
+        app.buttons["tool.create"].tap(); app.buttons["tool.primitives"].tap()
+        XCTAssertTrue(app.frame.contains(wheel.frame))
+        XCTAssertTrue(app.buttons["tool.torus"].isHittable)
+        let portrait = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        portrait.name = "Radial toolbar in portrait"; portrait.lifetime = .keepAlways; add(portrait)
+    }
+
+    func testRadialToolbarKeepsSelectionActionsAndPatternPreviews() {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app(arguments: ["--ui-testing-solid", "--radial-toolbar"])
+        let wheel = app.otherElements["radial.toolbar"]
+        XCTAssertTrue(wheel.waitForExistence(timeout: 15))
+        app.buttons["items.toggle"].tap(); app.buttons["item.Body 01"].tap(); app.buttons["items.toggle"].tap()
+        XCTAssertTrue(app.otherElements["selection.strip"].waitForExistence(timeout: 5))
+        for id in ["selection.shell", "selection.split", "selection.transform", "selection.delete", "transform.copy"] {
+            XCTAssertTrue(app.descendants(matching: .any)[id].exists, id)
+        }
+        XCTAssertEqual(app.buttons["tool.create"].label, "Create", "Selecting a body keeps the same tool groups")
+        XCTAssertTrue(app.buttons["tool.sketch"].isHittable)
+        app.buttons["tool.transform"].tap()
+        XCTAssertEqual(app.buttons["tool.pattern"].label, "Pattern")
+        app.buttons["tool.pattern"].tap()
+        let keep = app.buttons["pattern.confirm"]
+        XCTAssertTrue(keep.waitForExistence(timeout: 10))
+        XCTAssertFalse(keep.isEnabled, "Pattern waits for a direction and distance before Keep")
+        XCTAssertTrue(app.buttons["pattern.count"].isEnabled)
+        app.buttons["pattern.more"].tap()
+        XCTAssertEqual(app.buttons["pattern.count"].value as? String, "4", "Everyone can configure the operation")
+        XCTAssertEqual(keep.label, "Done")
+        XCTAssertFalse(wheel.exists)
+        app.buttons["pattern.cancel"].tap()
+        XCTAssertTrue(wheel.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["1 sketch · 1 solid"].exists)
+    }
+
+    func testRadialToolbarLayoutSettingRestoresTheDock() {
+        continueAfterFailure = false
+        let app = app(arguments: ["--ui-testing-solid", "--radial-toolbar"])
+        XCTAssertTrue(app.buttons["radial.toggle"].waitForExistence(timeout: 15))
+        // Tool Layout is in Settings (November 13, 2026; it left the project menu).
+        func chooseLayout(_ layout: String) {
+            app.buttons["Project menu"].tap(); app.buttons["project.settings"].tap()
+            XCTAssertTrue(app.buttons["settings.toolLayout"].waitForExistence(timeout: 5))
+            app.buttons["settings.toolLayout"].tap()
+            app.buttons[layout].tap()
+            app.buttons["settings.done"].tap()
+        }
+        chooseLayout("Dock")
+        XCTAssertTrue(app.otherElements["dock"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["radial.toggle"].exists)
+        chooseLayout("Radial Toolbar")
+        XCTAssertTrue(app.otherElements["radial.toolbar"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.otherElements["dock"].exists)
+    }
+
+    func testBottomDockSwapsModelingAndSketchToolsWithGroups() {
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app(arguments: ["--ui-testing-solid"])
+        func shot(_ name: String) {
+            let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
+        }
+        let dock = app.otherElements["dock"]
+        XCTAssertTrue(dock.waitForExistence(timeout: 10))
+        XCTAssertGreaterThan(dock.frame.minY, app.frame.height / 2, "The dock is at the bottom")
+        // Modeling: modeling tools only, no Select tile.
+        for id in ["tool.sketch", "tool.project", "tool.planes", "tool.create", "tool.edges", "tool.combine", "tool.transform", "tool.fit"] {
+            XCTAssertTrue(app.buttons[id].exists, id)
+        }
+        XCTAssertEqual(["tool.planes", "tool.create", "tool.edges", "tool.combine", "tool.transform", "tool.fit"].map { app.buttons[$0].label },
+                       ["Planes", "Create", "Modify", "Combine", "Transform", "Joints"], "Groups are named for what their tools do")
+        for id in ["tool.select", "tool.line", "tool.union", "tool.fillet", "tool.shell", "tool.extrude", "tool.revolve"] { XCTAssertFalse(app.buttons[id].exists, id) }
+        app.buttons["tool.combine"].tap()
+        for id in ["tool.union", "tool.subtract", "tool.intersect"] { XCTAssertTrue(app.buttons[id].waitForExistence(timeout: 5), id) }
+        XCTAssertFalse(app.buttons["tool.split"].exists, "Split Body divides a solid, so it is under Modify")
+        shot("Dock with Combine open")
+        XCTAssertFalse(app.otherElements["group.dismiss"].exists, "Nothing covers the canvas, so the Pencil draws at once")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.55)).tap()
+        XCTAssertTrue(app.buttons["tool.union"].waitForNonExistence(timeout: 5), "A tap on the canvas closes the pop-up")
+        // Modify group, and putting a tool down by tapping it again.
+        app.buttons["tool.edges"].tap()
+        for id in ["tool.fillet", "tool.chamfer", "tool.shell", "tool.deleteFace", "tool.split"] { XCTAssertTrue(app.buttons[id].waitForExistence(timeout: 5), id) }
+        shot("Dock with Modify open")
+        app.buttons["tool.chamfer"].tap()
+        XCTAssertEqual(app.buttons["tool.edges"].label, "Chamfer", "The group shows the tool in use")
+        XCTAssertTrue(app.buttons["tool.edges"].isSelected)
+        // Create group: Extrude and Revolve.
+        app.buttons["tool.create"].tap()
+        for id in ["tool.extrude", "tool.revolve"] { XCTAssertTrue(app.buttons[id].waitForExistence(timeout: 5), id) }
+        shot("Dock with Create open")
+        app.buttons["tool.revolve"].tap()
+        XCTAssertEqual(app.buttons["tool.create"].label, "Revolve", "The group shows the tool in use")
+        XCTAssertTrue(app.buttons["tool.create"].isSelected)
+        // Shell is under Modify; the Create tile goes back to its own name.
+        app.buttons["tool.edges"].tap()
+        app.buttons["tool.shell"].tap()
+        XCTAssertEqual(app.buttons["tool.edges"].label, "Shell")
+        XCTAssertEqual(app.buttons["tool.create"].label, "Create")
+        app.buttons["tool.edges"].tap()
+        app.buttons["tool.shell"].tap()
+        XCTAssertEqual(app.buttons["tool.edges"].label, "Modify", "Tapping the active tool puts it down")
+        XCTAssertFalse(app.buttons["tool.edges"].isSelected)
+        // Joints: Peg & Socket, Thread, Screw Lid, and Fit Test.
+        app.buttons["tool.fit"].tap()
+        for id in ["tool.peg", "tool.thread", "tool.screwLid", "tool.fitTest"] { XCTAssertTrue(app.buttons[id].waitForExistence(timeout: 5), id) }
+        XCTAssertEqual(app.buttons["tool.peg"].label, "Peg & Socket")
+        XCTAssertEqual(app.buttons["tool.screwLid"].label, "Screw Lid")
+        shot("Dock with Joints open")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.55)).tap()
+        // Sketch: sketch tools at once, before a plane is picked.
+        app.buttons["tool.sketch"].tap()
+        XCTAssertTrue(app.buttons["sketch.exit"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["sketch.title"].label, "No active plane")
+        for id in ["tool.line", "tool.rectangle", "tool.curves", "tool.modify", "tool.dimension", "tool.project"] { XCTAssertTrue(app.buttons[id].exists, id) }
+        XCTAssertTrue(app.buttons["tool.line"].isSelected, "Line is ready")
+        for id in ["tool.create", "tool.edges", "tool.combine"] { XCTAssertFalse(app.buttons[id].exists, id) }
+        XCTAssertEqual(["tool.curves", "tool.modify"].map { app.buttons[$0].label }, ["Shapes", "Modify"])
+        shot("Sketch dock")
+        // Circle, Arc, and Slot share Shapes; Trim and Fillet are under Modify.
+        app.buttons["tool.curves"].tap()
+        for id in ["tool.circle", "tool.arc", "tool.slot"] { XCTAssertTrue(app.buttons[id].waitForExistence(timeout: 5), id) }
+        shot("Sketch dock with Shapes open")
+        app.buttons["tool.slot"].tap()
+        XCTAssertEqual(app.buttons["tool.curves"].label, "Slot", "The group shows the tool in use")
+        app.buttons["tool.modify"].tap()
+        for id in ["tool.trim", "tool.cornerFillet"] { XCTAssertTrue(app.buttons[id].waitForExistence(timeout: 5), id) }
+        app.buttons["tool.cornerFillet"].tap()
+        XCTAssertEqual(app.buttons["tool.modify"].label, "Fillet")
+        XCTAssertTrue(app.buttons["tool.measure"].exists, "Measure is beside the view controls")
+        app.buttons["sketch.exit"].tap()
+        XCTAssertTrue(app.buttons["tool.create"].waitForExistence(timeout: 5))
+        // A selected solid's actions sit in the strip above the dock.
+        app.buttons["items.toggle"].tap()
+        app.buttons["item.Body 01"].tap()
+        app.buttons["items.toggle"].tap()
+        let strip = app.otherElements["selection.strip"]
+        XCTAssertTrue(strip.waitForExistence(timeout: 5))
+        for id in ["selection.shell", "selection.split", "selection.transform", "selection.delete", "transform.copy"] {
+            XCTAssertTrue(app.descendants(matching: .any)[id].exists, id)
+        }
+        XCTAssertLessThan(strip.frame.maxY, dock.frame.minY + 1, "Just above the dock")
+        shot("Solid selected")
+    }
+    func testItemsListSelectsSketchesAndSolids() {
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app(arguments: ["--ui-testing-solid"])
+        let toggle = app.buttons["items.toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+        toggle.tap()
+        let body = app.buttons["item.Body 01"], rectangle = app.buttons["item.Rectangle 01"]
+        XCTAssertTrue(body.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["SKETCHES"].exists)
+        XCTAssertTrue(app.buttons["item.Sketch 01"].exists, "Each sketch is a row, its shapes under it")
+        // Hide and show the solid from its row.
+        let visibility = app.buttons["item.visibility.Body 01"]
+        XCTAssertEqual(visibility.label, "Hide Body 01")
+        visibility.tap()
+        XCTAssertTrue(app.buttons["Show Body 01"].waitForExistence(timeout: 5))
+        app.buttons["Show Body 01"].tap()
+        XCTAssertTrue(app.buttons["Hide Body 01"].waitForExistence(timeout: 5))
+        body.tap()
+        XCTAssertTrue(app.staticTexts["selection.measure"].waitForExistence(timeout: 5))
+        XCTAssertTrue(body.isSelected)
+        // The solid's source rectangle lies under its base, out of the Pencil's reach on the canvas.
+        rectangle.tap()
+        XCTAssertTrue(app.buttons["dimension.width"].waitForExistence(timeout: 5))
+        XCTAssertTrue(rectangle.isSelected)
+        XCTAssertFalse(body.isSelected)
+        XCTAssertTrue(app.buttons["selection.extrude"].exists)
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "Items list with a sketch selected"; shot.lifetime = .keepAlways; add(shot)
+        toggle.tap()
+        XCTAssertTrue(body.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["dimension.width"].exists, "Closing the list keeps the selection")
+    }
+
+    func testModelTreeFoldsASketchsShapes() {
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app(arguments: ["--ui-testing-solid"])
+        let toggle = app.buttons["items.toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+        toggle.tap()
+        let sketch = app.buttons["item.Sketch 01"], rectangle = app.buttons["item.Rectangle 01"]
+        let fold = app.buttons["sketch.fold.Sketch 01"]
+        XCTAssertTrue(fold.waitForExistence(timeout: 5))
+        XCTAssertEqual(fold.label, "Collapse Sketch 01")
+        rectangle.tap()
+        XCTAssertTrue(app.buttons["dimension.width"].waitForExistence(timeout: 5))
+        // Folded away: the rectangle's row goes, the selection stays, and the sketch's row holds it.
+        fold.tap()
+        XCTAssertTrue(rectangle.waitForNonExistence(timeout: 5))
+        XCTAssertEqual(fold.label, "Expand Sketch 01")
+        XCTAssertEqual(sketch.value as? String, "Holds the selection")
+        XCTAssertFalse(sketch.isSelected)
+        XCTAssertTrue(app.buttons["dimension.width"].exists, "Folding keeps the selection")
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "Model Tree with a folded sketch"; shot.lifetime = .keepAlways; add(shot)
+        // The folded sketch still selects, hides, and picks in Select mode.
+        sketch.tap()
+        XCTAssertTrue(sketch.isSelected)
+        app.buttons["item.visibility.Sketch 01"].tap()
+        XCTAssertTrue(app.buttons["Show Sketch 01"].waitForExistence(timeout: 5))
+        app.buttons["Show Sketch 01"].tap()
+        XCTAssertTrue(app.buttons["Hide Sketch 01"].waitForExistence(timeout: 5))
+        // The panel's identifier covers its header buttons, so they are found by label.
+        let header = app.buttons.matching(identifier: "items.panel")
+        header["Select"].tap()
+        XCTAssertTrue(header["Done"].waitForExistence(timeout: 5))
+        sketch.tap()
+        XCTAssertTrue(sketch.isSelected, "Picked in Select mode")
+        XCTAssertTrue(app.staticTexts["1 selected"].exists)
+        header["Done"].tap()
+        // Unfolded: its shapes are back.
+        fold.tap()
+        XCTAssertTrue(rectangle.waitForExistence(timeout: 5))
+        XCTAssertEqual(fold.label, "Collapse Sketch 01")
+    }
+
+    /// Shapes joined end to end, as a Pencil double-tap on a sketch line picks them (October 30,
+    /// 2026): their strip, help, Whole Sketch, and Delete. The fixture starts with them picked,
+    /// since UI test touches are fingers.
+    func testJoinedShapesOfferWholeSketchAndDeleteOnlyThemselves() {
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app(arguments: ["--ui-testing-chain"])
+        let count = app.staticTexts["selection.chainCount"]
+        XCTAssertTrue(count.waitForExistence(timeout: 10))
+        XCTAssertEqual(count.label, "2 joined shapes")
+        XCTAssertTrue(app.buttons["selection.extrude"].exists, "The rectangle closes a region")
+        XCTAssertTrue(app.descendants(matching: .any)["transform.copy"].exists, "The Move/Rotate widget's Create Copy")
+        XCTAssertTrue(app.buttons["selection.delete"].exists)
+        XCTAssertTrue(app.buttons["selection.wholeSketch"].exists)
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "Joined shapes picked"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["hint.help"].tap()
+        XCTAssertTrue(app.staticTexts["help.title"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["help.title"].label, "Joined Shapes")
+        XCTAssertTrue(app.staticTexts["hint.detail"].label.hasPrefix("2 joined shapes selected."), app.staticTexts["hint.detail"].label)
+        app.buttons["help.close"].tap()
+
+        // Whole Sketch picks all of it, shown on its Model Tree row.
+        app.buttons["selection.wholeSketch"].tap()
+        XCTAssertTrue(app.staticTexts["selection.sketchName"].waitForExistence(timeout: 5))
+        XCTAssertFalse(count.exists)
+        app.buttons["items.toggle"].tap()
+        let sketch = app.buttons["item.Sketch 01"]
+        XCTAssertTrue(sketch.waitForExistence(timeout: 5))
+        XCTAssertTrue(sketch.isSelected)
+        app.buttons["items.toggle"].tap()
+
+        // Delete takes out only the joined shapes; the line apart stays.
+        app.terminate()
+        let again = self.app(arguments: ["--ui-testing-chain"])
+        XCTAssertTrue(again.staticTexts["selection.chainCount"].waitForExistence(timeout: 10))
+        // The Model Tree marks the joined shapes' rows, not the line apart.
+        again.buttons["items.toggle"].tap()
+        XCTAssertTrue(again.buttons["item.Rectangle 01"].waitForExistence(timeout: 5))
+        XCTAssertTrue(again.buttons["item.Rectangle 01"].isSelected)
+        XCTAssertTrue(again.buttons["item.Line 01"].isSelected)
+        XCTAssertFalse(again.buttons["item.Line 02"].isSelected)
+        XCTAssertFalse(again.buttons["item.Sketch 01"].isSelected)
+        again.buttons["items.toggle"].tap()
+        again.buttons["selection.delete"].tap()
+        XCTAssertFalse(again.staticTexts["selection.chainCount"].waitForExistence(timeout: 2))
+        again.buttons["items.toggle"].tap()
+        // Rows are numbered by kind, so the line apart is now Line 01.
+        XCTAssertTrue(again.buttons["item.Line 01"].waitForExistence(timeout: 5), "The line apart stays")
+        XCTAssertFalse(again.buttons["item.Line 02"].exists)
+        XCTAssertFalse(again.buttons["item.Rectangle 01"].exists)
+    }
+
+    func testExtrudeUndoRedoAndDelete() {
+        let app = app()
+        XCTAssertTrue(app.buttons["selection.extrude"].waitForExistence(timeout: 10))
+        app.buttons["selection.extrude"].tap()
+        XCTAssertTrue(app.buttons["dimension.depth"].waitForExistence(timeout: 5))
+        app.buttons["dimension.depth"].tap()
+        XCTAssertTrue(app.buttons["keypad.3"].waitForExistence(timeout: 5))
+        app.buttons["keypad.3"].tap()
+        app.buttons["keypad.0"].tap()
+        app.buttons["keypad.confirm"].tap()
+        app.buttons["extrusion.confirm"].tap()
+        XCTAssertTrue(app.staticTexts["selection.measure"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["1 sketch · 1 solid"].exists)
+        XCTAssertEqual(app.buttons["dimension.depth"].value as? String, "30")
+        app.buttons["selection.delete"].tap()
+        XCTAssertTrue(app.staticTexts["1 sketch · 0 solids"].exists)
+        app.buttons.matching(NSPredicate(format: "identifier == %@", "Undo")).element.tap()
+        XCTAssertTrue(app.staticTexts["1 sketch · 1 solid"].exists)
+        app.buttons.matching(NSPredicate(format: "identifier == %@", "Undo")).element.tap()
+        XCTAssertTrue(app.staticTexts["1 sketch · 0 solids"].exists)
+        app.buttons.matching(NSPredicate(format: "identifier == %@", "Redo")).element.tap()
+        XCTAssertTrue(app.staticTexts["1 sketch · 1 solid"].exists)
+        // Extruding kept the view from straight above; the cube's double-tap returns to the 3D angle.
+        app.buttons["view.cube.top"].doubleTap()
+        XCTAssertTrue(app.buttons["view.cube.front"].waitForExistence(timeout: 4))
+        app.buttons["view.cube.front"].tap()
+        // Drawing tools appear only while sketching; the Sketch tile shows the planes to pick.
+        XCTAssertFalse(app.buttons["tool.line"].exists)
+        app.buttons["tool.sketch"].tap()
+        let canvas = app.otherElements["modeling.canvas"]
+        let a = canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.45))
+        let b = canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.6))
+        a.press(forDuration: 0.05, thenDragTo: b)
+        XCTAssertTrue(app.staticTexts["1 sketch · 1 solid"].exists)
+    }
+    func testOnCanvasDimensionsOpenKeypadAndReplaceSelectedValue() {
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app()
+        let width = app.buttons["dimension.width"]
+        XCTAssertTrue(width.waitForExistence(timeout: 10))
+        XCTAssertEqual(width.value as? String, "60")
+        XCTAssertTrue(app.buttons["dimension.height"].exists)
+        width.tap()
+        XCTAssertTrue(app.buttons["keypad.7"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.keyboards.count, 0, "Dimension input must not depend on the system keyboard")
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "On-canvas dimension keypad"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        app.buttons["keypad.7"].tap()
+        app.buttons["keypad.5"].tap()
+        app.buttons["keypad.confirm"].tap()
+        XCTAssertEqual(width.value as? String, "75")
+        XCTAssertFalse(app.buttons["keypad.confirm"].exists)
+        app.buttons["dimension.height"].tap()
+        app.buttons["keypad.2"].tap()
+        app.buttons["keypad.5"].tap()
+        app.buttons["keypad.confirm"].tap()
+        XCTAssertEqual(app.buttons["dimension.height"].value as? String, "25")
+        XCTAssertEqual(width.value as? String, "75")
+        app.buttons.matching(NSPredicate(format: "identifier == %@", "Undo")).element.tap()
+        XCTAssertFalse(app.buttons["dimension.width"].exists)
+        app.buttons.matching(NSPredicate(format: "identifier == %@", "Redo")).element.tap()
+        XCTAssertTrue(app.staticTexts["1 sketch · 0 solids"].exists)
+    }
+    func testKeypadValidationCancelAndArithmeticInPortrait() {
+        let app = app()
+        let width = app.buttons["dimension.width"]
+        XCTAssertTrue(width.waitForExistence(timeout: 10))
+        width.tap()
+        app.buttons["keypad.0"].tap()
+        XCTAssertFalse(app.buttons["keypad.confirm"].isEnabled)
+        app.buttons["keypad.cancel"].tap()
+        XCTAssertEqual(width.value as? String, "60")
+        width.tap()
+        app.buttons["keypad.2"].tap()
+        app.buttons["keypad.cm"].tap()
+        app.buttons["keypad.+"].tap()
+        app.buttons["keypad.4"].tap()
+        app.buttons["keypad.confirm"].tap()
+        XCTAssertEqual(width.value as? String, "24")
+        width.tap()
+        app.buttons["keypad.9"].tap()
+        app.buttons["keypad.⌫"].tap()
+        XCTAssertFalse(app.buttons["keypad.confirm"].isEnabled)
+        app.buttons["keypad.cancel"].tap()
+        XCTAssertEqual(width.value as? String, "24")
+    }
+    func testExtrusionReferencePreviewAndSignedDepthKeypad() {
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app()
+        XCTAssertTrue(app.buttons["selection.extrude"].waitForExistence(timeout: 10))
+        app.buttons["selection.extrude"].tap()
+        let depth = app.buttons["dimension.depth"]
+        XCTAssertTrue(depth.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(depth.frame.height, depth.frame.width, "Depth value should be vertical above the double-arrow")
+        XCTAssertGreaterThan(app.buttons["extrusion.confirm"].frame.midY, app.frame.height * 0.8)
+        depth.tap()
+        XCTAssertTrue(app.buttons["keypad.3"].waitForExistence(timeout: 5))
+        app.buttons["keypad.3"].tap()
+        app.buttons["keypad.confirm"].tap()
+        XCTAssertEqual(depth.value as? String, "3")
+        let preview = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        preview.name = "Extrusion double-arrow and depth value"
+        preview.lifetime = .keepAlways
+        add(preview)
+        depth.tap()
+        XCTAssertTrue(app.buttons["keypad.±"].waitForExistence(timeout: 5))
+        let keypad = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        keypad.name = "Extrusion depth keypad"
+        keypad.lifetime = .keepAlways
+        add(keypad)
+        app.buttons["keypad.±"].tap()
+        app.buttons["keypad.confirm"].tap()
+        XCTAssertEqual(depth.value as? String, "-3")
+        // Retyping a negative value keeps its sign and replaces only the amount.
+        depth.tap()
+        XCTAssertTrue(app.buttons["keypad.5"].waitForExistence(timeout: 5))
+        app.buttons["keypad.5"].tap()
+        XCTAssertEqual(app.staticTexts["keypad.expression"].value as? String, "-5")
+        app.buttons["keypad.confirm"].tap()
+        XCTAssertEqual(depth.value as? String, "-5")
+        app.buttons["extrusion.cancel"].tap()
+        XCTAssertTrue(app.staticTexts["1 sketch · 0 solids"].exists)
+        XCTAssertFalse(app.buttons["extrusion.confirm"].exists)
+    }
+
+    func testTappingEmptyCanvasFinishesTheExtrusion() {
+        let app = app()
+        XCTAssertTrue(app.buttons["selection.extrude"].waitForExistence(timeout: 10))
+        app.buttons["selection.extrude"].tap()
+        XCTAssertTrue(app.buttons["extrusion.confirm"].waitForExistence(timeout: 5))
+        let canvas = app.otherElements["modeling.canvas"]
+        let empty = canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.6))
+        // At 0 mm there is nothing to make: a tap away changes nothing.
+        empty.tap()
+        XCTAssertTrue(app.buttons["extrusion.confirm"].exists)
+        XCTAssertTrue(app.staticTexts["1 sketch · 0 solids"].exists)
+        app.buttons["dimension.depth"].tap()
+        XCTAssertTrue(app.buttons["keypad.1"].waitForExistence(timeout: 5))
+        app.buttons["keypad.1"].tap()
+        app.buttons["keypad.2"].tap()
+        // With the keypad open, a tap away only closes it.
+        empty.tap()
+        XCTAssertFalse(app.buttons["keypad.confirm"].waitForExistence(timeout: 1))
+        XCTAssertTrue(app.buttons["extrusion.confirm"].exists)
+        app.buttons["dimension.depth"].tap()
+        XCTAssertTrue(app.buttons["keypad.1"].waitForExistence(timeout: 5))
+        app.buttons["keypad.1"].tap()
+        app.buttons["keypad.2"].tap()
+        app.buttons["keypad.confirm"].tap()
+        XCTAssertEqual(app.buttons["dimension.depth"].value as? String, "12")
+        empty.tap()
+        XCTAssertTrue(app.staticTexts["1 sketch · 1 solid"].waitForExistence(timeout: 5), "A tap on empty canvas is Done")
+        XCTAssertFalse(app.buttons["extrusion.confirm"].exists)
+        app.buttons.matching(NSPredicate(format: "identifier == %@", "Undo")).element.tap()
+        XCTAssertTrue(app.staticTexts["1 sketch · 0 solids"].exists, "One undo step")
+    }
+
+    func testRevolveAboutALineWithTheAngleKeypad() {
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app(arguments: ["--ui-testing-axis"])
+        func shot(_ name: String) {
+            let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
+        }
+        XCTAssertTrue(app.buttons["selection.revolve"].waitForExistence(timeout: 10))
+        app.buttons["selection.revolve"].tap()
+        let confirm = app.buttons["revolve.confirm"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertFalse(confirm.isEnabled, "Nothing to make before the axis and angle")
+        XCTAssertGreaterThan(confirm.frame.midY, app.frame.height * 0.8, "Cancel and Done at the bottom center")
+        XCTAssertFalse(app.otherElements["dock"].exists, "The revolve's controls replace the dock")
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS 'axis'")).firstMatch.exists)
+        // Pencil taps pick the axis on the canvas; the Items list picks it too.
+        app.buttons["items.toggle"].tap()
+        XCTAssertTrue(app.buttons["item.Line 01"].waitForExistence(timeout: 5))
+        app.buttons["item.Line 01"].tap()
+        app.buttons["items.toggle"].tap()
+        let angle = app.buttons["dimension.revolve.angle"]
+        XCTAssertTrue(angle.waitForExistence(timeout: 5))
+        XCTAssertEqual(angle.value as? String, "0")
+        XCTAssertTrue(app.segmentedControls["revolve.mode"].exists)
+        angle.tap()
+        XCTAssertTrue(app.buttons["keypad.3"].waitForExistence(timeout: 5))
+        app.buttons["keypad.2"].tap(); app.buttons["keypad.7"].tap(); app.buttons["keypad.0"].tap()
+        app.buttons["keypad.confirm"].tap()
+        XCTAssertEqual(angle.value as? String, "270")
+        XCTAssertTrue(confirm.isEnabled)
+        XCTAssertTrue(app.segmentedControls["revolve.mode"].buttons["New Body"].isSelected)
+        shot("Revolve preview, axis, and angle")
+        confirm.tap()
+        XCTAssertTrue(app.staticTexts["1 sketch · 1 solid"].waitForExistence(timeout: 5))
+        XCTAssertFalse(confirm.exists)
+        let bodyAngle = app.buttons["dimension.angle"]
+        XCTAssertTrue(bodyAngle.waitForExistence(timeout: 5), "The new solid is selected with its angle")
+        XCTAssertEqual(bodyAngle.value as? String, "270")
+        shot("Revolved solid")
+        app.buttons.matching(NSPredicate(format: "identifier == %@", "Undo")).element.tap()
+        XCTAssertTrue(app.staticTexts["1 sketch · 0 solids"].waitForExistence(timeout: 5))
+    }
+
+
+    func testAIProviderPagesOfferKeyModelAndEffort() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-testing-solid"]
+        app.launch()
+        let menu = app.buttons["Project menu"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 20))
+        menu.tap()
+        app.buttons["project.settings"].tap()
+        // The providers sit below Workspace, Units, and Fit Clearance; a form only lists rows on screen.
+        func reveal(_ element: XCUIElement) {
+            for _ in 0..<4 where !element.exists || !element.isHittable { app.collectionViews.firstMatch.swipeUp() }
+        }
+        for provider in ["claude", "openai", "gemini"] {
+            reveal(app.buttons["settings.provider.\(provider)"])
+            XCTAssertTrue(app.buttons["settings.provider.\(provider)"].waitForExistence(timeout: 5), provider)
+        }
+        for (provider, title) in [("openai", "OpenAI"), ("gemini", "Gemini")] {
+            reveal(app.buttons["settings.provider.\(provider)"])
+            app.buttons["settings.provider.\(provider)"].tap()
+            XCTAssertTrue(app.secureTextFields["settings.\(provider).key"].waitForExistence(timeout: 5), provider)
+            XCTAssertTrue(app.buttons["settings.\(provider).model"].exists, "A model picker")
+            reveal(app.buttons["High"])
+            for effort in ["Low", "Medium", "High"] { XCTAssertTrue(app.buttons[effort].exists, effort) }
+            reveal(app.buttons["settings.\(provider).use"])
+            XCTAssertTrue(app.buttons["settings.\(provider).use"].exists)
+            let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            shot.name = "\(title) settings"; shot.lifetime = .keepAlways; add(shot)
+            app.navigationBars.buttons["Settings"].tap()
+        }
+        app.buttons["settings.done"].tap()
+    }
+
+    func testClaudeSettingsSaveSelectAndRemoveKey() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-testing-solid"]
+        app.launch()
+        let menu = app.buttons["Project menu"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 20))
+        // Each provider (Claude, OpenAI, Gemini) has its own page under AI Providers (November 13, 2026).
+        func openClaude() {
+            menu.tap()
+            app.buttons["project.settings"].tap()
+            let row = app.buttons["settings.provider.claude"]
+            for _ in 0..<4 where !row.exists || !row.isHittable { app.collectionViews.firstMatch.swipeUp() }
+            XCTAssertTrue(row.waitForExistence(timeout: 5))
+            row.tap()
+        }
+        openClaude()
+        XCTAssertTrue(app.secureTextFields["settings.claude.key"].waitForExistence(timeout: 5))
+        try XCTSkipIf(app.buttons["settings.claude.remove"].exists, "Preserve a user's existing Claude key.")
+        // A synthetic credential is only saved/removed locally; this test never sends a request.
+        defer {
+            if app.buttons["settings.claude.remove"].exists { app.buttons["settings.claude.remove"].tap() }
+            if app.navigationBars.buttons["Settings"].exists { app.navigationBars.buttons["Settings"].tap() }
+            if app.buttons["settings.assistant.model"].waitForExistence(timeout: 2) {
+                app.buttons["settings.assistant.model"].tap()
+                if app.buttons["Automatic (Apple)"].exists { app.buttons["Automatic (Apple)"].tap() }
+            }
+        }
+        app.secureTextFields["settings.claude.key"].tap()
+        app.secureTextFields["settings.claude.key"].typeText("test-ui-credential-not-a-real-key")
+        if !app.buttons["settings.claude.save"].isHittable { app.collectionViews.firstMatch.swipeUp() }
+        app.buttons["settings.claude.save"].tap()
+        XCTAssertTrue(app.buttons["settings.claude.remove"].waitForExistence(timeout: 5))
+        let use = app.buttons["settings.claude.use"]
+        for _ in 0..<4 where !use.exists || !use.isHittable { app.collectionViews.firstMatch.swipeUp() }
+        use.tap()
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = "Claude Settings: key saved, model and effort, used for the assistant"; attachment.lifetime = .keepAlways; add(attachment)
+        app.buttons["settings.done"].tap()
+        app.buttons["assistant.toggle"].tap()
+        XCTAssertTrue(app.buttons["assistant.model"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["assistant.model"].value as? String, "Claude · High")
+        openClaude()
+        XCTAssertTrue(app.buttons["settings.claude.remove"].waitForExistence(timeout: 5))
+        app.buttons["settings.claude.remove"].tap()
+        XCTAssertEqual(app.staticTexts["settings.claude.status"].label, "No API key is saved.")
+    }
+
+    /// The assistant panel opens from the right rail; a request's changes preview with Keep and
+    /// Discard in place of the dock, Keep is one undo step, and Discard leaves the model alone.
+    /// The model is scripted (--ui-testing-assistant), so this checks the interface, not a model.
+    func testAssistantPreviewsChangesForKeepOrDiscard() {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-testing-solid", "--ui-testing-assistant"]
+        app.launch()
+        func shot(_ name: String) {
+            let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
+        }
+        let toggle = app.buttons["assistant.toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 20))
+        toggle.tap()
+        XCTAssertTrue(app.otherElements["assistant.panel"].waitForExistence(timeout: 5) || app.buttons["assistant.close"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["assistant.suggestion"].firstMatch.exists, "suggestions fill the empty panel")
+        shot("Assistant panel")
+
+        let input = app.textFields["assistant.input"].exists ? app.textFields["assistant.input"] : app.textViews["assistant.input"]
+        type("Round the vertical edges 3 mm", into: input)
+        app.buttons["assistant.send"].tap()
+        let keep = app.buttons["assistant.keep"]
+        XCTAssertTrue(keep.waitForExistence(timeout: 10), "Keep replaces the dock")
+        XCTAssertTrue(app.buttons["assistant.discard"].exists)
+        XCTAssertFalse(app.buttons["tool.sketch"].exists, "the dock is replaced while reviewing")
+        XCTAssertTrue(app.descendants(matching: .any)["assistant.changes"].exists, "the reply lists its changes")
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier == %@", "Undo")).element.isEnabled, "editing waits for Keep or Discard")
+        shot("Assistant changes under review")
+        keep.tap()
+        XCTAssertTrue(app.buttons["tool.sketch"].waitForExistence(timeout: 5), "the dock returns")
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier == %@", "Undo")).element.isEnabled)
+
+        // A second request, discarded.
+        input.tap()
+        input.typeText("Chamfer the top edges 1 mm")
+        app.buttons["assistant.send"].tap()
+        XCTAssertTrue(app.buttons["assistant.discard"].waitForExistence(timeout: 10))
+        XCUIDevice.shared.orientation = .portrait
+        XCTAssertTrue(app.buttons["assistant.discard"].waitForExistence(timeout: 5))
+        shot("Assistant review in portrait")
+        app.buttons["assistant.discard"].tap()
+        XCTAssertTrue(app.buttons["tool.sketch"].waitForExistence(timeout: 5))
+        app.buttons["assistant.close"].tap()
+        XCTAssertFalse(app.buttons["assistant.close"].waitForExistence(timeout: 1))
+        // Undo removes the kept fillet in one step.
+        app.buttons.matching(NSPredicate(format: "identifier == %@", "Undo")).element.tap()
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier == %@", "Undo")).element.isEnabled)
+    }
+
+    func testAssistantShowsUnmetRequirementBeforeDiscardingTheDraft() {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-testing-solid", "--ui-testing-assistant", "--ui-testing-assistant-requirements"]
+        app.launch()
+        XCTAssertTrue(app.buttons["assistant.toggle"].waitForExistence(timeout: 20))
+        app.buttons["assistant.toggle"].tap()
+        let input = app.textFields["assistant.input"].exists ? app.textFields["assistant.input"] : app.textViews["assistant.input"]
+        type("Keep the block 60 by 40 by 20 mm.", into: input)
+        app.buttons["assistant.send"].tap()
+        let summary = app.staticTexts["assistant.requirements.summary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 10))
+        XCTAssertEqual(summary.label, "0 passed · 1 unmet · 0 not checked")
+        XCTAssertTrue(app.buttons["assistant.keep"].exists)
+        XCTAssertTrue(app.buttons["assistant.discard"].exists)
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "Assistant: unmet size requirement on draft"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["assistant.discard"].tap()
+        XCTAssertTrue(app.buttons["tool.sketch"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier == %@", "Undo")).element.isEnabled)
+    }
+
+    func testAssistantNativeTemplateKeepsBothPartsAndUndoesTogether() {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-testing-solid", "--ui-testing-assistant", "--ui-testing-assistant-template"]
+        app.launch()
+        XCTAssertTrue(app.buttons["assistant.toggle"].waitForExistence(timeout: 20))
+        app.buttons["assistant.toggle"].tap()
+        let input = app.textFields["assistant.input"].exists ? app.textFields["assistant.input"] : app.textViews["assistant.input"]
+        type("Make a closed 64 by 44 by 24 mm box with a slip-on lid.", into: input)
+        app.buttons["assistant.send"].tap()
+        XCTAssertTrue(app.buttons["assistant.keep"].waitForExistence(timeout: 10))
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "Assistant: native box and lid preview"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["assistant.keep"].tap()
+        XCTAssertTrue(app.staticTexts["1 sketch · 3 solids"].waitForExistence(timeout: 5))
+        app.buttons.matching(NSPredicate(format: "identifier == %@", "Undo")).element.tap()
+        XCTAssertTrue(app.staticTexts["1 sketch · 1 solid"].waitForExistence(timeout: 5))
+    }
+
+    func testUnitsSettingShowsInchesAndTheKeypadTakesThem() {
+        let app = app()
+        let width = app.buttons["dimension.width"]
+        XCTAssertTrue(width.waitForExistence(timeout: 10))
+        XCTAssertEqual(width.label, "Width, 60 mm")
+        // Units is in Settings (November 13, 2026; it left the project menu) and changes the open project.
+        func chooseUnits(_ units: String) {
+            app.buttons["Project menu"].tap(); app.buttons["project.settings"].tap()
+            XCTAssertTrue(app.buttons["settings.units"].waitForExistence(timeout: 5))
+            app.buttons["settings.units"].tap()
+            app.buttons[units].tap()
+            app.buttons["settings.done"].tap()
+        }
+        chooseUnits("Inches")
+        XCTAssertTrue(app.buttons["dimension.width"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["dimension.width"].label, "Width, 2.362 in")
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "Rectangle dimensioned in inches"; shot.lifetime = .keepAlways; add(shot)
+        // A bare number is inches; the stored value is millimeters.
+        app.buttons["dimension.width"].tap()
+        app.buttons["keypad.3"].tap()
+        app.buttons["keypad.confirm"].tap()
+        XCTAssertEqual(app.buttons["dimension.width"].label, "Width, 3 in")
+        chooseUnits("Millimeters")
+        XCTAssertEqual(app.buttons["dimension.width"].label, "Width, 76.2 mm")
+    }
+
+    func testHintStaysWithinTwoLinesAndHelpShowsTheRest() {
+        let app = app(arguments: ["--ui-testing-solid"])
+        let toggle = app.buttons["items.toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+        toggle.tap()
+        app.buttons["item.Body 01"].tap()
+        toggle.tap()
+        // A selected solid has the longest hint: it is cut to two lines.
+        let hint = app.staticTexts["hint.text"]
+        XCTAssertTrue(hint.waitForExistence(timeout: 5))
+        XCTAssertLessThan(hint.frame.height, 46, "At most two lines of 15 pt text")
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "Two-line hint with help"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["hint.help"].tap()
+        // The help card opens on the topic for what is being done, with the whole hint.
+        XCTAssertTrue(app.staticTexts["help.title"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["help.title"].label, "Moving a Solid")
+        let detail = app.staticTexts["hint.detail"]
+        XCTAssertTrue(detail.waitForExistence(timeout: 5))
+        XCTAssertTrue(detail.label.hasPrefix("Solid selected."), detail.label)
+        XCTAssertTrue(detail.label.hasSuffix("Double-tap another solid to pick it too."), "The whole hint")
+        XCTAssertTrue(app.staticTexts["help.summary"].exists, "A plain-language overview")
+        let overview = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        overview.name = "Help card overview"; overview.lifetime = .keepAlways; add(overview)
+        // The card moves by its top bar.
+        let title = app.staticTexts["help.title"]
+        let before = title.frame
+        title.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.4)))
+        XCTAssertGreaterThan(abs(title.frame.midX - before.midX) + abs(title.frame.midY - before.midY), 40, "Dragged")
+        app.buttons["help.close"].tap()
+        XCTAssertFalse(app.staticTexts["help.title"].waitForExistence(timeout: 1))
+        app.buttons["hint.help"].tap()
+        app.buttons["hint.controls"].tap()
+        XCTAssertTrue(app.navigationBars["Controls"].waitForExistence(timeout: 5), "All controls opens the guide")
+    }
+
+    func testTextHelpStaysUsableAfterBackgroundingAndRotation() {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app(arguments: ["--ui-testing-solid"])
+        XCTAssertTrue(app.buttons["hint.help"].waitForExistence(timeout: 10))
+        app.buttons["hint.help"].tap()
+        for orientation in [UIDeviceOrientation.landscapeLeft, .portrait] {
+            XCUIDevice.shared.orientation = orientation
+            XCTAssertTrue(app.staticTexts["help.summary"].waitForExistence(timeout: 5), "Text is the default with or without a catalog")
+            XCUIDevice.shared.press(.home)
+            app.activate()
+            XCTAssertTrue(app.staticTexts["help.summary"].waitForExistence(timeout: 10))
+            let close = app.buttons["help.close"]
+            XCTAssertTrue(close.isHittable)
+            let bounds = app.frame
+            XCTAssertTrue(bounds.contains(close.frame), "Help controls stay on screen")
+            let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            shot.name = "Text help after backgrounding, \(orientation.rawValue)"
+            shot.lifetime = .keepAlways
+            add(shot)
+        }
+        app.buttons["hint.controls"].tap()
+        XCTAssertTrue(app.navigationBars["Controls"].waitForExistence(timeout: 5))
+    }
+}
+
+// Current-controls help recaptures use only the in-memory UI test box. Optional
+// pacing keeps captions readable in simctl recordings; ordinary checks run fast.
+@MainActor extension SwipeAndSketchUITests {
+    private func helpCapture(_ name: String, app: XCUIApplication) {
+        print("HELP_CAPTURE \(Date().timeIntervalSince1970) \(name)")
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "Help capture: \(name)"; shot.lifetime = .keepAlways; add(shot)
+        if ProcessInfo.processInfo.environment["SWIPESKETCH_HELP_CAPTURE"] == "1" {
+            Thread.sleep(forTimeInterval: 4)
+        }
+    }
+
+    func testHelpCurrentModelTreeSelection() {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app(arguments: ["--ui-testing-solid"])
+        let toggle = app.buttons["items.toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 15))
+        helpCapture("selection-start", app: app)
+        toggle.tap()
+        XCTAssertTrue(app.buttons["item.Body 01"].waitForExistence(timeout: 5))
+        helpCapture("selection-tree", app: app)
+        app.buttons["item.Body 01"].tap()
+        XCTAssertTrue(app.buttons["item.Body 01"].isSelected)
+        XCTAssertTrue(app.staticTexts["selection.measure"].exists)
+        helpCapture("selection-solid", app: app)
+        app.buttons["item.Sketch 01"].tap()
+        XCTAssertTrue(app.buttons["item.Sketch 01"].isSelected)
+        helpCapture("selection-sketch", app: app)
+        app.buttons["item.Rectangle 01"].tap()
+        XCTAssertTrue(app.buttons["dimension.width"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["dimension.width"].value as? String, "60")
+        XCTAssertEqual(app.buttons["dimension.height"].value as? String, "40")
+        helpCapture("selection-shape", app: app)
+        toggle.tap()
+        XCTAssertTrue(app.buttons["dimension.width"].exists)
+        helpCapture("selection-end", app: app)
+    }
+
+    func testHelpCurrentModelTreeVisibility() {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app(arguments: ["--ui-testing-solid"])
+        XCTAssertTrue(app.buttons["items.toggle"].waitForExistence(timeout: 15))
+        helpCapture("visibility-start", app: app)
+        app.buttons["items.toggle"].tap()
+        XCTAssertTrue(app.buttons["item.Body 01"].waitForExistence(timeout: 5))
+        helpCapture("visibility-tree", app: app)
+        app.buttons["item.visibility.Body 01"].tap()
+        XCTAssertTrue(app.buttons["Show Body 01"].exists)
+        helpCapture("visibility-hide-body", app: app)
+        app.buttons["item.visibility.Sketch 01"].tap()
+        XCTAssertTrue(app.buttons["Show Sketch 01"].exists)
+        helpCapture("visibility-hide-sketch", app: app)
+        app.buttons["Show Sketch 01"].tap()
+        XCTAssertTrue(app.buttons["Hide Sketch 01"].exists)
+        helpCapture("visibility-show-sketch", app: app)
+        app.buttons["Show Body 01"].tap()
+        XCTAssertTrue(app.buttons["Hide Body 01"].exists)
+        XCTAssertTrue(app.buttons["item.Sketch 01"].exists)
+        helpCapture("visibility-end", app: app)
+    }
+
+    func testHelpCurrentMeasureRail() {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app(arguments: ["--ui-testing-solid"])
+        XCTAssertTrue(app.buttons["items.toggle"].waitForExistence(timeout: 15))
+        app.buttons["items.toggle"].tap()
+        app.buttons["item.Body 01"].tap()
+        XCTAssertTrue(app.buttons["item.Body 01"].isSelected)
+        helpCapture("measure-selected", app: app)
+        app.buttons["items.toggle"].tap()
+        helpCapture("measure-rail", app: app)
+        app.buttons["tool.measure"].tap()
+        XCTAssertTrue(app.buttons["measure.done"].waitForExistence(timeout: 5))
+        let volume = app.descendants(matching: .any)["measure.volume"].firstMatch
+        XCTAssertTrue(volume.exists)
+        XCTAssertTrue(volume.label.contains("28,800") || volume.label.contains("28800"), volume.label)
+        helpCapture("measure-values", app: app)
+        app.buttons["measure.done"].tap()
+        XCTAssertFalse(app.buttons["measure.done"].exists)
+        helpCapture("measure-end", app: app)
+    }
+}

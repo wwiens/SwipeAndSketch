@@ -1,0 +1,5 @@
+module SSKernel {
+    header "SSKernel.h"
+    link "c++"
+    export *
+}

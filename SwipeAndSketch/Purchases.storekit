@@ -1,0 +1,42 @@
+{
+  "identifier": "51BB383E-31AC-49C8-AD3A-3FDCCCA932BA",
+  "nonRenewingSubscriptions": [],
+  "products": [
+    {
+      "displayPrice": "0",
+      "familyShareable": false,
+      "internalID": "42D3DABA-7EC0-4A07-AE95-2E1F6FB42D6F",
+      "localizations": [
+        {
+          "description": "Every feature free for 14 days. No automatic charge.",
+          "displayName": "14-day Trial",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "noventix.SwipeAndSketch.trial14days",
+      "referenceName": "14-day Trial",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "19.99",
+      "familyShareable": true,
+      "internalID": "24FA8347-D85C-4324-8FAC-86BC06228047",
+      "localizations": [
+        {
+          "description": "Unlock every tool and assistant edit. Pay once.",
+          "displayName": "Swipe & Sketch",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "noventix.SwipeAndSketch.unlock",
+      "referenceName": "Swipe & Sketch",
+      "type": "NonConsumable"
+    }
+  ],
+  "settings": {},
+  "subscriptionGroups": [],
+  "version": {
+    "major": 3,
+    "minor": 0
+  }
+}

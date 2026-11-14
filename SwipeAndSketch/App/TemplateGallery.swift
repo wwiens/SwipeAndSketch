@@ -1,0 +1,568 @@
+import SceneKit
+import SwiftUI
+
+private let ink = Color("ss-ink")
+private let muted = Color("ss-muted")
+private let violet = Color("ss-violet")
+private let paper = Color("ss-paper")
+private let coral = Color("ss-coral")
+private let hairline = Color("ss-border")
+private let canvas = Color("ss-canvas")
+private let card = Color("ss-white")
+
+/// New Project (October 21, 2026): a blank project, or a template set up with a few sizes and
+/// choices before it is made (Core/Templates.swift). Opened from the Files browser's + and the
+/// project menu, and shown in Home's Templates (October 22, 2026, without Cancel); `onCreate` gets
+/// the new project and its suggested file name, then the usual save sheet asks where to put it.
+/// It opens on a panel saying what templates do (October 29, 2026): each is a model
+/// generator, not a fixed model. Home's Templates has no Blank Project (Home has its own); New
+/// Project keeps one in the panel.
+struct TemplateGallery: View {
+    var title = "New Project"
+    /// A category to show first (Home's Start Something cards).
+    var category: ProjectTemplate.Category? = nil
+    /// Offer Blank Project in the panel: New Project's sheet, where it's the only way to a blank one.
+    var offersBlank = true
+    var onCreate: (Project, String) -> Void
+    var onCancel: (() -> Void)?
+    @State private var path: [String] = []
+    @StateObject private var thumbnails = TemplateThumbnails.shared
+    private let templates = TemplateCatalog.all
+
+    var body: some View {
+        NavigationStack(path: $path) {
+          ScrollViewReader { scroller in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 28) {
+                    intro
+                    ForEach(ProjectTemplate.Category.allCases, id: \.self) { category in
+                        VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(category.title).font(.system(size: 22, weight: .bold)).foregroundStyle(ink)
+                                Text(category.summary).font(.system(size: 14)).foregroundStyle(muted)
+                            }
+                            LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
+                                ForEach(templates.filter { $0.category == category }) { template in
+                                    NavigationLink(value: template.id) { templateCard(template) }
+                                        .buttonStyle(.plain).accessibilityIdentifier("templates.\(template.id)")
+                                }
+                            }
+                            if let notice = category.notice {
+                                Text(notice).font(.system(size: 12)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
+                                    .accessibilityIdentifier("templates.notice.\(category.rawValue)")
+                            }
+                        }
+                        .id(category)
+                    }
+                }
+                .padding(24)
+            }
+            .onAppear { if let category { scroller.scrollTo(category, anchor: .top) } }
+            .onChange(of: category) { _, category in
+                if let category { withAnimation { scroller.scrollTo(category, anchor: .top) } }
+            }
+          }
+            .background(canvas)
+            .navigationTitle(title).navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if let onCancel {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: onCancel).accessibilityIdentifier("templates.cancel") }
+                }
+            }
+            .navigationDestination(for: String.self) { id in
+                if let template = TemplateCatalog.template(id) { TemplateSetup(template: template, onCreate: onCreate) }
+            }
+        }
+        .tint(violet)
+        .task { thumbnails.load(templates) }
+    }
+
+    private var columns: [GridItem] { [GridItem(.adaptive(minimum: 220, maximum: 300), spacing: 16, alignment: .top)] }
+
+    /// What a template does for you, at the top of the gallery: a soft lavender panel, violet only
+    /// in its icons and button.
+    private var intro: some View {
+        let benefits: [(icon: SSIcon, title: String, text: String)] = [
+            (.dimension, "Made to your measurements", "Set the sizes, counts, clearances, and screws, even the words on it."),
+            (.solid, "A live preview", "Turn it and zoom in while you set it up; it rebuilds as you change it."),
+            (.fitTest, "Ready to print", "Each one lists the sizes that matter, the hardware it needs, and how to lay it on the bed."),
+            (.items, "Yours to change", "It comes out as ordinary named solids, so you can keep shaping it with every tool.")
+        ]
+        let categories = Set(templates.map(\.category)).count
+        return VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Every template is a model generator").font(.system(size: 28, weight: .bold)).foregroundStyle(ink)
+                    .accessibilityAddTraits(.isHeader)
+                Text("These aren't fixed models. Choose a starting point, tell it what you're storing, mounting, or replacing, and it builds a model that fits: the right size, the right fit, ready to print.")
+                    .font(.system(size: 16)).foregroundStyle(ink).fixedSize(horizontal: false, vertical: true)
+            }
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12, alignment: .top)], alignment: .leading, spacing: 12) {
+                ForEach(benefits, id: \.title) { benefit in
+                    HStack(alignment: .top, spacing: 12) {
+                        SSIconGlyph(icon: benefit.icon, size: 26, color: paper)
+                            .frame(width: 40, height: 40)
+                            .background(violet, in: RoundedRectangle(cornerRadius: 11))
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(benefit.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(ink)
+                            Text(benefit.text).font(.system(size: 13)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+            }
+            HStack(spacing: 16) {
+                Text("\(templates.count) generators in \(categories) categories, from Gridfinity bins to wall boards, cases, and replacement parts.")
+                    .font(.system(size: 13, weight: .medium)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
+                if offersBlank {
+                    Spacer(minLength: 0)
+                    Button { onCreate(Project(), "Untitled Project") } label: {
+                        HStack(spacing: 6) {
+                            SSIconGlyph(icon: .newProject, size: 18, color: paper)
+                            Text("Blank Project").font(.system(size: 15, weight: .semibold)).foregroundStyle(paper)
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 9)
+                        .background(violet, in: Capsule())
+                    }
+                    .buttonStyle(.plain).accessibilityIdentifier("templates.blank")
+                }
+            }
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color("ss-lavender"), in: RoundedRectangle(cornerRadius: 20))
+    }
+
+    private func templateCard(_ template: ProjectTemplate) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12).fill(canvas)
+                if let image = thumbnails.picture(of: template) {
+                    Image(uiImage: image).resizable().scaledToFill()
+                } else {
+                    ProgressView()
+                }
+            }
+            .aspectRatio(4 / 3, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(template.title).font(.system(size: 17, weight: .semibold)).foregroundStyle(ink)
+                }
+                Text(template.summary).font(.system(size: 13)).foregroundStyle(muted).lineLimit(4, reservesSpace: true)
+            }
+        }
+        .cardStyle()
+    }
+}
+
+private extension View {
+    func cardStyle() -> some View {
+        padding(12)
+            .background(card, in: RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(hairline, lineWidth: 1))
+            .contentShape(RoundedRectangle(cornerRadius: 16))
+    }
+}
+
+/// Card pictures of each template at its default sizes: drawn ahead of time into the asset catalog
+/// (Scripts/render_template_pictures.sh), so the gallery opens at once. A template without one
+/// (just added, say) is built and drawn here instead, once per launch.
+@MainActor final class TemplateThumbnails: ObservableObject {
+    static let shared = TemplateThumbnails()
+    @Published private(set) var images: [String: UIImage] = [:]
+    private var loading = false
+
+    func picture(of template: ProjectTemplate) -> UIImage? { images[template.id] ?? UIImage(named: template.pictureName) }
+
+    func load(_ templates: [ProjectTemplate]) {
+        let missing = templates.filter { picture(of: $0) == nil }
+        guard !loading, !missing.isEmpty else { return }
+        loading = true
+        Task {
+            for template in missing {
+                let parts = await Task.detached(priority: .userInitiated) { () -> [ModelPicture.Part] in
+                    (try? template.workspace(template.pictureValues)).map(ModelPicture.parts(of:)) ?? []
+                }.value
+                if let image = ModelPicture.image(parts: parts, side: 480) { images[template.id] = image }
+            }
+            loading = false
+        }
+    }
+}
+
+// MARK: Setting up a template
+
+/// A template's sizes and choices beside a live preview that fingers can turn and zoom.
+struct TemplateSetup: View {
+    let template: ProjectTemplate
+    var onCreate: (Project, String) -> Void
+    @State private var values: TemplateValues
+    @StateObject private var preview = TemplatePreview()
+    private let unit = LengthUnit(rawValue: UserDefaults.standard.string(forKey: "lengthUnit") ?? "") ?? .millimeters
+
+    init(template: ProjectTemplate, onCreate: @escaping (Project, String) -> Void) {
+        self.template = template
+        self.onCreate = onCreate
+        _values = State(initialValue: template.defaults)
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ZStack(alignment: .bottom) {
+                ModelPreviewView(parts: preview.parts, version: preview.version)
+                    .accessibilityLabel("Preview of the \(template.title)")
+                status.padding(16)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Divider()
+            panel.frame(width: 380)
+        }
+        .background(canvas)
+        .navigationTitle(template.title).navigationBarTitleDisplayMode(.inline)
+        .onAppear { preview.update(template, values) }
+        .onChange(of: values) { _, values in preview.update(template, values) }
+    }
+
+    @ViewBuilder private var status: some View {
+        switch preview.state {
+        case .building:
+            HStack(spacing: 8) { ProgressView(); Text("Building…").foregroundStyle(muted) }
+                .font(.system(size: 14)).padding(.horizontal, 14).padding(.vertical, 8)
+                .background(card, in: Capsule()).overlay(Capsule().stroke(hairline))
+        case .failed(let message):
+            Text(message).font(.system(size: 14, weight: .medium)).foregroundStyle(coral).multilineTextAlignment(.center)
+                .padding(.horizontal, 14).padding(.vertical, 10)
+                .background(card, in: RoundedRectangle(cornerRadius: 12)).overlay(RoundedRectangle(cornerRadius: 12).stroke(hairline))
+                .accessibilityIdentifier("templates.error")
+        case .ready:
+            Text("Drag with a finger to turn it; pinch to zoom.").font(.system(size: 13)).foregroundStyle(muted)
+        }
+    }
+
+    private var panel: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text(template.summary).font(.system(size: 15)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
+                    ForEach(template.textParameters.filter { $0.isShown(values) }) { parameter in
+                        TextParameterRow(parameter: parameter, text: Binding(get: { values.text(parameter.id) }, set: { values.texts[parameter.id] = $0 }))
+                    }
+                    ForEach(template.parameters.filter { $0.isShown(values) }) { parameter in
+                        ParameterRow(parameter: parameter, value: binding(parameter), unit: unit)
+                    }
+                    TemplateNotesView(notes: template.notes(template.clamped(values)), unit: unit)
+                    Text("Once made, these are ordinary solids: change them with any tool.")
+                        .font(.system(size: 13)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
+                    if let notice = template.category.notice {
+                        Text(notice).font(.system(size: 12)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(20)
+            }
+            Divider()
+            HStack {
+                Button("Defaults") { values = template.defaults }
+                    .disabled(values == template.defaults).accessibilityIdentifier("templates.defaults")
+                Spacer()
+                Button(action: create) {
+                    Text("Create Project").font(.system(size: 17, weight: .semibold)).foregroundStyle(paper)
+                        .padding(.horizontal, 22).padding(.vertical, 12)
+                        .background(preview.isReady ? violet : muted.opacity(0.5), in: Capsule())
+                }
+                .buttonStyle(.plain).disabled(!preview.isReady).accessibilityIdentifier("templates.create")
+            }
+            .padding(16)
+        }
+        .background(card)
+    }
+
+    private func binding(_ parameter: TemplateParameter) -> Binding<Double> {
+        Binding(get: { values[parameter.id] }, set: {
+            var changed = values
+            changed[parameter.id] = parameter.clamped($0)
+            values = template.adjust(changed, parameter.id)
+        })
+    }
+
+    private func create() {
+        guard let workspace = preview.workspace, preview.isReady else { return }
+        var project = Project(workspace: workspace)
+        project.preview = ModelPicture.image(parts: preview.parts, side: CGFloat(ProjectPreview.side))?.pngData()
+            .flatMap { $0.count <= ProjectPreview.maximumBytes ? $0 : nil }
+        onCreate(project, template.name(template.clamped(values)))
+    }
+}
+
+/// Millimeters shown in the display unit, without trailing zeros.
+private func formatLength(_ millimeters: Double, _ unit: LengthUnit) -> String {
+    let shown = millimeters / unit.millimeters
+    let formatter = NumberFormatter()
+    formatter.minimumFractionDigits = 0
+    formatter.maximumFractionDigits = unit.fractionDigits
+    formatter.usesGroupingSeparator = false
+    return formatter.string(from: NSNumber(value: shown)) ?? String(shown)
+}
+
+/// What a template makes at the current values (October 28, 2026): the sizes that decide its fit,
+/// the hardware it needs, and how it prints, worked out from the same numbers as its solids.
+private struct TemplateNotesView: View {
+    let notes: TemplateNotes
+    let unit: LengthUnit
+
+    var body: some View {
+        if !notes.measurements.isEmpty || notes.hardware != nil || notes.printing != nil {
+            VStack(alignment: .leading, spacing: 14) {
+                if !notes.measurements.isEmpty {
+                    section("Measurements") {
+                        ForEach(notes.measurements.indices, id: \.self) { index in
+                            let measurement = notes.measurements[index]
+                            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                                Text(measurement.title).foregroundStyle(muted)
+                                Spacer(minLength: 8)
+                                Text(value(measurement)).foregroundStyle(ink).multilineTextAlignment(.trailing).monospacedDigit()
+                            }
+                            .font(.system(size: 14))
+                        }
+                    }
+                }
+                if let hardware = notes.hardware { section("Hardware") { paragraph(hardware) } }
+                if let printing = notes.printing { section("Printing") { paragraph(printing) } }
+            }
+            .padding(14)
+            .background(canvas, in: RoundedRectangle(cornerRadius: 12))
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("templates.notes")
+        }
+    }
+
+    private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(ink).accessibilityAddTraits(.isHeader)
+            content()
+        }
+    }
+
+    private func paragraph(_ text: String) -> some View {
+        Text(text).font(.system(size: 14)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func value(_ measurement: TemplateMeasurement) -> String {
+        var words: [String] = []
+        if !measurement.lengths.isEmpty {
+            words.append(measurement.lengths.map { formatLength($0, unit) }.joined(separator: measurement.separator) + " " + unit.symbol)
+        }
+        if let text = measurement.text { words.append(text) }
+        return words.joined(separator: " ")
+    }
+}
+
+/// A line of text a template is set up with, such as a sign's words (October 28, 2026). It is kept
+/// exactly as typed; the preview says why when it can't be used (blank, too long, or a character
+/// the font can't draw).
+private struct TextParameterRow: View {
+    let parameter: TemplateTextParameter
+    @Binding var text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(parameter.title).font(.system(size: 16)).foregroundStyle(ink)
+                Spacer()
+                Text("\(text.count)/\(parameter.maxLength)").font(.system(size: 13).monospacedDigit())
+                    .foregroundStyle(text.count > parameter.maxLength ? coral : muted)
+            }
+            TextField(parameter.defaultText, text: $text)
+                .font(.system(size: 17, weight: .medium)).foregroundStyle(ink)
+                .submitLabel(.done)
+                .padding(.horizontal, 12).padding(.vertical, 10)
+                .background(canvas, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(hairline))
+                .accessibilityIdentifier("templates.text.\(parameter.id)")
+            if let note = parameter.note {
+                Text(note).font(.system(size: 12)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+/// One size or choice of a template.
+private struct ParameterRow: View {
+    let parameter: TemplateParameter
+    @Binding var value: Double
+    let unit: LengthUnit
+    @State private var text = ""
+    @FocusState private var editing: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            control
+            if let note = parameter.note {
+                Text(note).font(.system(size: 12)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityIdentifier("templates.parameter.\(parameter.id)")
+    }
+
+    @ViewBuilder private var control: some View {
+        switch parameter.kind {
+        case .count(let range):
+            Stepper(value: Binding(get: { Int(value.rounded()) }, set: { value = Double($0) }), in: range) {
+                HStack { title; Spacer(); Text("\(Int(value.rounded()))").font(.system(size: 17, weight: .semibold).monospacedDigit()).foregroundStyle(ink) }
+            }
+        case .length(_, let step):
+            Stepper {
+                HStack {
+                    title
+                    Spacer()
+                    TextField("", text: $text)
+                        .multilineTextAlignment(.trailing).keyboardType(.decimalPad).focused($editing)
+                        .font(.system(size: 17, weight: .semibold).monospacedDigit()).foregroundStyle(ink)
+                        .frame(width: 64)
+                        .onSubmit(commit)
+                    Text(unit.symbol).font(.system(size: 15)).foregroundStyle(muted).fixedSize()
+                }
+            } onIncrement: { value = value + step } onDecrement: { value = value - step }
+            .onAppear { text = format(value) }
+            .onChange(of: value) { _, new in if !editing { text = format(new) } }
+            .onChange(of: editing) { _, now in if !now { commit() } }
+        case .choice(let options):
+            if options.count <= 3 && options.allSatisfy({ $0.count <= 14 }) {
+                VStack(alignment: .leading, spacing: 8) {
+                    title
+                    Picker(parameter.title, selection: Binding(get: { Int(value.rounded()) }, set: { value = Double($0) })) {
+                        ForEach(options.indices, id: \.self) { Text(options[$0]).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                }
+            } else {
+                // Long option names (boards) get a full-width row of their own, on one line.
+                let selected = min(max(Int(value.rounded()), 0), options.count - 1)
+                VStack(alignment: .leading, spacing: 8) {
+                    title
+                    Menu {
+                        Picker(parameter.title, selection: Binding(get: { selected }, set: { value = Double($0) })) {
+                            ForEach(options.indices, id: \.self) { Text(options[$0]).tag($0) }
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text(options[selected]).font(.system(size: 16, weight: .medium)).foregroundStyle(violet)
+                                .lineLimit(1).minimumScaleFactor(0.8)
+                            Spacer(minLength: 8)
+                            SSIconGlyph(icon: .disclosure, size: 16, color: violet).rotationEffect(.degrees(90))
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 10)
+                        .background(canvas, in: RoundedRectangle(cornerRadius: 10))
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(hairline))
+                        .contentShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    .accessibilityLabel(parameter.title)
+                    .accessibilityValue(options[selected])
+                    .accessibilityIdentifier("templates.menu.\(parameter.id)")
+                }
+            }
+        case .toggle:
+            Toggle(isOn: Binding(get: { value >= 0.5 }, set: { value = $0 ? 1 : 0 })) { title }
+        }
+    }
+
+    private var title: some View { Text(parameter.title).font(.system(size: 16)).foregroundStyle(ink).layoutPriority(1) }
+
+    private func format(_ millimeters: Double) -> String { formatLength(millimeters, unit) }
+
+    /// A typed value (it may carry a unit, or be a sum) in the display unit, kept within range.
+    private func commit() {
+        if let typed = DimensionExpression.evaluate(text, unit: unit) { value = typed * unit.millimeters }
+        text = format(value)
+    }
+}
+
+/// Builds a template's solids off the main thread as its values change, a moment after the last
+/// change, keeping the last good picture on screen meanwhile.
+@MainActor final class TemplatePreview: ObservableObject {
+    enum State: Equatable { case building, ready, failed(String) }
+    @Published private(set) var state = State.building
+    @Published private(set) var parts: [ModelPicture.Part] = []
+    /// Bumped with each new set of parts, so the preview view knows to redraw.
+    @Published private(set) var version = 0
+    private(set) var workspace: Workspace?
+    private var task: Task<Void, Never>?
+    var isReady: Bool { state == .ready && workspace != nil }
+
+    func update(_ template: ProjectTemplate, _ values: TemplateValues) {
+        task?.cancel()
+        state = .building
+        let first = version == 0
+        task = Task {
+            if !first {
+                try? await Task.sleep(for: .milliseconds(250))
+                guard !Task.isCancelled else { return }
+            }
+            let built = await Task.detached(priority: .userInitiated) { () -> Result<(Workspace, [ModelPicture.Part]), Error> in
+                Result { let workspace = try template.workspace(values); return (workspace, ModelPicture.parts(of: workspace)) }
+            }.value
+            guard !Task.isCancelled else { return }
+            switch built {
+            case .success(let (workspace, parts)) where parts.count == workspace.bodies.count:
+                self.workspace = workspace
+                self.parts = parts
+                version += 1
+                state = .ready
+            case .success:
+                workspace = nil
+                state = .failed(TemplateError.failed(template.title).localizedDescription)
+            case .failure(let error):
+                workspace = nil
+                state = .failed(error.localizedDescription)
+            }
+        }
+    }
+}
+
+/// The live preview: SceneKit's own camera control, turning about the model's center with Z up.
+/// A new set of parts keeps the angle the user turned to and fits the model again.
+private struct ModelPreviewView: UIViewRepresentable {
+    var parts: [ModelPicture.Part]
+    var version: Int
+
+    final class Coordinator { var shown = -1 }
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    /// Fits the model across the view's narrower side: the picture's scale is set for its height,
+    /// so a view taller than wide (setup in portrait) fits its width instead.
+    final class FittingView: SCNView {
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            fitCamera()
+        }
+        func fitCamera() {
+            pointOfView?.camera?.projectionDirection = bounds.width < bounds.height ? .horizontal : .vertical
+        }
+    }
+
+    func makeUIView(context: Context) -> FittingView {
+        let view = FittingView()
+        view.backgroundColor = UIColor(named: "ss-canvas")
+        view.antialiasingMode = .multisampling4X
+        view.allowsCameraControl = true
+        view.defaultCameraController.interactionMode = .orbitTurntable
+        view.defaultCameraController.worldUp = SCNVector3(0, 0, 1)
+        view.defaultCameraController.inertiaEnabled = true
+        view.cameraControlConfiguration.allowsTranslation = false
+        return view
+    }
+
+    func updateUIView(_ view: FittingView, context: Context) {
+        guard context.coordinator.shown != version else { return }
+        context.coordinator.shown = version
+        guard let drawn = ModelPicture.scene(parts: parts, pixels: 0.85 * Double(view.contentScaleFactor)) else { view.scene = nil; return }
+        if let previous = view.pointOfView, previous.camera != nil, view.scene != nil {
+            // Keep the turned angle; look at the new model's center from there.
+            drawn.camera.simdOrientation = previous.simdOrientation
+            drawn.camera.simdPosition = drawn.center + previous.simdWorldFront * -50_000
+        }
+        view.scene = drawn.scene
+        view.pointOfView = drawn.camera
+        view.fitCamera()
+        view.defaultCameraController.target = SCNVector3(drawn.center)
+    }
+}
