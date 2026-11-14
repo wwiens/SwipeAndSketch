@@ -308,6 +308,10 @@ struct AssistantWorkbench: Sendable {
             parts.append("\(Self.mm(size.x)) wide (x) × \(Self.mm(size.y)) deep (y) × \(Self.mm(size.z)) tall (z)")
             parts.append("spans x \(Self.mm(b.min.x))…\(Self.mm(b.max.x)), y \(Self.mm(b.min.y))…\(Self.mm(b.max.y)), z \(Self.mm(b.min.z))…\(Self.mm(b.max.z))")
             parts.append("volume \(Self.mm(solid.volume)) mm³")
+            // The same estimate Export shows, so "how much filament?" has an answer.
+            let filament = FilamentSettings.stored
+            let estimate = PrintEstimate(volume: solid.volume, surfaceArea: solid.surfaceArea, settings: filament)
+            parts.append("prints in about \(estimate.weightText) (\(estimate.lengthText)) of filament at the user's settings (\(filament.summary), \(Self.mm(filament.wallThickness)) mm walls)")
         } else {
             parts.append("does not build")
         }

@@ -69,6 +69,7 @@ final class AssistantWorkbenchTests: XCTestCase {
         let summary = bench.summary()
         XCTAssertTrue(summary.contains("Body 01: extruded 20 mm along +Z from Sketch 01"), summary)
         XCTAssertTrue(summary.contains("60 wide (x) × 40 deep (y) × 20 tall (z)"), summary)
+        XCTAssertTrue(summary.contains(" of filament at the user's settings ("), "The print estimate, as in Export: \(summary)")
         XCTAssertTrue(summary.contains("Rectangle 01 60 × 40 centered at (0, 0, 0)"), summary)
         XCTAssertTrue(summary.contains("Selected: nothing."), summary)
     }

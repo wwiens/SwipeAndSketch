@@ -386,16 +386,63 @@ import XCTest
         XCTAssertTrue(format.waitForExistence(timeout: 5))
         format.buttons["3MF"].tap()
         XCTAssertTrue(app.buttons["print.bed"].waitForExistence(timeout: 5), "3MF has plate options")
+        // The sheet scrolls: the estimate sits below Share.
+        let sheet = app.collectionViews.firstMatch
+        for _ in 0..<3 where !app.buttons["print.share"].exists { sheet.swipeUp() }
         XCTAssertTrue(app.buttons["print.share"].exists)
         XCTAssertTrue(app.buttons["print.chooseFolder"].exists)
         attach("Export sheet, 3MF")
+        for _ in 0..<3 where !format.isHittable { sheet.swipeDown() }
         format.buttons["STL"].tap()
         XCTAssertFalse(app.buttons["print.bed"].waitForExistence(timeout: 2), "STL is exported as modeled")
+        for _ in 0..<3 where !app.buttons["print.share"].exists { sheet.swipeUp() }
         XCTAssertTrue(app.buttons["print.share"].exists)
         attach("Export sheet, STL")
+        for _ in 0..<3 where !format.isHittable { sheet.swipeDown() }
         format.buttons["3MF"].tap()
         app.buttons["Cancel"].tap()
         XCTAssertFalse(format.waitForExistence(timeout: 2))
+    }
+
+    func testExportEstimatesFilamentAndListsParts() {
+        continueAfterFailure = false
+        let app = app(arguments: ["--ui-testing-solid"])
+        XCTAssertTrue(app.staticTexts["project.title"].waitForExistence(timeout: 20))
+        func attach(_ name: String) {
+            let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); shot.name = name; shot.lifetime = .keepAlways; add(shot)
+        }
+        app.buttons["Project menu"].tap()
+        app.buttons["project.export"].tap()
+        // The estimate is at the foot of the sheet, under the export choices.
+        XCTAssertTrue(app.segmentedControls["export.format"].waitForExistence(timeout: 5))
+        let filament = app.descendants(matching: .any)["export.estimate.filament"]
+        for _ in 0..<4 where !(filament.exists && filament.isHittable) { app.collectionViews.firstMatch.swipeUp() }
+        XCTAssertTrue(filament.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["export.estimate.cost"].exists)
+        let before = filament.label
+        XCTAssertTrue(before.contains(" g · ") && before.hasSuffix(" m"), before)
+        attach("Export sheet with estimate")
+
+        // The filament page changes the estimate at once.
+        app.buttons["export.filament"].tap()
+        let infill = app.steppers["settings.filament.infill"]
+        XCTAssertTrue(infill.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["settings.filament.material"].exists)
+        infill.buttons.element(boundBy: 1).tap() // Increment
+        attach("Filament settings")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(filament.waitForExistence(timeout: 5))
+        XCTAssertNotEqual(filament.label, before, "More infill, more filament")
+
+        app.buttons["export.partsList"].tap()
+        let row = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'partsList.row.'")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(row.label.contains(" × "), row.label)
+        XCTAssertTrue(app.buttons["partsList.share"].exists)
+        attach("Parts list")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.buttons["export.filament"].tap()
+        infill.buttons.element(boundBy: 0).tap() // Decrement
     }
 
     func testAboutShowsAppLicenseAndKeepsBrandingSeparate() {

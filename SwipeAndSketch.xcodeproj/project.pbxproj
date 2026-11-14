@@ -136,6 +136,7 @@
 		CB61CB5BBEB811ED3615710B /* SwipeAndSketch/Core/TemplatesDesk.swift in Sources */ = {isa = PBXBuildFile; fileRef = E84DB15CFE35F9EC60A3B2B2 /* SwipeAndSketch/Core/TemplatesDesk.swift */; };
 		D1581AE27866C1EA4D7AE989 /* SwipeAndSketch/Canvas/ModelPicture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 500B62A91E8768DF802070F0 /* SwipeAndSketch/Canvas/ModelPicture.swift */; };
 		D29F30C494B34804A94B5075 /* SwipeAndSketch/Core/Measuring.swift in Sources */ = {isa = PBXBuildFile; fileRef = 221851B73AAC4432BE5787BA /* SwipeAndSketch/Core/Measuring.swift */; };
+		8A64EFE9C9684FECA159F547 /* SwipeAndSketch/Core/PrintEstimate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B730BF00A87A4BF8ACB69E24 /* SwipeAndSketch/Core/PrintEstimate.swift */; };
 		D2B18F60759549EAAD92C8CB /* SwipeAndSketch/Core/AssistantWorkbench.swift in Sources */ = {isa = PBXBuildFile; fileRef = FABAEDA45F6342B7865522C6 /* SwipeAndSketch/Core/AssistantWorkbench.swift */; };
 		D2E951E13DB44292B79D4FE0 /* SwipeAndSketch/Assistant/AssistantPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37B0C3A68BDB48B59F04375A /* SwipeAndSketch/Assistant/AssistantPlanner.swift */; };
 		D339E4C574643E9A3EC47319 /* Tests/AppTests/CanvasTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86A881F290F7F31E0ACB27B1 /* Tests/AppTests/CanvasTests.swift */; };
@@ -216,6 +217,7 @@
 		21B377C8E4B334B299C5796E /* SwipeAndSketchThumbnails/ThumbnailProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketchThumbnails/ThumbnailProvider.swift; sourceTree = SOURCE_ROOT; };
 		21E31698EF6CA14F37C233C5 /* SwipeAndSketchThumbnails/Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = SwipeAndSketchThumbnails/Info.plist; sourceTree = SOURCE_ROOT; };
 		221851B73AAC4432BE5787BA /* SwipeAndSketch/Core/Measuring.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Measuring.swift; sourceTree = SOURCE_ROOT; };
+		B730BF00A87A4BF8ACB69E24 /* SwipeAndSketch/Core/PrintEstimate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/PrintEstimate.swift; sourceTree = SOURCE_ROOT; };
 		2455D4A927594EB4A2BBF894 /* SwipeAndSketch/Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = SwipeAndSketch/Info.plist; sourceTree = SOURCE_ROOT; };
 		2626DB4D602ECD2EE71B2AFB /* Tests/AppTests/KernelSceneTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/KernelSceneTests.swift; sourceTree = SOURCE_ROOT; };
 		27745638E573BB853338027D /* SwipeAndSketch/Core/Align.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Align.swift; sourceTree = SOURCE_ROOT; };
@@ -414,6 +416,7 @@
 				2A7F25CF72B36E52BC89C86D /* SwipeAndSketch/App/WalkthroughPlayer.swift */,
 				35F733218BA4E121BC4FC3BF /* SwipeAndSketch/App/Walkthroughs.swift */,
 				221851B73AAC4432BE5787BA /* SwipeAndSketch/Core/Measuring.swift */,
+				B730BF00A87A4BF8ACB69E24 /* SwipeAndSketch/Core/PrintEstimate.swift */,
 				D2FA6DACD3D041B784B19F62 /* SwipeAndSketch/Core/SketchDimensions.swift */,
 				D6C35E1B90B34884BC6F583A /* SwipeAndSketch/Core/SketchModify.swift */,
 				7A72DC06F98647DFB477A979 /* SwipeAndSketch/Core/Regions.swift */,
@@ -836,6 +839,7 @@
 				F033E0B1988BCFAEB29B1EC0 /* SwipeAndSketch/App/WalkthroughPlayer.swift in Sources */,
 				886E8B14A9238E74A629C0E5 /* SwipeAndSketch/App/Walkthroughs.swift in Sources */,
 				D29F30C494B34804A94B5075 /* SwipeAndSketch/Core/Measuring.swift in Sources */,
+				8A64EFE9C9684FECA159F547 /* SwipeAndSketch/Core/PrintEstimate.swift in Sources */,
 				DFC026CA1AD8488BA84A3BCB /* SwipeAndSketch/Core/SketchDimensions.swift in Sources */,
 				208F1D3C6A4A44469CAE996B /* SwipeAndSketch/Core/SketchModify.swift in Sources */,
 				4FD5187C7B134041A05B982C /* SwipeAndSketch/Core/Regions.swift in Sources */,

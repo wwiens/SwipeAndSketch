@@ -6,7 +6,7 @@ import simd
 @MainActor final class PrintExportToolTests: CanvasTestCase {
 
     /// App preferences these tests change, put back afterwards (hosted tests share the app's settings).
-    private static let preferenceKeys = ["fitClearance", "print.folderBookmark", "print.placement", "print.bedWidth", "print.bedDepth"]
+    private static let preferenceKeys = ["fitClearance", "print.folderBookmark", "print.placement", "print.bedWidth", "print.bedDepth"] + FilamentSettings.keys
     private var savedPreferences: [String: Any] = [:]
     override func setUp() async throws {
         try await super.setUp()
@@ -93,5 +93,34 @@ import simd
         let file = folder.appendingPathComponent("Untitled Project.stl")
         XCTAssertEqual(session.status, "Sent Untitled Project.stl to \(folder.lastPathComponent)")
         XCTAssertGreaterThan(triangles(try Data(contentsOf: file)), triangles(selected), "All visible solids, more than the one selected")
+    }
+
+    func testPartsListAndEstimateFollowTheChosenPartsAndFilament() {
+        let (session, controller) = boxScene()
+        defer { withExtendedLifetime(controller) {} }
+        FilamentSettings().store()
+        session.chooseTool(.fitTest)
+        let visible = session.partsList(.visible)
+        XCTAssertEqual(visible.map(\.name), ["Body 01", "Body 02", "Body 03"])
+        XCTAssertEqual(visible[0].size.x, 60, accuracy: 1e-6)
+        XCTAssertEqual(visible[0].size.y, 40, accuracy: 1e-6)
+        XCTAssertEqual(visible[0].size.z, 20, accuracy: 1e-6)
+        XCTAssertEqual(visible[0].estimate.volume, 60 * 40 * 20, accuracy: 1e-3)
+        XCTAssertTrue(visible.allSatisfy { $0.estimate.grams > 0 && $0.estimate.grams < $0.estimate.volume / 1000 * 1.24 },
+                      "Less than solid plastic at 15% infill")
+
+        session.select(.body(session.workspace.bodies[1].id))
+        XCTAssertEqual(session.partsList(.selected).map(\.name), ["Body 02"])
+
+        // Changing the filament changes the estimate, not the parts.
+        let pla = visible[0].estimate
+        var heavier = FilamentSettings()
+        heavier.infill = 1
+        heavier.pricePerKilogram = 40
+        heavier.store()
+        let solid = session.partsList(.visible)[0].estimate
+        XCTAssertEqual(solid.grams, 48 * 1.24, accuracy: 1e-3, "100% infill: the whole 48 cm³")
+        XCTAssertEqual(solid.cost, solid.grams / 1000 * 40, accuracy: 1e-9)
+        XCTAssertGreaterThan(solid.grams, pla.grams)
     }
 }

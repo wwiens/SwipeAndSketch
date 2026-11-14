@@ -67,6 +67,11 @@ extension ModelingSession {
         return bodies.map { ModelExport.PrintPart(body: $0, name: names[$0.id] ?? "Solid") }
     }
 
+    /// Each part's size and print estimate, with the filament settings in Settings.
+    func partsList(_ choice: PrintParts) -> [PartsList.Entry] {
+        PartsList.entries(printParts(choice).map { ($0.body, $0.name) }, settings: .stored)
+    }
+
     /// Whether the parts fit the plate as laid out (from the solids' boxes).
     func printFits(_ choice: PrintParts) -> Bool {
         let boxes = printParts(choice).compactMap { try? SolidKernel.solid(for: $0.body).bounds }
@@ -219,6 +224,8 @@ struct PrintSheet: View {
                     }
                     .accessibilityIdentifier("print.share")
                 } footer: { Text("AirDrop to a Mac, save to Files, or open in a slicer or printer app on this iPad.") }
+                // Below the export choices, so they stay in view; scroll for the filament and parts.
+                EstimateSection(session: session, parts: parts)
             }
             .navigationTitle("Export")
             .navigationBarTitleDisplayMode(.inline)
@@ -228,6 +235,163 @@ struct PrintSheet: View {
             }
         }
         .tint(Color("ss-violet"))
+    }
+}
+
+/// The local currency estimates are priced in (the price per kilogram is typed in it).
+var estimateCurrency: String { Locale.current.currency?.identifier ?? "USD" }
+
+/// Export's estimate: about how much filament the chosen parts take and what it costs, the parts
+/// list, and the filament settings it assumed.
+private struct EstimateSection: View {
+    @Bindable var session: ModelingSession
+    var parts: PrintParts
+    // Read so the figures follow a change on the Filament page.
+    @AppStorage(FilamentSettings.materialKey) private var material = FilamentSettings.Material.pla.rawValue
+    @AppStorage(FilamentSettings.densityKey) private var density = FilamentSettings().customDensity
+    @AppStorage(FilamentSettings.priceKey) private var price = FilamentSettings().pricePerKilogram
+    @AppStorage(FilamentSettings.diameterKey) private var diameter = FilamentSettings().diameter
+    @AppStorage(FilamentSettings.infillKey) private var infill = FilamentSettings().infill
+    @AppStorage(FilamentSettings.wallKey) private var walls = FilamentSettings().wallThickness
+
+    var body: some View {
+        let entries = session.partsList(parts), total = PartsList.total(entries)
+        Section {
+            LabeledContent("Filament", value: "\(total.weightText) · \(total.lengthText)")
+                .monospacedDigit().accessibilityIdentifier("export.estimate.filament")
+            LabeledContent("Cost", value: total.costText(currency: estimateCurrency))
+                .monospacedDigit().accessibilityIdentifier("export.estimate.cost")
+            NavigationLink {
+                PartsListView(session: session, entries: entries)
+            } label: {
+                LabeledContent("Parts List", value: entries.count == 1 ? "1 part" : "\(entries.count) parts")
+            }
+            .accessibilityIdentifier("export.partsList")
+            NavigationLink {
+                Form { FilamentSettingsSections(unit: session.lengthUnit) }
+                    .navigationTitle("Filament").navigationBarTitleDisplayMode(.inline)
+            } label: {
+                LabeledContent("Assumes", value: FilamentSettings.stored.summary)
+            }
+            .accessibilityIdentifier("export.filament")
+        } header: { Text("Estimate") } footer: {
+            Text("About what your slicer will use, from the parts' volume and faces. The slicer's own figure is exact.")
+        }
+    }
+}
+
+/// Every part with its size and estimate, and the total; shared as CSV for a spreadsheet.
+struct PartsListView: View {
+    let session: ModelingSession
+    let entries: [PartsList.Entry]
+
+    var body: some View {
+        let total = PartsList.total(entries), muted = Color("ss-muted")
+        List {
+            if entries.isEmpty {
+                Text("No solids to list.").foregroundStyle(muted)
+            }
+            Section {
+                ForEach(entries) { entry in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(entry.name).font(.headline).lineLimit(1)
+                            Spacer()
+                            Text(entry.estimate.weightText).monospacedDigit()
+                        }
+                        HStack {
+                            Text(sizeText(entry.size) + " · " + session.measureText(Measurement(kind: .volume, value: entry.estimate.volume)))
+                            Spacer()
+                            Text(entry.estimate.costText(currency: estimateCurrency))
+                        }
+                        .font(.subheadline).foregroundStyle(muted).monospacedDigit()
+                    }
+                    .padding(.vertical, 2)
+                    .accessibilityElement(children: .combine).accessibilityIdentifier("partsList.row.\(entry.name)")
+                }
+            } footer: {
+                if !entries.isEmpty { Text("Sizes are each part's extent along X, Y, and Z.") }
+            }
+            if entries.count > 1 {
+                Section {
+                    LabeledContent("Filament", value: "\(total.weightText) · \(total.lengthText)").monospacedDigit()
+                    LabeledContent("Cost", value: total.costText(currency: estimateCurrency)).monospacedDigit()
+                } header: { Text("Total") }
+                .accessibilityIdentifier("partsList.total")
+            }
+        }
+        .navigationTitle("Parts List").navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if !entries.isEmpty {
+                ToolbarItem(placement: .primaryAction) {
+                    ShareLink(item: PartsList.csv(entries, currency: estimateCurrency), preview: SharePreview("\(session.projectName) Parts List")) {
+                        Image(SSIcon.export.assetName).renderingMode(.template)
+                    }
+                    .accessibilityLabel("Share Parts List").accessibilityIdentifier("partsList.share")
+                }
+            }
+        }
+    }
+
+    private func sizeText(_ size: SIMD3<Double>) -> String {
+        let unit = session.lengthUnit
+        return [size.x, size.y, size.z].map { formatted(length: $0, unit: unit) }.joined(separator: " × ") + " " + unit.symbol
+    }
+}
+
+/// The filament and slicer settings estimates assume: in Settings, and one tap from Export.
+struct FilamentSettingsSections: View {
+    var unit: LengthUnit
+    @AppStorage(FilamentSettings.materialKey) private var material = FilamentSettings.Material.pla.rawValue
+    @AppStorage(FilamentSettings.densityKey) private var density = FilamentSettings().customDensity
+    @AppStorage(FilamentSettings.priceKey) private var price = FilamentSettings().pricePerKilogram
+    @AppStorage(FilamentSettings.diameterKey) private var diameter = FilamentSettings().diameter
+    @AppStorage(FilamentSettings.infillKey) private var infill = FilamentSettings().infill
+    @AppStorage(FilamentSettings.wallKey) private var walls = FilamentSettings().wallThickness
+
+    var body: some View {
+        Section {
+            Picker("Material", selection: $material) {
+                ForEach(FilamentSettings.Material.allCases, id: \.self) { material in
+                    Text(material.density.map { "\(material.title) · \(FilamentSettings.number($0, digits: 2)) g/cm³" } ?? material.title)
+                        .tag(material.rawValue)
+                }
+            }
+            .accessibilityIdentifier("settings.filament.material")
+            if material == FilamentSettings.Material.custom.rawValue {
+                // Hundredths, so repeated steps never drift.
+                Stepper(value: Binding(get: { density }, set: { density = ($0 * 100).rounded() / 100 }),
+                        in: FilamentSettings.densityRange, step: 0.01) {
+                    Text("Density: \(FilamentSettings.number(density, digits: 2)) g/cm³").monospacedDigit()
+                }
+                .accessibilityIdentifier("settings.filament.density")
+            }
+            LabeledContent("Price per kg") {
+                TextField("Price per kg", value: Binding(get: { price }, set: { value in
+                    if value.isFinite { price = min(FilamentSettings.priceRange.upperBound, max(FilamentSettings.priceRange.lowerBound, value)) }
+                }), format: .currency(code: estimateCurrency))
+                .keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(maxWidth: 160)
+                .accessibilityIdentifier("settings.filament.price")
+            }
+            Picker("Diameter", selection: $diameter) {
+                ForEach(FilamentSettings.diameters, id: \.self) { Text("\(FilamentSettings.number($0, digits: 2)) mm").tag($0) }
+            }
+            .accessibilityIdentifier("settings.filament.diameter")
+        } header: { Text("Filament") } footer: {
+            Text("For the weight, length, and cost estimates in Export. The price is in your currency.")
+        }
+        Section {
+            Stepper(value: Binding(get: { (infill * 100).rounded() }, set: { infill = $0 / 100 }), in: 0...100, step: 5) {
+                Text("Infill: \(Int((infill * 100).rounded()))%").monospacedDigit()
+            }
+            .accessibilityIdentifier("settings.filament.infill")
+            Stepper(value: Binding(get: { walls }, set: { walls = ($0 * 10).rounded() / 10 }), in: 0.4...3.0, step: 0.1) {
+                Text("Walls: \(formatted(length: walls, unit: unit)) \(unit.symbol)").monospacedDigit()
+            }
+            .accessibilityIdentifier("settings.filament.walls")
+        } header: { Text("Slicer") } footer: {
+            Text("Estimates assume solid plastic this thick under every face and this much infill inside, as most slicers print. Match them to your slicer's settings.")
+        }
     }
 }
 

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// App settings: the workspace, units, the fit clearance, and the assistant's provider and
+/// App settings: the workspace, units, the fit clearance, the filament estimates assume, and the assistant's provider and
 /// device-local credential (no requests are made by saving a key). Opened from Home, the project
 /// menu, and the assistant panel; from a project, units and clearance change it at once.
 struct AssistantSettingsView: View {
@@ -62,6 +62,7 @@ struct AssistantSettingsView: View {
                 } header: { Text("Fit Clearance") } footer: {
                     Text("The gap on each side that new pegs, threads, lids, and Subtract clearances start from. It depends on your printer: Joints ▸ Fit Test adds a test print to find yours. Parts already made keep their own gap.")
                 }
+                FilamentSettingsSections(unit: unit)
                 Section("Assistant") {
                     NavigationLink {
                         AssistantModelSettings(selection: $model)
