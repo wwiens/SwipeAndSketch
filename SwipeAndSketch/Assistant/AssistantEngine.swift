@@ -45,6 +45,13 @@ enum AssistantModelChoice: String, CaseIterable, Identifiable, Sendable {
         case .claude, .openAI, .gemini: Self.providerTitle(provider!)
         }
     }
+    /// Whether Settings and the assistant's menu offer this choice (OpenAI and Gemini can be hidden).
+    var isOffered: Bool { provider?.isOffered ?? true }
+    static var offered: [AssistantModelChoice] { allCases.filter(\.isOffered) }
+    /// A stored preference, or Automatic when it is missing or no longer offered.
+    static func stored(_ rawValue: String?) -> AssistantModelChoice {
+        rawValue.flatMap(AssistantModelChoice.init).flatMap { $0.isOffered ? $0 : nil } ?? .automatic
+    }
     /// "Claude Opus 5.5 · High": the chosen model and effort.
     static func providerTitle(_ provider: AIProvider) -> String {
         "\(ProviderSettings.model(for: provider).name) · \(ProviderSettings.effort(for: provider).title)"

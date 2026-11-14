@@ -9,6 +9,28 @@ import FoundationModels
 enum AIProvider: String, CaseIterable, Identifiable, Sendable {
     case claude, openAI = "openai", gemini
     var id: String { rawValue }
+
+    /// OpenAI and Gemini are built and tested but not offered yet (user decision, November 13, 2026):
+    /// Settings, the assistant's model menu, and help show only Claude. Set this to true to offer them
+    /// again. Debug UI tests can turn them on with `--ui-testing-all-providers`.
+    static let offersOpenAIAndGemini = false
+    static var showsOpenAIAndGemini: Bool {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--ui-testing") && arguments.contains("--ui-testing-all-providers") { return true }
+        #endif
+        return offersOpenAIAndGemini
+    }
+    /// Whether Settings and the assistant offer this provider.
+    var isOffered: Bool { self == .claude || Self.showsOpenAIAndGemini }
+    /// The providers Settings and the assistant offer.
+    static var offered: [AIProvider] { allCases.filter(\.isOffered) }
+    /// "Claude" or "Claude, OpenAI, or Gemini", for help and notes.
+    static var offeredNames: String {
+        let names = offered.map(\.title)
+        return names.count < 3 ? names.joined(separator: " or ") : names.dropLast().joined(separator: ", ") + ", or " + names.last!
+    }
+
     var title: String {
         switch self { case .claude: "Claude"; case .openAI: "OpenAI"; case .gemini: "Gemini" }
     }

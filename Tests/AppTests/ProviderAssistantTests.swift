@@ -32,6 +32,19 @@ import Foundation
 
     // MARK: OpenAI
 
+    /// OpenAI and Gemini stay hidden until `AIProvider.offersOpenAIAndGemini` is turned on
+    /// (November 13, 2026); a stored choice of either falls back to Automatic.
+    func testOpenAIAndGeminiAreHiddenUntilOffered() throws {
+        try XCTSkipIf(AIProvider.offersOpenAIAndGemini, "OpenAI and Gemini are offered.")
+        XCTAssertEqual(AIProvider.offered, [.claude])
+        XCTAssertEqual(AIProvider.offeredNames, "Claude")
+        XCTAssertEqual(AssistantModelChoice.offered, [.automatic, .cloud, .onDevice, .claude])
+        XCTAssertEqual(AssistantModelChoice.stored("openai"), .automatic)
+        XCTAssertEqual(AssistantModelChoice.stored("gemini"), .automatic)
+        XCTAssertEqual(AssistantModelChoice.stored("claude"), .claude)
+        XCTAssertEqual(AssistantModelChoice.stored(nil), .automatic)
+    }
+
     func testOpenAIRunsToolsStatelesslyAndReturnsReasoning() async throws {
         ProviderSettings.setModel(ProviderModel(id: "gpt-test", name: "GPT Test"), for: .openAI)
         ProviderSettings.setEffort(.medium, for: .openAI)

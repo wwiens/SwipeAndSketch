@@ -73,7 +73,7 @@ struct PurchaseView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     Divider()
                     Text("Requires iPadOS 27 or later and a compatible Apple Pencil. Fingers navigate the canvas; Pencil draws, selects, and edits.")
-                    Text("Assistant availability depends on your iPad and model settings. Optional Claude, OpenAI, or Gemini requests use your own API key and are billed separately by that company.")
+                    Text("Assistant availability depends on your iPad and model settings. Optional \(AIProvider.offeredNames) requests use your own API key and are billed separately by that company.")
                     Text("Support is provided as time allows, without a guaranteed response or feature schedule. Keep backups of important projects.")
                         .font(.callout).foregroundStyle(Color("ss-muted"))
                 }

@@ -51,7 +51,7 @@ struct AssistantPanel: View {
             Text("Assistant").font(.system(size: 17, weight: .semibold)).foregroundStyle(ink).lineLimit(1).layoutPriority(-1)
             Spacer(minLength: 2)
             Menu {
-                ForEach(AssistantModelChoice.allCases) { choice in
+                ForEach(AssistantModelChoice.offered) { choice in
                     Button(choice.title) { assistant.choice = choice }
                 }
                 Section {

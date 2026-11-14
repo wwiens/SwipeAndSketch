@@ -59,7 +59,7 @@ struct AboutView: View {
                 }
                 Section("What you need") {
                     Text("Apple Pencil. Swipe & Sketch draws, selects, and edits geometry with Apple Pencil only; fingers move the view and press buttons.")
-                    Text("The assistant uses Apple Intelligence, or Claude, OpenAI, or Gemini with your own API key in Settings. Those need an internet connection and bill usage to your API account with that company. Modeling works offline; the walkthroughs in help need a connection.")
+                    Text("The assistant uses Apple Intelligence, or \(AIProvider.offeredNames) with your own API key in Settings. Those need an internet connection and bill usage to your API account with that company. Modeling works offline; the walkthroughs in help need a connection.")
                 }
                 Section("Help and privacy") {
                     Button { showQuickStart = true } label: { Text("Quick Start").foregroundStyle(violet) }

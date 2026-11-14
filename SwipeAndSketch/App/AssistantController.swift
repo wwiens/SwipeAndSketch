@@ -71,7 +71,7 @@ import Combine
 
     init(session: ModelingSession) {
         self.session = session
-        choice = UserDefaults.standard.string(forKey: Self.choiceKey).flatMap(AssistantModelChoice.init) ?? .automatic
+        choice = AssistantModelChoice.stored(UserDefaults.standard.string(forKey: Self.choiceKey))
         let engine = self.engine
         responder = { request, workspace, selection, choice, onActivity, onText in
             try await engine.respond(to: request, workspace: workspace, selection: selection, choice: choice, onActivity: onActivity, onText: onText)
@@ -137,7 +137,8 @@ import Combine
             .receive(on: DispatchQueue.main).sink { [weak self] _ in
             guard let self else { return }
             // A provider's model or effort changed in Settings: the badge shows the new effort.
-            guard let value = UserDefaults.standard.string(forKey: Self.choiceKey).flatMap(AssistantModelChoice.init), value != choice else {
+            let value = AssistantModelChoice.stored(UserDefaults.standard.string(forKey: Self.choiceKey))
+            guard value != choice else {
                 refreshModelStatus(); return
             }
             choice = value

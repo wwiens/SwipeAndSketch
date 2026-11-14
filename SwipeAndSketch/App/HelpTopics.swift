@@ -641,7 +641,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
             HelpOverview(
                 summary: "The assistant is changing the model for you. Look over the result before keeping it.",
                 steps: ["Check the preview on the canvas.", "Tap Keep to add the change, or Discard to leave the model as it was."],
-                tips: ["A kept change is one step you can undo.", "Requirement checks apply to the draft when each reply finished. They cover only the listed requirements; review unmet and unchecked items before keeping changes.", "To use Claude, OpenAI, or Gemini, add your API key for it in Settings ▸ AI Providers, choose a model and effort there, then pick it from the Model menu. Requests and model details go to that company, and API usage is billed to your account."])
+                tips: ["A kept change is one step you can undo.", "Requirement checks apply to the draft when each reply finished. They cover only the listed requirements; review unmet and unchecked items before keeping changes.", "To use \(AIProvider.offeredNames), add your API key for it in Settings ▸ AI Providers, choose a model and effort there, then pick it from the Model menu. Requests and model details go to that company, and API usage is billed to your account."])
         }
     }
 

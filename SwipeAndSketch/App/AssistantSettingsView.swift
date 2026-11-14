@@ -69,17 +69,17 @@ struct AssistantSettingsView: View {
                         HStack {
                             Text("Model")
                             Spacer()
-                            Text(AssistantModelChoice(rawValue: model)?.title ?? "Automatic (Apple)")
+                            Text(AssistantModelChoice.stored(model).title)
                                 .foregroundStyle(Color("ss-muted"))
                         }
                     }
-                    .accessibilityValue(AssistantModelChoice(rawValue: model)?.title ?? "Automatic (Apple)")
+                    .accessibilityValue(AssistantModelChoice.stored(model).title)
                     .accessibilityIdentifier("settings.assistant.model")
-                    Text("Automatic uses Apple's models. Claude, OpenAI, and Gemini use your own API key from that company, with the model and effort you choose for it.")
+                    Text("Automatic uses Apple's models. \(AIProvider.offeredNames) uses your own API key from that company, with the model and effort you choose for it.")
                         .font(.footnote).foregroundStyle(Color("ss-muted"))
                 }
                 Section {
-                    ForEach(AIProvider.allCases) { provider in
+                    ForEach(AIProvider.offered) { provider in
                         NavigationLink {
                             ProviderSettingsView(provider: provider, choice: $model, onDone: onDone)
                         } label: {
@@ -93,7 +93,7 @@ struct AssistantSettingsView: View {
                         .accessibilityIdentifier("settings.provider.\(provider.rawValue)")
                     }
                 } header: { Text("AI Providers") } footer: {
-                    Text("Each needs an API key from its company. Usage is billed to your account there.")
+                    Text(AIProvider.offered.count > 1 ? "Each needs an API key from its company. Usage is billed to your account there." : "Needs an API key from \(AIProvider.claude.company). Usage is billed to your account there.")
                 }
             }
             .scrollContentBackground(.hidden).background(Color("ss-canvas"))
@@ -130,7 +130,7 @@ struct AssistantSettingsView: View {
     }
 
     private func refreshKeys() {
-        keys = Set(AIProvider.allCases.filter { (try? $0.credentials.read()) != nil })
+        keys = Set(AIProvider.offered.filter { (try? $0.credentials.read()) != nil })
     }
 
     /// A preset, or nil for Custom.
@@ -148,7 +148,7 @@ private struct AssistantModelSettings: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        List(AssistantModelChoice.allCases) { choice in
+        List(AssistantModelChoice.offered) { choice in
             Button {
                 selection = choice.rawValue
                 dismiss()

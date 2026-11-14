@@ -1274,9 +1274,26 @@ import XCTest
     }
 
 
-    func testAIProviderPagesOfferKeyModelAndEffort() {
+    func testReleaseSettingsOfferOnlyClaude() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-testing-solid"]
+        app.launch()
+        let menu = app.buttons["Project menu"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 20))
+        menu.tap()
+        app.buttons["project.settings"].tap()
+        let claude = app.buttons["settings.provider.claude"]
+        for _ in 0..<4 where !claude.exists || !claude.isHittable { app.collectionViews.firstMatch.swipeUp() }
+        XCTAssertTrue(claude.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["settings.provider.openai"].exists)
+        XCTAssertFalse(app.buttons["settings.provider.gemini"].exists)
+        app.buttons["settings.done"].tap()
+    }
+
+    func testAIProviderPagesOfferKeyModelAndEffort() {
+        let app = XCUIApplication()
+        // OpenAI and Gemini are hidden in the release (November 13, 2026); this turns them on.
+        app.launchArguments = ["--ui-testing", "--ui-testing-solid", "--ui-testing-all-providers"]
         app.launch()
         let menu = app.buttons["Project menu"]
         XCTAssertTrue(menu.waitForExistence(timeout: 20))
