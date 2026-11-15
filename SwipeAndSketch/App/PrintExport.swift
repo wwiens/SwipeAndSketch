@@ -53,18 +53,42 @@ enum PrintFolder {
         defer { if access { url.stopAccessingSecurityScopedResource() } }
         UserDefaults.standard.set(try url.bookmarkData(), forKey: key)
     }
+
+    /// Saves an export into the print folder, replacing the last version, so the slicer's recent
+    /// file is always the newest. Returns where it went.
+    static func save(_ data: Data, named fileName: String, in folder: URL) throws -> URL {
+        let access = folder.startAccessingSecurityScopedResource()
+        defer { if access { folder.stopAccessingSecurityScopedResource() } }
+        let target = folder.appendingPathComponent(fileName)
+        var coordinationError: NSError?, writeError: Error?
+        NSFileCoordinator().coordinate(writingItemAt: target, options: .forReplacing, error: &coordinationError) { url in
+            do { try data.write(to: url, options: .atomic) } catch { writeError = error }
+        }
+        if let error = coordinationError ?? writeError { throw error }
+        return target
+    }
+}
+
+/// Export files to share: each in a folder of its own in the temporary directory.
+enum ExportFiles {
+    static func temporary(_ data: Data, named fileName: String) throws -> URL {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("Export-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let url = folder.appendingPathComponent(fileName)
+        try data.write(to: url, options: .atomic)
+        return url
+    }
 }
 
 extension ModelingSession {
     /// The solids a print would include, with their Model Tree names.
     func printParts(_ choice: PrintParts) -> [ModelExport.PrintPart] {
-        let names = workspace.bodyNames
-        let bodies: [SolidBody]
         switch choice {
-        case .visible: bodies = workspace.bodies.filter { !workspace.isHidden($0) }
-        case .selected: bodies = workspace.bodies.filter { selectedMembers.bodies.contains($0.id) }
+        case .visible: return workspace.printParts(includingHidden: false)
+        case .selected:
+            let names = workspace.bodyNames
+            return workspace.bodies.filter { selectedMembers.bodies.contains($0.id) }.map { ModelExport.PrintPart(body: $0, name: names[$0.id] ?? "Solid") }
         }
-        return bodies.map { ModelExport.PrintPart(body: $0, name: names[$0.id] ?? "Solid") }
     }
 
     /// Each part's size and print estimate, with the filament settings in Settings.
@@ -101,26 +125,10 @@ extension ModelingSession {
         if let previous = exportItem?.url.deletingLastPathComponent() { try? FileManager.default.removeItem(at: previous) }
         Task.detached(priority: .userInitiated) { [weak self] in
             let result = Result { () throws -> URL in
-                let data = format == .threeMF ? try ModelExport.threeMF(parts, title: name, layout: layout, thumbnail: thumbnail)
-                    : try ModelExport.data(format, bodies: parts.map(\.body), title: name)
-                let safeName = name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
-                if let folder {
-                    // Replaces the last version, so the slicer's recent file is always the newest.
-                    let access = folder.startAccessingSecurityScopedResource()
-                    defer { if access { folder.stopAccessingSecurityScopedResource() } }
-                    let target = folder.appendingPathComponent(safeName).appendingPathExtension(format.rawValue)
-                    var coordinationError: NSError?, writeError: Error?
-                    NSFileCoordinator().coordinate(writingItemAt: target, options: .forReplacing, error: &coordinationError) { url in
-                        do { try data.write(to: url, options: .atomic) } catch { writeError = error }
-                    }
-                    if let error = coordinationError ?? writeError { throw error }
-                    return target
-                }
-                let temporary = FileManager.default.temporaryDirectory.appendingPathComponent("Export-\(UUID().uuidString)", isDirectory: true)
-                try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
-                let url = temporary.appendingPathComponent(safeName).appendingPathExtension(format.rawValue)
-                try data.write(to: url, options: .atomic)
-                return url
+                let data = try ModelExport.file(parts, format: format, title: name, layout: layout, thumbnail: thumbnail)
+                let fileName = ModelExport.fileName(name, format: format)
+                if let folder { return try PrintFolder.save(data, named: fileName, in: folder) }
+                return try ExportFiles.temporary(data, named: fileName)
             }
             await self?.finishPrintExport(result, toFolder: folder != nil, format: format)
         }
@@ -130,6 +138,7 @@ extension ModelingSession {
         isProjectBusy = false
         switch result {
         case .success(let url):
+            donateExport(format, toFolder: toFolder)
             if toFolder {
                 status = "Sent \(url.lastPathComponent) to \(url.deletingLastPathComponent().lastPathComponent)"
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
