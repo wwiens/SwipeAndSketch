@@ -9,6 +9,7 @@ import Foundation
     /// Whole completed exchanges only, so a function call is never sent without its thought.
     private var exchanges: [[AssistantJSON]] = []
     static let keptExchanges = 4
+    static let malformedRetries = 2
     /// Models that refused a thinking level; they run at their own default from then on.
     private var noEffort: Set<String> = []
 
@@ -29,7 +30,10 @@ import Foundation
                                                   "content": .array([.object(["type": .string("text"), "text": .string(prompt)])])])]
         var calls = 0
         var wrappingUp = false
-        for _ in 0...AssistantContext.maximumCalls + 1 {
+        // Google reports a garbled tool call as a failed interaction (`malformed_tool_call`) and asks
+        // for a retry; the same request is sent again, at most `malformedRetries` times in a row.
+        var retries = 0
+        for _ in 0...AssistantContext.maximumCalls + 1 + Self.malformedRetries {
             try Task.checkCancellation()
             var configuration: [String: AssistantJSON] = ["tool_choice": .string(wrappingUp ? "none" : "auto"),
                                                           "max_output_tokens": .number(16384)]
@@ -62,17 +66,38 @@ import Foundation
             catch let error as AssistantFailure { throw error }
             catch { throw AssistantFailure(message: "Gemini could not be reached. Check your internet connection and try again.", kind: .service) }
 
-            guard let response = try? JSONDecoder().decode(AssistantJSON.self, from: data), let steps = response["steps"]?.array else {
-                throw AssistantFailure(message: "Gemini returned an incomplete response. Try again.", kind: .service)
+            guard let response = try? JSONDecoder().decode(AssistantJSON.self, from: data) else {
+                throw AssistantFailure(message: "Gemini returned an incomplete response. Try again.", kind: .service,
+                                       details: Self.shape(of: data))
             }
+            // A failed interaction has no steps, so its status is read first.
             switch response["status"]?.string ?? "completed" {
             case "completed", "requires_action": break
             case "incomplete": throw AssistantFailure(message: "Gemini reached its response limit. Start a new conversation or ask for fewer changes.")
             case "failed":
-                let text = (response["errors"]?.array ?? []).compactMap { $0["message"]?.string }.joined(separator: " ").lowercased()
-                if text.contains("safety") || text.contains("blocked") { throw AssistantFailure(message: "Gemini declined this request.", kind: .refusal) }
-                throw AssistantFailure(message: "Gemini could not complete this request. Try again, or ask for fewer changes.", kind: .service)
+                let errors = response["errors"]?.array ?? []
+                let codes = errors.compactMap { $0["code"]?.string }
+                if codes.contains("malformed_tool_call"), retries < Self.malformedRetries {
+                    retries += 1
+                    continue
+                }
+                let details = errors.map { error in
+                    "Gemini: " + [error["code"]?.string, error["message"]?.string].compactMap { $0 }.joined(separator: ": ")
+                }
+                let text = errors.compactMap { $0["message"]?.string }.joined(separator: " ").lowercased()
+                if text.contains("safety") || text.contains("blocked") {
+                    throw AssistantFailure(message: "Gemini declined this request.", kind: .refusal, details: details)
+                }
+                if codes.contains("malformed_tool_call") {
+                    throw AssistantFailure(message: "Gemini kept sending CAD tool instructions it could not finish. Try again, or choose another Gemini model in Settings.", kind: .service, details: details)
+                }
+                throw AssistantFailure(message: "Gemini could not complete this request. Try again, or ask for fewer changes.", kind: .service, details: details)
             default: throw AssistantFailure(message: "Gemini stopped before completing this request. Try a smaller request.")
+            }
+            retries = 0
+            guard let steps = response["steps"]?.array else {
+                throw AssistantFailure(message: "Gemini returned an incomplete response. Try again.", kind: .service,
+                                       details: Self.shape(of: data))
             }
             let toolCalls = steps.filter { $0["type"]?.string == "function_call" }
             // Every step goes back as it came, in order, signed thoughts included.
@@ -118,6 +143,23 @@ import Foundation
         throw AssistantFailure(message: "Gemini reached the request limit. Ask for fewer changes at a time.")
     }
 
+    /// The outline of a reply the app could not read, for the panel's Details: its size, top-level
+    /// fields, status, and step types. Never any text, arguments, or values.
+    static func shape(of data: Data) -> [String] {
+        guard let response = try? JSONDecoder().decode(AssistantJSON.self, from: data) else {
+            return ["Reply: \(data.count) bytes, not JSON."]
+        }
+        guard case .object(let fields) = response else { return ["Reply: \(data.count) bytes, not a JSON object."] }
+        var lines = ["Reply: \(data.count) bytes; fields: \(fields.keys.sorted().joined(separator: ", "))."]
+        if let status = response["status"]?.string { lines.append("Status: \(status).") }
+        for name in ["steps", "outputs"] {
+            if let items = response[name]?.array {
+                lines.append("\(name): " + items.map { $0["type"]?.string ?? "?" }.joined(separator: ", ") + ".")
+            }
+        }
+        return lines
+    }
+
     private static func checkStatus(_ status: Int, data: Data, model: String) throws {
         let text = String(decoding: data.prefix(4096), as: UTF8.self)
         switch status {
@@ -125,6 +167,8 @@ import Foundation
         // Google answers a bad key with 400 (API_KEY_INVALID) as well as 401 or 403.
         case 400 where text.contains("API_KEY_INVALID") || text.contains("API key not valid"), 401:
             throw AssistantFailure(message: "Google rejected the Gemini API key. Replace it in Settings.")
+        case 400 where text.contains("Function calling is not enabled"):
+            throw AssistantFailure(message: "\(model) can't use the CAD tools. Choose another Gemini model in Settings.")
         case 403: throw AssistantFailure(message: "This Gemini API key can't use \(model). Check the key's project in Google AI Studio.")
         case 404: throw AssistantFailure(message: "\(model) is not available to this API key. Choose another model in Settings.")
         case 429: throw AssistantFailure(message: "Your Gemini API quota or rate limit was reached. Check your Google AI Studio plan and try again later.", kind: .service)

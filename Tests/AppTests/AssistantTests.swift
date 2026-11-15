@@ -365,13 +365,29 @@ import UIKit
     }
 
     /// Live requests through the real engine. Run with TEST_RUNNER_LIVE_ASSISTANT=1 (and
-    /// TEST_RUNNER_LIVE_BACKEND=cloud or onDevice); prints each request's trace.
+    /// TEST_RUNNER_LIVE_BACKEND=cloud, onDevice, claude, openai, or gemini); prints each request's trace.
+    /// For a provider, TEST_RUNNER_LIVE_KEYS names a folder on this Mac holding a file per provider
+    /// (`claude`, `openai`, `gemini`) with just its API key; the key is read from there and never
+    /// printed. TEST_RUNNER_LIVE_MODEL and TEST_RUNNER_LIVE_EFFORT (low, medium, high) pick the model.
+    /// `Scripts/live_assistant.sh` runs it.
     func testLiveRequests() async throws {
         let environment = ProcessInfo.processInfo.environment
         try XCTSkipUnless(environment["LIVE_ASSISTANT"] == "1", "Set TEST_RUNNER_LIVE_ASSISTANT=1 to run live model requests.")
         let choice = AssistantModelChoice(rawValue: environment["LIVE_BACKEND"] ?? "") ?? .cloud
-        if let reason = AssistantEngine.backends(for: choice).first.flatMap(AssistantEngine.unavailableReason) { throw XCTSkip(reason) }
-        let requests = (environment["LIVE_REQUESTS"]?.components(separatedBy: "|")) ?? [
+        var keyFor: (AIProvider) throws -> String? = { try $0.credentials.read() }
+        if let provider = choice.provider {
+            if let folder = environment["LIVE_KEYS"] {
+                let file = URL(fileURLWithPath: folder).appendingPathComponent(provider.rawValue)
+                guard let key = try? String(contentsOf: file, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines), !key.isEmpty else {
+                    throw XCTSkip("No \(provider.title) key at \(file.path).")
+                }
+                keyFor = { $0 == provider ? key : nil }
+            }
+            if let id = environment["LIVE_MODEL"], !id.isEmpty { ProviderSettings.setModel(ProviderModel(id: id, name: id), for: provider) }
+            if let effort = environment["LIVE_EFFORT"].flatMap(AssistantEffort.init(rawValue:)) { ProviderSettings.setEffort(effort, for: provider) }
+            print("Live \(provider.title): \(ProviderSettings.model(for: provider).id) · \(ProviderSettings.effort(for: provider).title)")
+        } else if let reason = AssistantEngine.backends(for: choice).first.flatMap(AssistantEngine.unavailableReason) { throw XCTSkip(reason) }
+        let requests = (environment["LIVE_REQUESTS"].flatMap { $0.isEmpty ? nil : $0.components(separatedBy: "|") }) ?? [
             "How big is it, and what is its volume?",
             "Round the vertical edges 3 mm",
             "Hollow it out with 2 mm walls, open at the top",
@@ -380,7 +396,7 @@ import UIKit
         ]
         let session = environment["LIVE_SCENE"] == "empty" ? ModelingSession(inMemory: true) : boxScene()
         for request in requests {
-            let engine = AssistantEngine()
+            let engine = AssistantEngine(claudeKey: { try keyFor(.claude) }, providerKey: keyFor)
             if let seconds = environment["LIVE_TIMEOUT"].flatMap(Double.init) { AssistantEngine.cloudTimeout = seconds }
             engine.context.onResult = { print("      ↳ \($0.prefix(240))") }
             print("▶︎ [\(choice.rawValue)] \(request)")
@@ -392,6 +408,7 @@ import UIKit
                 print(String(format: "  %.1f s on %@", Date().timeIntervalSince(started), turn.backend.title))
             } catch {
                 print("  ✗ \(error.localizedDescription) [\(error)]")
+                for line in (error as? AssistantFailure)?.details ?? [] { print("    details: \(line)") }
             }
         }
     }

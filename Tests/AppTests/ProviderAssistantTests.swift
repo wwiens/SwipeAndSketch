@@ -158,6 +158,52 @@ import Foundation
         catch { XCTAssertTrue(error.localizedDescription.contains("Gemini API key"), error.localizedDescription) }
     }
 
+    func testGeminiUnreadableReplyDetailsShowOnlyItsShape() async throws {
+        let secret = "Secret model text"
+        let client = GeminiAssistant { _ in
+            try self.http(.object(["id": .string("i_1"), "status": .string("completed"),
+                                   "outputs": .array([.object(["type": .string("text"), "text": .string(secret)])])]))
+        }
+        do { _ = try await run(AssistantEngine(gemini: client, providerKey: { _ in self.fakeKey }), choice: .gemini); XCTFail("A reply without steps must fail") }
+        catch let failure as AssistantFailure {
+            XCTAssertTrue(failure.message.contains("incomplete response"), failure.message)
+            XCTAssertTrue(failure.details.contains { $0.contains("fields: id, outputs, status") }, "\(failure.details)")
+            XCTAssertTrue(failure.details.contains("outputs: text."), "\(failure.details)")
+            XCTAssertFalse(failure.details.joined().contains(secret), "Details never carry the reply's text")
+        }
+        XCTAssertEqual(GeminiAssistant.shape(of: Data("<html>".utf8)), ["Reply: 6 bytes, not JSON."])
+    }
+
+    /// Google answers a garbled tool call with HTTP 200, status failed, and no steps (seen live with
+    /// gemini-3.1-pro-preview, November 15, 2026); the request is sent again.
+    func testGeminiRetriesAMalformedToolCall() async throws {
+        let malformed: AssistantJSON = .object(["status": .string("failed"), "errors": .array([.object([
+            "code": .string("malformed_tool_call"), "message": .string("Model generated invalid JSON syntax.")])])])
+        let output: AssistantJSON = .object(["type": .string("model_output"), "content": .array([.object(["type": .string("text"), "text": .string("Done.")])])])
+        var requests = 0
+        let client = GeminiAssistant { _ in
+            requests += 1
+            return try self.http(requests == 1 ? malformed : .object(["status": .string("completed"), "steps": .array([output])]))
+        }
+        let turn = try await run(AssistantEngine(gemini: client, providerKey: { _ in self.fakeKey }), choice: .gemini)
+        XCTAssertEqual(turn.reply, "Done.")
+        XCTAssertEqual(requests, 2)
+
+        var attempts = 0
+        let failing = GeminiAssistant { _ in attempts += 1; return try self.http(malformed) }
+        do { _ = try await run(AssistantEngine(gemini: failing, providerKey: { _ in self.fakeKey }), choice: .gemini); XCTFail("Repeated malformed calls must fail") }
+        catch let failure as AssistantFailure {
+            XCTAssertEqual(attempts, 1 + GeminiAssistant.malformedRetries)
+            XCTAssertTrue(failure.message.contains("choose another Gemini model"), failure.message)
+            XCTAssertEqual(failure.details, ["Gemini: malformed_tool_call: Model generated invalid JSON syntax."])
+        }
+    }
+
+    func testGeminiModelListLeavesOutModelsWithoutFunctionCalls() throws {
+        let list = #"{"models":[{"name":"models/gemini-omni-1.2-flash","supportedGenerationMethods":["generateContent"]},{"name":"models/gemini-4-hydrogen","displayName":"Gemini 4 Hydrogen","supportedGenerationMethods":["generateContent"]}]}"#
+        XCTAssertEqual(try ProviderCatalog.parse(.gemini, data: Data(list.utf8)).map(\.id), ["gemini-4-hydrogen"])
+    }
+
     // MARK: Engine, model lists, and settings
 
     func testProvidersNeedTheirOwnKeyAndNeverFallBack() async throws {

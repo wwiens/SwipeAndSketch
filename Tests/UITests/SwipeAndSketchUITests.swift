@@ -1321,7 +1321,8 @@ import XCTest
     }
 
 
-    func testReleaseSettingsOfferOnlyClaude() {
+    /// OpenAI and Gemini are offered again (November 15, 2026) without the test-only switch.
+    func testReleaseSettingsOfferAllProviders() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-testing-solid"]
         app.launch()
@@ -1332,8 +1333,10 @@ import XCTest
         let claude = app.buttons["settings.provider.claude"]
         for _ in 0..<4 where !claude.exists || !claude.isHittable { app.collectionViews.firstMatch.swipeUp() }
         XCTAssertTrue(claude.waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["settings.provider.openai"].exists)
-        XCTAssertFalse(app.buttons["settings.provider.gemini"].exists)
+        let gemini = app.buttons["settings.provider.gemini"]
+        for _ in 0..<4 where !gemini.exists || !gemini.isHittable { app.collectionViews.firstMatch.swipeUp() }
+        XCTAssertTrue(app.buttons["settings.provider.openai"].exists)
+        XCTAssertTrue(gemini.exists)
         app.buttons["settings.done"].tap()
     }
 

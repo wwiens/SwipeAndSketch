@@ -10,10 +10,10 @@ enum AIProvider: String, CaseIterable, Identifiable, Sendable {
     case claude, openAI = "openai", gemini
     var id: String { rawValue }
 
-    /// OpenAI and Gemini are built and tested but not offered yet (user decision, November 13, 2026):
-    /// Settings, the assistant's model menu, and help show only Claude. Set this to true to offer them
-    /// again. Debug UI tests can turn them on with `--ui-testing-all-providers`.
-    static let offersOpenAIAndGemini = false
+    /// Whether Settings, the assistant's model menu, and help offer OpenAI and Gemini beside Claude
+    /// (hidden November 13, 2026; offered again November 15, 2026). Set it to false to show only
+    /// Claude; Debug UI tests can still turn them on with `--ui-testing-all-providers`.
+    static let offersOpenAIAndGemini = true
     static var showsOpenAIAndGemini: Bool {
         #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments
@@ -261,7 +261,9 @@ enum ProviderSettings {
     /// Models for speech, images, embeddings, moderation, search, or code completion only.
     private static let excludedTerms = ["embed", "tts", "audio", "realtime", "transcribe", "image", "vision", "search",
                                         "moderation", "live", "robotics", "aqa", "computer-use", "whisper", "dall-e",
-                                        "sora", "codex", "instruct", "babbage", "davinci", "deep-research", "gpt-3.5"]
+                                        "sora", "codex", "instruct", "babbage", "davinci", "deep-research", "gpt-3.5",
+                                        // Gemini Omni models take no function calls, so they can't use the CAD tools.
+                                        "gemini-omni"]
     private static func excluded(_ id: String) -> Bool { excludedTerms.contains { id.contains($0) } }
 
     /// GPT and o-series chat models, without dated snapshots (the undated name follows the latest).
