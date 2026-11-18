@@ -1321,25 +1321,26 @@ import XCTest
     }
 
 
-    func testReleaseSettingsOfferOnlyClaude() {
+    func testReleaseSettingsOfferClaudeOpenAIAndGemini() {
         let app = XCUIApplication()
+        // No --ui-testing-all-providers: the release offers all three (November 17, 2026).
         app.launchArguments = ["--ui-testing", "--ui-testing-solid"]
         app.launch()
         let menu = app.buttons["Project menu"]
         XCTAssertTrue(menu.waitForExistence(timeout: 20))
         menu.tap()
         app.buttons["project.settings"].tap()
-        let claude = app.buttons["settings.provider.claude"]
-        for _ in 0..<4 where !claude.exists || !claude.isHittable { app.collectionViews.firstMatch.swipeUp() }
-        XCTAssertTrue(claude.waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["settings.provider.openai"].exists)
-        XCTAssertFalse(app.buttons["settings.provider.gemini"].exists)
+        for provider in ["claude", "openai", "gemini"] {
+            let row = app.buttons["settings.provider.\(provider)"]
+            for _ in 0..<4 where !row.exists || !row.isHittable { app.collectionViews.firstMatch.swipeUp() }
+            XCTAssertTrue(row.waitForExistence(timeout: 5), provider)
+        }
         app.buttons["settings.done"].tap()
     }
 
     func testAIProviderPagesOfferKeyModelAndEffort() {
         let app = XCUIApplication()
-        // OpenAI and Gemini are hidden in the release (November 13, 2026); this turns them on.
+        // Turns OpenAI and Gemini on even if AIProvider.offersOpenAIAndGemini hides them.
         app.launchArguments = ["--ui-testing", "--ui-testing-solid", "--ui-testing-all-providers"]
         app.launch()
         let menu = app.buttons["Project menu"]
