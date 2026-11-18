@@ -26,11 +26,13 @@ enum HelpTopic: String, CaseIterable, Identifiable {
     case notes
     case radialToolbar
     case purchases
+    case workspaceModes
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
+        case .workspaceModes: "Workspace Modes"
         case .purchases: "Purchases and Trial"
         case .notes: "Project Notes"
         case .radialToolbar: "Radial Toolbar"
@@ -111,6 +113,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
 
     var icon: SSIcon {
         switch self {
+        case .workspaceModes: .more
         case .purchases: .brand
         case .notes: .text
         case .radialToolbar: .more
@@ -181,6 +184,11 @@ enum HelpTopic: String, CaseIterable, Identifiable {
     /// What it is, how to do it, and what is worth knowing, in plain words.
     var overview: HelpOverview {
         switch self {
+        case .workspaceModes:
+            HelpOverview(
+                summary: "Choose how many tools and how much guidance the workspace shows. Essentials and All Tools edit the same projects with the same precision.",
+                steps: ["Tap Essentials or All Tools at the top of the project to switch at any time, including while setting up an operation.", "Essentials starts with primitives, sketching, and common modeling tools, with extra explanations beside the current hint.", "Choose All Tools for the complete catalog, including construction planes, lofts, sweeps, patterns, and joints. The choice is also in Settings under Workspace Mode."],
+                tips: ["Your choice is remembered across projects. Changing it does not change geometry, selection, undo history, or an operation in progress.", "Turn off Show Tips in the workspace menu or Settings to hide the extra explanations in Essentials. The current tool hint and Help remain available.", "Existing features keep their editing controls in either workspace. Open Controls for the complete guide.", "For Extrude in Essentials, More Options reveals Symmetric, Taper, and Up To. Collapsing the options keeps their values, with a summary of active settings.", "Pencil draws, selects, and drags; fingers navigate in both workspaces. Every tool belongs to the same trial and purchase."])
         case .purchases:
             HelpOverview(
                 summary: "Try the complete app free for 14 days, then make a one-time purchase to continue creating and editing. There is no subscription or automatic charge.",
@@ -199,10 +207,10 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                 tips: ["Your toolbar position is remembered. A ring moves inward temporarily if it would reach off screen.", "In a smaller window, Primitives replaces the second ring; Back returns to Create. In a very narrow window, groups use the first ring.", "Squeeze Apple Pencil Pro to show or hide the wheel. Set squeeze to Show Contextual Palette in iPad Settings.", "Selection actions and operation controls stay at the bottom. Pencil draws and selects on the uncovered canvas; fingers navigate."])
         case .gettingStarted:
             HelpOverview(
-                summary: "Swipe & Sketch needs Apple Pencil: it draws, selects, and edits. Your fingers move around the model. Start with a sketch, then turn it into a solid.",
+                summary: "Apple Pencil draws, selects, and edits; fingers move the view. Start with a ready-made solid under Create, or sketch an outline and extrude it into a solid.",
                 steps: ["Tap Sketch in the toolbar.", "Draw a shape with Pencil on the grid.", "Tap Finish Sketch, tap inside the shape, then tap Extrude to make it solid."],
                 tips: ["One finger orbits, two fingers pan, and a pinch zooms.", "Tap a face of the view cube to look straight at it; double-tap the cube to go back to 3D.",
-                       "With no tool chosen, a Pencil tap selects. Undo and Redo are at the bottom left."])
+                       "With no tool chosen, a Pencil tap selects. Undo and Redo are at the bottom left.", "For a ready-made solid, choose Create, then Box or Cylinder, tap the grid with Pencil, enter its sizes, and tap Done.", "Essentials shows common tools with extra guidance. Choose All Tools at the top of the project for the complete catalog."])
         case .sketchPlane:
             HelpOverview(
                 summary: "A sketch lies flat on a plane. Pick where to draw before you start.",
@@ -444,7 +452,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .primitives:
             HelpOverview(
                 summary: "Make a ready-made box, cylinder, sphere, or torus (a ring) in one step, without sketching.",
-                steps: ["Choose Create, then Box, Cylinder, Sphere, or Torus.", "Tap the grid, or a flat face of a solid, where it goes. It stands on what you tapped.", "Tap a size beside it to type a new one. Tap elsewhere to move it.", "Tap Done. It is a solid of its own, ready to move, combine, fillet, or shell."],
+                steps: ["Open Create and choose Box, Cylinder, Sphere, or Torus. In the All Tools radial toolbar, open Primitives inside Create first.", "Tap the grid, or a flat face of a solid, where it goes. It stands on what you tapped.", "Tap a size beside it to type a new one. Tap elsewhere to move it.", "Tap Done. It is a solid of its own, ready to move, combine, fillet, or shell."],
                 tips: ["A torus's diameter runs through the middle of its tube.", "A box or cylinder is an ordinary extrusion and a sphere or torus a revolve, so their faces can be resized and pushed like any other.", "The next one starts from the sizes you used last."])
         case .modelGroup:
             HelpOverview(

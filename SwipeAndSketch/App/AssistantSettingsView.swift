@@ -8,6 +8,8 @@ struct AssistantSettingsView: View {
     var onDone: () -> Void
     @AppStorage("assistant.model") private var model = AssistantModelChoice.automatic.rawValue
     @AppStorage("radialToolbarEnabled") private var radialToolbarEnabled = true
+    @AppStorage(WorkspaceMode.defaultsKey) private var workspaceMode: WorkspaceMode = .essentials
+    @AppStorage(WorkspaceMode.tipsDefaultsKey) private var showTips = true
     @AppStorage(TouchHighlighter.defaultsKey) private var showTouches = false
     @State private var unit = LengthUnit.millimeters
     @State private var clearance = Fit.defaultClearance
@@ -21,6 +23,17 @@ struct AssistantSettingsView: View {
         NavigationStack {
             Form {
                 Section("Workspace") {
+                    Picker("Workspace Mode", selection: $workspaceMode) {
+                        ForEach(WorkspaceMode.allCases) { Text($0.title).tag($0) }
+                    }
+                    .accessibilityIdentifier("settings.workspaceMode")
+                    .accessibilityValue(workspaceMode.title)
+                    Text("Essentials shows common tools with extra guidance. All Tools shows the complete tool catalog. Switch at the top of any project; your choice is remembered for every project.")
+                        .font(.footnote).foregroundStyle(Color("ss-muted"))
+                    Toggle("Show Tips", isOn: $showTips)
+                        .accessibilityIdentifier("settings.showTips")
+                    Text("Shows extra explanations beneath the current tool hint in Essentials. Your choice is remembered across projects and workspace modes.")
+                        .font(.footnote).foregroundStyle(Color("ss-muted"))
                     Picker("Tool Layout", selection: $radialToolbarEnabled) {
                         Text("Radial Toolbar").tag(true)
                         Text("Dock").tag(false)

@@ -60,6 +60,30 @@ import simd
         XCTAssertTrue(ToolbarEntry.children(of: .create).contains(.primitives))
     }
 
+    func testEssentialsCatalogOffersTheBasicWorkflowInBothLayouts() {
+        for (sketching, onFace) in [(false, false), (true, false), (true, true)] {
+            let roots = ToolbarEntry.roots(sketching: sketching, onFace: onFace, mode: .essentials)
+            XCTAssertFalse(roots.contains(.tool(.project)))
+            XCTAssertFalse(roots.contains(.group(.planes)))
+            XCTAssertFalse(roots.contains(.group(.fit)))
+            XCTAssertEqual(Set(roots.map(\.id)).count, roots.count)
+            for case let .group(group) in roots {
+                // The dock's list and the wheel's sectors must expose exactly the same commands.
+                let children = ToolbarEntry.children(of: group, mode: .essentials)
+                XCTAssertEqual(children, WorkspaceMode.essentials.tools(in: group).map(ToolbarEntry.tool))
+                XCTAssertFalse(children.isEmpty)
+                XCTAssertEqual(Set(children.map(\.id)).count, children.count)
+                XCTAssertTrue(Set(WorkspaceMode.essentials.tools(in: group)).isSubset(of: Set(group.tools)))
+            }
+        }
+        XCTAssertEqual(ToolbarEntry.children(of: .create, mode: .essentials),
+                       [.tool(.box), .tool(.cylinder), .tool(.sphere), .tool(.torus), .tool(.extrude)])
+        XCTAssertEqual(WorkspaceMode.essentials.tools(in: .edges), [.fillet, .chamfer, .shell])
+        XCTAssertEqual(WorkspaceMode.essentials.tools(in: .faceFeatures), [.hole, .text])
+        XCTAssertTrue(ToolbarEntry.roots(sketching: true, onFace: true, mode: .essentials).contains(.group(.faceFeatures)))
+        for group in ToolGroup.allCases { XCTAssertEqual(WorkspaceMode.allTools.tools(in: group), group.tools) }
+    }
+
     func testRadialPatternCommandPreviewsWithoutChangingTheDocument() throws {
         let session = ModelingSession(inMemory: true)
         session.addShape(.init(kind: .rectangle, plane: .top, start: .zero, end: .init(x: 20, y: 15)))
@@ -112,6 +136,15 @@ import simd
         }
         for level in [0, 1] {
             configurations.append(([.primitives] + ToolbarEntry.primitiveTools.map(ToolbarEntry.tool), level, true))
+        }
+        for (sketching, onFace) in [(false, false), (true, false), (true, true)] {
+            let roots = ToolbarEntry.roots(sketching: sketching, onFace: onFace, mode: .essentials)
+            configurations.append((roots, 0, false))
+            for case let .group(group) in roots {
+                for level in [0, 1] {
+                    configurations.append((ToolbarEntry.children(of: group, mode: .essentials), level, false))
+                }
+            }
         }
         for (entries, level, compact) in configurations {
             for (index, entry) in entries.enumerated() {

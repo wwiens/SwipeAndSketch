@@ -1,7 +1,30 @@
 import SwiftUI
 
+/// An interface preference only: both workspaces use the same document, commands, and input.
+enum WorkspaceMode: String, CaseIterable, Identifiable {
+    case essentials, allTools
+    static let defaultsKey = "workspace.mode"
+    static let tipsDefaultsKey = "workspace.showTips"
+    var id: String { rawValue }
+    var title: String { self == .essentials ? "Essentials" : "All Tools" }
+
+    func tools(in group: ToolGroup) -> [ModelingTool] {
+        guard self == .essentials else { return group.tools }
+        switch group {
+        case .create: return [.box, .cylinder, .sphere, .torus, .extrude]
+        case .edges: return [.fillet, .chamfer, .shell]
+        case .combine: return [.union, .subtract]
+        case .transform: return [.align, .scale]
+        case .curves: return [.circle, .arc, .slot]
+        case .modify: return [.trim, .cornerFillet, .offset]
+        case .faceFeatures: return [.hole, .text]
+        case .planes, .fit: return []
+        }
+    }
+}
+
 /// The dock and wheel share their roots, names, identifiers, and commands. A selection never
-/// rearranges the wheel. Only entering or leaving a sketch changes the first ring.
+/// rearranges the wheel. Sketching and the chosen workspace mode determine the first ring.
 enum ToolbarEntry: Identifiable, Equatable {
     case sketch, finishSketch, tool(ModelingTool), group(ToolGroup), primitives
 
@@ -33,18 +56,22 @@ enum ToolbarEntry: Identifiable, Equatable {
         }
     }
     static let primitiveTools: [ModelingTool] = [.box, .cylinder, .sphere, .torus]
-    static func roots(sketching: Bool, onFace: Bool) -> [Self] {
+    static func roots(sketching: Bool, onFace: Bool, mode: WorkspaceMode = .allTools) -> [Self] {
         if sketching {
             return [.finishSketch, .tool(.line), .tool(.rectangle), .group(.curves)]
                 + (onFace ? [.group(.faceFeatures)] : [])
-                + [.group(.modify), .tool(.dimension), .tool(.project)]
+                + [.group(.modify), .tool(.dimension)] + (mode == .allTools ? [.tool(.project)] : [])
+        }
+        if mode == .essentials {
+            return [.sketch, .group(.create), .group(.edges), .group(.combine), .group(.transform)]
         }
         return [.sketch, .tool(.project), .group(.planes), .group(.create), .group(.edges),
                 .group(.combine), .group(.transform), .group(.fit)]
     }
-    static func children(of group: ToolGroup) -> [Self] {
-        group == .create ? group.tools.filter { !primitiveTools.contains($0) }.map(Self.tool) + [.primitives]
-            : group.tools.map(Self.tool)
+    static func children(of group: ToolGroup, mode: WorkspaceMode = .allTools) -> [Self] {
+        let tools = mode.tools(in: group)
+        return group == .create && mode == .allTools ? tools.filter { !primitiveTools.contains($0) }.map(Self.tool) + [.primitives]
+            : tools.map(Self.tool)
     }
 }
 
@@ -221,6 +248,7 @@ private struct ToolbarCaptionTarget: Shape {
 struct RadialToolbar: View {
     let session: ModelingSession
     let sketching: Bool
+    let mode: WorkspaceMode
     let bounds: CGRect
     let requestedCenter: CGPoint?
     let onMove: (CGPoint) -> Void
@@ -230,7 +258,7 @@ struct RadialToolbar: View {
     @State private var primitives = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var roots: [ToolbarEntry] { ToolbarEntry.roots(sketching: sketching, onFace: session.sketchMode?.face != nil) }
+    private var roots: [ToolbarEntry] { ToolbarEntry.roots(sketching: sketching, onFace: session.sketchMode?.face != nil, mode: mode) }
     private var twoRings: Bool { RadialToolbarLayout.fits(levels: 2, in: bounds) }
     private var threeRings: Bool { RadialToolbarLayout.fits(levels: 3, in: bounds) }
     private var levels: Int { expanded == nil || !twoRings ? 1 : primitives && threeRings ? 3 : 2 }
@@ -247,6 +275,7 @@ struct RadialToolbar: View {
         }
         .allowsHitTesting(!session.isPencilDown)
         .onChange(of: sketching) { expanded = nil; primitives = false }
+        .onChange(of: mode) { expanded = nil; primitives = false }
         .onChange(of: session.sketchMode?.face != nil) { _, onFace in
             if !onFace && expanded == .faceFeatures { expanded = nil; primitives = false }
         }
@@ -263,7 +292,7 @@ struct RadialToolbar: View {
                 if primitives && !threeRings {
                     ring([.primitives] + ToolbarEntry.primitiveTools.map(ToolbarEntry.tool), level: twoRings ? 1 : 0, compactPrimitives: true)
                 } else {
-                    ring(ToolbarEntry.children(of: expanded), level: twoRings ? 1 : 0)
+                    ring(ToolbarEntry.children(of: expanded, mode: mode), level: twoRings ? 1 : 0)
                 }
             }
             if primitives && threeRings {
