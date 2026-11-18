@@ -1485,6 +1485,8 @@ struct DimensionEdit: Identifiable {
     @ObservationIgnored var onNewProject: (() -> Void)?
     @ObservationIgnored var onSaveAs: (() -> Void)?
     var hasProjectFile: Bool { document != nil }
+    /// The open project's file, if it has one.
+    var projectFileURL: URL? { document?.fileURL }
     /// Editing waits while the assistant works on a request or its changes are under review.
     var isEditingBlocked: Bool { isReadOnly || purchaseBlocksEditing || isViewingBlocked }
     /// Looking at the model (Measure, the section view) waits only for the project and the assistant;

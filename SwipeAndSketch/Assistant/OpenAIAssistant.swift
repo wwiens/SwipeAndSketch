@@ -45,7 +45,7 @@ import Foundation
             do {
                 var (received, response) = try await ProviderHTTP.send(request, with: transport)
                 // A model that takes no reasoning setting (or not this level) is asked again without it.
-                if response.statusCode == 400, sendsEffort, String(decoding: received, as: UTF8.self).contains("reasoning") {
+                if response.statusCode == 400, sendsEffort, String(decoding: received, as: UTF8.self).localizedCaseInsensitiveContains("reasoning") {
                     noEffort.insert(model)
                     fields["reasoning"] = nil
                     try ProviderHTTP.json(&request, .object(fields))

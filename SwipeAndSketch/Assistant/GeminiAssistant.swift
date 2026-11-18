@@ -10,6 +10,12 @@ import Foundation
     private var exchanges: [[AssistantJSON]] = []
     static let keptExchanges = 4
     static let malformedRetries = 2
+    /// Output tokens (thinking included) for one request, and how many times a request that runs out
+    /// is continued with that much more (up to 65,536 in all).
+    static let outputBudget = 16384
+    static let maximumContinuations = 3
+    /// The most thoughtful models can take several minutes to answer a large request.
+    static var requestTimeout: TimeInterval = 600
     /// Models that refused a thinking level; they run at their own default from then on.
     private var noEffort: Set<String> = []
 
@@ -36,7 +42,7 @@ import Foundation
         for _ in 0...AssistantContext.maximumCalls + 1 + Self.malformedRetries {
             try Task.checkCancellation()
             var configuration: [String: AssistantJSON] = ["tool_choice": .string(wrappingUp ? "none" : "auto"),
-                                                          "max_output_tokens": .number(16384)]
+                                                          "max_output_tokens": .number(Double(Self.outputBudget))]
             let sendsEffort = effort != nil && !noEffort.contains(model)
             if sendsEffort, let effort { configuration["thinking_level"] = .string(effort) }
             var fields: [String: AssistantJSON] = [
@@ -46,34 +52,60 @@ import Foundation
             ]
             var request = URLRequest(url: Self.endpoint)
             request.setValue(key, forHTTPHeaderField: "x-goog-api-key")
-            try ProviderHTTP.json(&request, .object(fields))
-            let data: Data
-            do {
-                var (received, response) = try await ProviderHTTP.send(request, with: transport)
-                // A model that takes no thinking level (or not this one) is asked again without it.
-                if response.statusCode == 400, sendsEffort, String(decoding: received, as: UTF8.self).contains("thinking") {
-                    noEffort.insert(model)
-                    configuration["thinking_level"] = nil
-                    fields["generation_config"] = .object(configuration)
-                    try ProviderHTTP.json(&request, .object(fields))
-                    (received, response) = try await ProviderHTTP.send(request, with: transport)
+            func encode() throws {
+                try ProviderHTTP.json(&request, .object(fields))
+                request.timeoutInterval = Self.requestTimeout
+            }
+            try encode()
+            var continuations = 0
+            var response: AssistantJSON
+            var data = Data()
+            while true {
+                do {
+                    var (received, status) = try await ProviderHTTP.send(request, with: transport)
+                    // A model that takes no thinking level (or not this one) is asked again without it.
+                    if status.statusCode == 400, sendsEffort, configuration["thinking_level"] != nil,
+                       String(decoding: received, as: UTF8.self).localizedCaseInsensitiveContains("thinking") {
+                        noEffort.insert(model)
+                        configuration["thinking_level"] = nil
+                        fields["generation_config"] = .object(configuration)
+                        try encode()
+                        (received, status) = try await ProviderHTTP.send(request, with: transport)
+                    }
+                    try Task.checkCancellation()
+                    try Self.checkStatus(status.statusCode, data: received, model: model)
+                    data = received
+                } catch is CancellationError { throw CancellationError() }
+                catch let error as URLError where error.code == .cancelled { throw CancellationError() }
+                catch let error as URLError where error.code == .timedOut {
+                    throw AssistantFailure(message: "\(model) took too long to answer. Try again, choose a lower Effort or a faster model in Settings, or ask for less at a time.", kind: .service)
                 }
-                try Task.checkCancellation()
-                try Self.checkStatus(response.statusCode, data: received, model: model)
-                data = received
-            } catch is CancellationError { throw CancellationError() }
-            catch let error as URLError where error.code == .cancelled { throw CancellationError() }
-            catch let error as AssistantFailure { throw error }
-            catch { throw AssistantFailure(message: "Gemini could not be reached. Check your internet connection and try again.", kind: .service) }
-
-            guard let response = try? JSONDecoder().decode(AssistantJSON.self, from: data) else {
-                throw AssistantFailure(message: "Gemini returned an incomplete response. Try again.", kind: .service,
-                                       details: Self.shape(of: data))
+                catch let error as AssistantFailure { throw error }
+                catch { throw AssistantFailure(message: "Gemini could not be reached. Check your internet connection and try again.", kind: .service) }
+                guard let decoded = try? JSONDecoder().decode(AssistantJSON.self, from: data) else {
+                    throw AssistantFailure(message: "Gemini returned an incomplete response. Try again.", kind: .service,
+                                           details: Self.shape(of: data))
+                }
+                // A model that used its whole output budget (usually on thinking) before answering stops
+                // as incomplete with a continuation token: the same request with the token and a larger
+                // budget (counted across the continuations) carries on where it stopped.
+                if decoded["status"]?.string == "incomplete", let token = decoded["continuation_token"]?.string,
+                   continuations < Self.maximumContinuations {
+                    try Task.checkCancellation()
+                    continuations += 1
+                    configuration["max_output_tokens"] = .number(Double(Self.outputBudget * (continuations + 1)))
+                    fields["generation_config"] = .object(configuration)
+                    fields["continuation_token"] = .string(token)
+                    try encode()
+                    continue
+                }
+                response = decoded
+                break
             }
             // A failed interaction has no steps, so its status is read first.
             switch response["status"]?.string ?? "completed" {
             case "completed", "requires_action": break
-            case "incomplete": throw AssistantFailure(message: "Gemini reached its response limit. Start a new conversation or ask for fewer changes.")
+            case "incomplete": throw AssistantFailure(message: "\(model) used up its response limit before answering. Try again, choose a lower Effort in Settings, or ask for fewer changes at a time.")
             case "failed":
                 let errors = response["errors"]?.array ?? []
                 let codes = errors.compactMap { $0["code"]?.string }
@@ -172,6 +204,10 @@ import Foundation
         case 403: throw AssistantFailure(message: "This Gemini API key can't use \(model). Check the key's project in Google AI Studio.")
         case 404: throw AssistantFailure(message: "\(model) is not available to this API key. Choose another model in Settings.")
         case 429: throw AssistantFailure(message: "Your Gemini API quota or rate limit was reached. Check your Google AI Studio plan and try again later.", kind: .service)
+        // Google ends a request that runs past its 10-minute deadline (Gemini 4 Carbon at High effort
+        // on a design request, November 17, 2026).
+        case 504 where text.contains("deadline_exceeded") || text.lowercased().contains("deadline expired"):
+            throw AssistantFailure(message: "\(model) thought longer than Google allows for one step. Choose a lower Effort or a faster model in Settings, or ask for less at a time.", kind: .service)
         case 500...599: throw AssistantFailure(message: "Gemini is temporarily unavailable. Try again later.", kind: .service)
         default: throw AssistantFailure(message: "Gemini could not process this request. Start a new conversation or ask for fewer changes.")
         }

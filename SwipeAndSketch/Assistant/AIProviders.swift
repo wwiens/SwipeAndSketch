@@ -10,9 +10,9 @@ enum AIProvider: String, CaseIterable, Identifiable, Sendable {
     case claude, openAI = "openai", gemini
     var id: String { rawValue }
 
-    /// Whether Settings, the assistant's model menu, and help offer OpenAI and Gemini beside Claude
-    /// (hidden November 13, 2026; offered again November 15, 2026). Set it to false to show only
-    /// Claude; Debug UI tests can still turn them on with `--ui-testing-all-providers`.
+    /// OpenAI and Gemini are offered beside Claude (user decision, November 17, 2026). Setting this to
+    /// false hides them from Settings, the assistant's model menu, and help (a stored choice of either
+    /// then falls back to Automatic); Debug UI tests can still show them with `--ui-testing-all-providers`.
     static let offersOpenAIAndGemini = true
     static var showsOpenAIAndGemini: Bool {
         #if DEBUG
@@ -71,10 +71,10 @@ enum AIProvider: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .claude: [ProviderModel(id: "claude-opus-5-5", name: "Claude Opus 5.5"), ProviderModel(id: "claude-sonnet-5-5", name: "Claude Sonnet 5.5"),
                        ProviderModel(id: "claude-haiku-5-5", name: "Claude Haiku 5.5")]
-        case .openAI: [ProviderModel(id: "gpt-6-astra", name: "GPT-6 Astra"), ProviderModel(id: "gpt-6.1-sol", name: "GPT-6.1 Sol"),
-                       ProviderModel(id: "gpt-6-luna", name: "GPT-6 Luna")]
-        case .gemini: [ProviderModel(id: "gemini-4-hydrogen", name: "Gemini 4 Hydrogen"), ProviderModel(id: "gemini-3.8-flash", name: "Gemini 3.8 Flash"),
-                       ProviderModel(id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro Preview")]
+        case .openAI: [ProviderModel(id: "gpt-6.2-astra", name: "GPT-6.2 Astra"), ProviderModel(id: "gpt-6.2-sol", name: "GPT-6.2 Sol"),
+                       ProviderModel(id: "gpt-6.1-terra", name: "GPT-6.1 Terra"), ProviderModel(id: "gpt-6-luna", name: "GPT-6 Luna")]
+        case .gemini: [ProviderModel(id: "gemini-4-hydrogen", name: "Gemini 4 Hydrogen"), ProviderModel(id: "gemini-4-carbon", name: "Gemini 4 Carbon"),
+                       ProviderModel(id: "gemini-4-argon", name: "Gemini 4 Argon"), ProviderModel(id: "gemini-3.8-flash", name: "Gemini 3.8 Flash")]
         }
     }
 }
@@ -254,27 +254,35 @@ enum ProviderSettings {
                 if let methods, !methods.contains("generateContent") { return nil }
                 return ProviderModel(id: id, name: model["displayName"]?.string ?? id)
             }
-            return models.sorted { $0.id.compare($1.id, options: .numeric) == .orderedDescending }
+            // Numbered versions newest first, then the -latest aliases.
+            return models.sorted { a, b in
+                let aNumbered = isNumbered(a.id), bNumbered = isNumbered(b.id)
+                if aNumbered != bNumbered { return aNumbered }
+                return a.id.compare(b.id, options: .numeric) == .orderedDescending
+            }
         }
     }
 
-    /// Models for speech, images, embeddings, moderation, search, or code completion only.
-    private static let excludedTerms = ["embed", "tts", "audio", "realtime", "transcribe", "image", "vision", "search",
-                                        "moderation", "live", "robotics", "aqa", "computer-use", "whisper", "dall-e",
-                                        "sora", "codex", "instruct", "babbage", "davinci", "deep-research", "gpt-3.5",
-                                        // Gemini Omni models take no function calls, so they can't use the CAD tools.
-                                        "gemini-omni"]
+    /// Models for speech, images, embeddings, moderation, search, or code completion only, and ones
+    /// that refuse function tools (Gemini Omni, checked November 17, 2026).
+    private static let excludedTerms = ["embed", "tts", "audio", "realtime", "transcribe", "image", "nano-banana", "vision",
+                                        "search", "moderation", "live", "robotics", "aqa", "computer-use", "whisper", "dall-e",
+                                        "sora", "omni", "instruct", "babbage", "davinci", "deep-research", "gpt-3.5"]
     private static func excluded(_ id: String) -> Bool { excludedTerms.contains { id.contains($0) } }
+    /// "gemini-4-hydrogen" rather than an alias such as "gemini-pro-latest".
+    private static func isNumbered(_ id: String) -> Bool { id.dropFirst("gemini-".count).first?.isNumber == true }
 
-    /// GPT and o-series chat models, without dated snapshots (the undated name follows the latest).
+    /// GPT (Codex included), o-series, and ChatGPT chat models, without dated snapshots (the undated
+    /// name follows the latest).
     static func isOpenAIChatModel(_ id: String) -> Bool {
-        let family = id.hasPrefix("gpt-") || (id.first == "o" && id.dropFirst().first?.isNumber == true)
+        let family = id.hasPrefix("gpt-") || id.hasPrefix("chat-") || (id.first == "o" && id.dropFirst().first?.isNumber == true)
         let dated = id.range(of: #"-\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil
         return family && !dated && !excluded(id)
     }
 
-    /// "gpt-6.1-sol" reads "GPT-6.1 Sol"; o-series names stay as they are.
+    /// "gpt-6.1-sol" reads "GPT-6.1 Sol" and "chat-latest" "ChatGPT Latest"; o-series names stay as they are.
     static func openAIName(_ id: String) -> String {
+        if id.hasPrefix("chat-") { return (["ChatGPT"] + id.dropFirst(5).split(separator: "-").map { $0.prefix(1).uppercased() + $0.dropFirst() }).joined(separator: " ") }
         guard id.hasPrefix("gpt-") else { return id }
         let parts = id.dropFirst(4).split(separator: "-").map(String.init)
         guard let version = parts.first else { return id }

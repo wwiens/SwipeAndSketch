@@ -319,6 +319,8 @@ struct QuickStartView: View {
     var startBlank: (() -> Void)?
     var onDone: () -> Void
     @State private var page = 0
+    @AppStorage(WorkspaceMode.defaultsKey) private var workspaceMode: WorkspaceMode = .essentials
+    @AppStorage("radialToolbarEnabled") private var radialToolbarEnabled = true
 
     /// Set once the quick start has been seen, however it was closed.
     static let seenKey = "quickStart.seen"
@@ -386,12 +388,12 @@ struct QuickStartView: View {
                 Text("A block for your printer in four steps.").font(.system(size: 17)).foregroundStyle(muted)
             }
             VStack(alignment: .leading, spacing: 16) {
-                row(.sketch, "1. Sketch", "Tap Sketch in the dock at the bottom, then the plane lying flat at the origin.")
-                row(.rectangle, "2. Draw", "Drag a rectangle with Pencil. Tap a size beside it to type an exact one.")
-                row(.extrude, "3. Make it solid", "Tap Finish Sketch, tap inside the rectangle, then Extrude. Drag the arrow up and tap Done.")
+                row(.primitives, "1. Create", "Open \(workspaceMode == .allTools && radialToolbarEnabled ? "Create, then Primitives" : "Create") in the toolbar, choose Box, and tap the grid with Pencil.")
+                row(.dimension, "2. Size", "Tap the sizes beside the box to enter its width, length, and height.")
+                row(.done, "3. Keep the solid", "Tap Done. You can select and change the solid, round its edges with Fillet, or make it hollow with Shell.")
                 row(.send, "4. Print it", "Open the project menu at the top, choose Export, then Send to Slicer or Share.")
             }
-            Text("Stuck? Tap the help button beside the hint at the top for help with what you are doing, or Controls at the bottom right for the whole guide.")
+            Text("Essentials shows common tools. Choose All Tools at the top of a project for more. Tap Help beside the hint for instructions, or Controls for the whole guide.")
                 .font(.system(size: 14)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
             Text("Try every tool and template free for 14 days, starting when you choose Start 14-Day Trial. A one-time purchase then keeps you creating and editing, and your projects always stay available to view and export. This is experimental software; keep backups of important projects. Bug reports are welcome, and support is provided as time allows.")
                 .font(.system(size: 14)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)

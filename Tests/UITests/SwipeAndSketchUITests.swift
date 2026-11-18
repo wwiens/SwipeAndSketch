@@ -1,6 +1,203 @@
 import XCTest
 
 @MainActor final class SwipeAndSketchUITests: XCTestCase {
+    private func chooseWorkspace(_ title: String, in app: XCUIApplication) {
+        app.buttons["workspace.mode"].tap()
+        app.buttons[title].tap()
+        XCTAssertEqual(app.buttons["workspace.mode"].value as? String, title)
+    }
+
+    func testIntegratedHeaderAndTipsMenuRemainUsableBesidePanels() {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app(arguments: ["--ui-testing-solid", "--essentials-workspace", "--radial-toolbar"])
+        let mode = app.buttons["workspace.mode"]
+        let title = app.staticTexts["project.title"]
+        let project = app.buttons["Project menu"]
+        XCTAssertTrue(mode.waitForExistence(timeout: 15))
+        let counts = app.staticTexts["workspace.counts"].label
+        func checkHeader() {
+            XCTAssertTrue(mode.isHittable)
+            XCTAssertTrue(project.isHittable)
+            // The tab's flared outline extends above the screen edge; its controls must fit.
+            let header = app.otherElements["project.tab"].frame
+            XCTAssertGreaterThanOrEqual(header.minX, app.frame.minX)
+            XCTAssertLessThanOrEqual(header.maxX, app.frame.maxX)
+            XCTAssertFalse(title.frame.intersects(mode.frame), "The selector must not cover the document name")
+            XCTAssertFalse(mode.frame.intersects(project.frame))
+            for button in [mode, project, app.buttons["project.home"]] {
+                XCTAssertTrue(app.frame.contains(button.frame))
+                XCTAssertGreaterThanOrEqual(button.frame.width, 44)
+                XCTAssertGreaterThanOrEqual(button.frame.height, 44)
+            }
+        }
+        func capture(_ name: String) {
+            let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            shot.name = name; shot.lifetime = .keepAlways; add(shot)
+        }
+        checkHeader()
+        mode.tap()
+        let tips = app.descendants(matching: .any)["workspace.showTips"]
+        XCTAssertTrue(tips.waitForExistence(timeout: 5))
+        tips.tap()
+        XCTAssertTrue(app.staticTexts["workspace.guidance"].waitForNonExistence(timeout: 5))
+        mode.tap(); tips.tap()
+        XCTAssertTrue(app.staticTexts["workspace.guidance"].waitForExistence(timeout: 5))
+        app.buttons["items.toggle"].tap()
+        app.buttons["item.Body 01"].tap()
+        app.buttons["items.toggle"].tap()
+        capture("Integrated header in landscape")
+        XCUIDevice.shared.orientation = .portrait
+        checkHeader()
+        capture("Integrated header in portrait")
+        app.buttons["items.toggle"].tap()
+        XCTAssertTrue(app.buttons["item.Body 01"].waitForExistence(timeout: 5))
+        checkHeader()
+        chooseWorkspace("All Tools", in: app)
+        chooseWorkspace("Essentials", in: app)
+        XCTAssertEqual(app.staticTexts["workspace.counts"].label, counts)
+        capture("Integrated compact header beside Model Tree")
+        app.buttons["items.toggle"].tap()
+        app.buttons["notes.toggle"].tap()
+        XCTAssertTrue(app.buttons["notes.close"].waitForExistence(timeout: 5))
+        checkHeader()
+        project.tap()
+        XCTAssertTrue(app.buttons["project.settings"].waitForExistence(timeout: 5))
+    }
+
+    func testEssentialsDockSelectionSettingsAndRememberedMode() {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app(arguments: ["--ui-testing-solid", "--essentials-workspace"])
+        XCTAssertTrue(app.buttons["workspace.mode"].waitForExistence(timeout: 15))
+        XCTAssertEqual(app.buttons["workspace.mode"].value as? String, "Essentials")
+        XCTAssertTrue(app.staticTexts["workspace.guidance"].exists)
+        XCTAssertFalse(app.buttons["tool.planes"].exists)
+        app.buttons["items.toggle"].tap()
+        let body = app.buttons["item.Body 01"]
+        XCTAssertTrue(body.waitForExistence(timeout: 5))
+        body.tap()
+        XCTAssertTrue(app.buttons["selection.split"].exists, "Existing selection actions remain available")
+        let counts = app.staticTexts["workspace.counts"].label
+        let undo = app.buttons.matching(NSPredicate(format: "identifier == %@", "Undo")).element.isEnabled
+        app.buttons["tool.create"].tap()
+        XCTAssertTrue(app.buttons["tool.box"].isHittable)
+        XCTAssertFalse(app.buttons["tool.loft"].exists)
+        chooseWorkspace("All Tools", in: app)
+        XCTAssertFalse(app.otherElements["group.menu"].exists)
+        XCTAssertTrue(body.isSelected)
+        XCTAssertEqual(app.staticTexts["workspace.counts"].label, counts)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier == %@", "Undo")).element.isEnabled, undo)
+        XCTAssertTrue(app.buttons["tool.planes"].exists)
+        XCTAssertFalse(app.staticTexts["workspace.guidance"].exists)
+        app.buttons["Project menu"].tap(); app.buttons["project.settings"].tap()
+        let setting = app.buttons["settings.workspaceMode"]
+        XCTAssertTrue(setting.waitForExistence(timeout: 5))
+        XCTAssertEqual(setting.value as? String, "All Tools")
+        setting.tap(); app.buttons["Essentials"].tap()
+        let tips = app.switches["settings.showTips"]
+        XCTAssertEqual(tips.value as? String, "1")
+        // The Form exposes the whole row as the switch; target its trailing control.
+        tips.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        let tipsShot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        tipsShot.name = "Show Tips turned off in Settings"; tipsShot.lifetime = .keepAlways; add(tipsShot)
+        XCTAssertEqual(tips.value as? String, "0")
+        app.buttons["settings.done"].tap()
+        XCTAssertEqual(app.buttons["workspace.mode"].value as? String, "Essentials")
+        XCTAssertTrue(app.staticTexts["workspace.guidance"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["hint.text"].exists)
+        XCTAssertTrue(app.buttons["hint.help"].isHittable)
+        chooseWorkspace("All Tools", in: app)
+        chooseWorkspace("Essentials", in: app)
+        XCTAssertFalse(app.staticTexts["workspace.guidance"].exists, "Changing modes preserves the tips preference")
+        app.terminate()
+        app.launchArguments = ["--ui-testing", "--ui-testing-solid", "--preserve-workspace-mode"]
+        app.launch()
+        XCTAssertTrue(app.buttons["workspace.mode"].waitForExistence(timeout: 15))
+        XCTAssertEqual(app.buttons["workspace.mode"].value as? String, "Essentials")
+        XCTAssertFalse(app.buttons["tool.planes"].exists)
+        XCTAssertFalse(app.staticTexts["workspace.guidance"].exists, "Tips stay off after relaunch")
+        app.buttons["Project menu"].tap(); app.buttons["project.settings"].tap()
+        XCTAssertTrue(tips.waitForExistence(timeout: 5))
+        XCTAssertEqual(tips.value as? String, "0")
+        tips.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        app.buttons["settings.done"].tap()
+        XCTAssertTrue(app.staticTexts["workspace.guidance"].waitForExistence(timeout: 5))
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "Essentials dock and remembered workspace preference"; shot.lifetime = .keepAlways; add(shot)
+    }
+
+    func testEssentialsRadialPrimitivesAndSketchToolsSurviveSwitching() {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app(arguments: ["--ui-testing-solid", "--essentials-workspace", "--radial-toolbar"])
+        let wheel = app.otherElements["radial.toolbar"]
+        XCTAssertTrue(wheel.waitForExistence(timeout: 15))
+        app.buttons["tool.create"].tap()
+        for tool in ["box", "cylinder", "sphere", "torus", "extrude"] {
+            XCTAssertTrue(app.buttons["tool.\(tool)"].isHittable)
+        }
+        XCTAssertFalse(app.buttons["tool.primitives"].exists, "Essentials needs no third ring")
+        XCTAssertFalse(app.buttons["tool.loft"].exists)
+        app.buttons["tool.box"].tap()
+        let hint = app.staticTexts["hint.text"].label
+        chooseWorkspace("All Tools", in: app)
+        XCTAssertTrue(app.buttons["tool.create"].isSelected, "The active Box tool survives")
+        XCTAssertEqual(app.staticTexts["hint.text"].label, hint)
+        chooseWorkspace("Essentials", in: app)
+        app.buttons["tool.sketch"].tap()
+        XCTAssertTrue(app.buttons["tool.dimension"].exists)
+        XCTAssertFalse(app.buttons["tool.project"].exists)
+        app.buttons["tool.curves"].tap()
+        XCTAssertTrue(app.buttons["tool.circle"].isHittable)
+        XCTAssertFalse(app.buttons["tool.spline"].exists)
+        app.buttons["tool.circle"].tap()
+        chooseWorkspace("All Tools", in: app)
+        app.buttons["tool.curves"].tap()
+        XCTAssertTrue(app.buttons["tool.circle"].isSelected)
+        XCTAssertTrue(app.buttons["tool.spline"].isHittable)
+        chooseWorkspace("Essentials", in: app)
+        app.buttons["sketch.exit"].tap()
+        XCUIDevice.shared.orientation = .portrait
+        XCTAssertTrue(app.buttons["workspace.mode"].isHittable)
+        app.buttons["tool.create"].tap()
+        XCTAssertTrue(app.frame.contains(wheel.frame))
+        XCTAssertTrue(app.buttons["tool.torus"].isHittable)
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "Essentials primitives in portrait"; shot.lifetime = .keepAlways; add(shot)
+    }
+
+    func testEssentialsExtrudeOptionsAndDraftSurviveModeChanges() {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = app(arguments: ["--essentials-workspace"])
+        XCTAssertTrue(app.buttons["selection.extrude"].waitForExistence(timeout: 15))
+        app.buttons["selection.extrude"].tap()
+        let depth = app.buttons["dimension.depth"]
+        depth.tap(); app.buttons["keypad.7"].tap(); app.buttons["keypad.confirm"].tap()
+        XCTAssertFalse(app.buttons["extrusion.symmetric"].exists)
+        app.buttons["extrusion.options"].tap()
+        app.switches["extrusion.symmetric"].tap()
+        app.buttons["extrusion.options"].tap()
+        XCTAssertEqual(app.staticTexts["extrusion.optionsSummary"].label, "Symmetric")
+        chooseWorkspace("All Tools", in: app)
+        XCTAssertEqual(app.switches["extrusion.symmetric"].value as? String, "1")
+        XCTAssertEqual(depth.value as? String, "7")
+        chooseWorkspace("Essentials", in: app)
+        XCTAssertEqual(app.staticTexts["extrusion.optionsSummary"].label, "Symmetric")
+        XCTAssertEqual(depth.value as? String, "7")
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "Essentials preserves active Extrude options"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["extrusion.confirm"].tap()
+        XCTAssertTrue(app.staticTexts["1 sketch · 1 solid"].waitForExistence(timeout: 10))
+        app.buttons.matching(NSPredicate(format: "identifier == %@", "Undo")).element.tap()
+        XCTAssertTrue(app.staticTexts["1 sketch · 0 solids"].waitForExistence(timeout: 5), "The operation is still one undo step")
+    }
+
     func testLargeGridfinityFaceDimensionAppliesAndControlsRespond() {
         continueAfterFailure = false
         XCUIDevice.shared.orientation = .landscapeLeft
@@ -1321,28 +1518,26 @@ import XCTest
     }
 
 
-    /// OpenAI and Gemini are offered again (November 15, 2026) without the test-only switch.
-    func testReleaseSettingsOfferAllProviders() {
+    func testReleaseSettingsOfferClaudeOpenAIAndGemini() {
         let app = XCUIApplication()
+        // No --ui-testing-all-providers: the release offers all three (November 17, 2026).
         app.launchArguments = ["--ui-testing", "--ui-testing-solid"]
         app.launch()
         let menu = app.buttons["Project menu"]
         XCTAssertTrue(menu.waitForExistence(timeout: 20))
         menu.tap()
         app.buttons["project.settings"].tap()
-        let claude = app.buttons["settings.provider.claude"]
-        for _ in 0..<4 where !claude.exists || !claude.isHittable { app.collectionViews.firstMatch.swipeUp() }
-        XCTAssertTrue(claude.waitForExistence(timeout: 5))
-        let gemini = app.buttons["settings.provider.gemini"]
-        for _ in 0..<4 where !gemini.exists || !gemini.isHittable { app.collectionViews.firstMatch.swipeUp() }
-        XCTAssertTrue(app.buttons["settings.provider.openai"].exists)
-        XCTAssertTrue(gemini.exists)
+        for provider in ["claude", "openai", "gemini"] {
+            let row = app.buttons["settings.provider.\(provider)"]
+            for _ in 0..<4 where !row.exists || !row.isHittable { app.collectionViews.firstMatch.swipeUp() }
+            XCTAssertTrue(row.waitForExistence(timeout: 5), provider)
+        }
         app.buttons["settings.done"].tap()
     }
 
     func testAIProviderPagesOfferKeyModelAndEffort() {
         let app = XCUIApplication()
-        // OpenAI and Gemini are hidden in the release (November 13, 2026); this turns them on.
+        // Turns OpenAI and Gemini on even if AIProvider.offersOpenAIAndGemini hides them.
         app.launchArguments = ["--ui-testing", "--ui-testing-solid", "--ui-testing-all-providers"]
         app.launch()
         let menu = app.buttons["Project menu"]

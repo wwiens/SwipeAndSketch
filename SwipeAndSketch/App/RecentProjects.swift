@@ -86,6 +86,25 @@ struct RecentProject: Identifiable, Equatable, Sendable {
         refresh()
     }
 
+    /// The projects as they are now, found afresh and shown on Home too (Shortcuts and Siri, which
+    /// may run before Home was ever shown). Also tells Spotlight about them.
+    func current() async -> [RecentProject] {
+        let stored = stored, dismissed = dismissed, documents = documents
+        let found = await Task.detached(priority: .userInitiated) {
+            Self.find(stored: stored, dismissed: dismissed, documents: documents)
+        }.value
+        projects = found.projects
+        ProjectEntity.index(found.projects)
+        return found.projects
+    }
+
+    /// A project's picture as PNG, from what Home has loaded or its cached copy.
+    func picturePNG(for id: String) -> Data? {
+        if let image = pictures[id], let png = image.pngData() { return png }
+        guard let entry = stored.first(where: { $0.path == id }) else { return nil }
+        return try? Data(contentsOf: pictureURL(entry.picture))
+    }
+
     /// Takes a project off Home (the file stays where it is).
     func remove(_ project: RecentProject) {
         if let entry = stored.first(where: { $0.path == project.id }) { try? FileManager.default.removeItem(at: pictureURL(entry.picture)) }
@@ -124,6 +143,7 @@ struct RecentProject: Identifiable, Equatable, Sendable {
             }.value
             guard !Task.isCancelled else { return }
             projects = found.projects
+            ProjectEntity.index(found.projects)
             if !found.forgotten.isEmpty || !found.moved.isEmpty {
                 for entry in self.stored where found.forgotten.contains(entry.path) {
                     try? FileManager.default.removeItem(at: pictureURL(entry.picture))

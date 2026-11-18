@@ -159,6 +159,9 @@ struct AssistantDiagnostic: Codable, Equatable {
     nonisolated(unsafe) static var plannerSkipRoutedSplit = true
     /// How long a cloud request may take before Automatic falls back to the on-device model.
     nonisolated(unsafe) static var cloudTimeout: Double = 90
+    /// A whole Claude, OpenAI, or Gemini turn: the most thoughtful models (Gemini 4 Carbon, November
+    /// 2026) can take minutes for each round of tool calls.
+    nonisolated(unsafe) static var providerTimeout: Double = 1800
     private var cloudSession: LanguageModelSession?
     private let claude: ClaudeAssistant
     private let openAI: OpenAIAssistant
@@ -275,8 +278,8 @@ struct AssistantDiagnostic: Codable, Equatable {
             }
             do {
                 // A request that never answers (no network, a stalled service) gives up instead of hanging.
-                // Claude's limit covers its whole tool loop; each of its requests also has its own.
-                let reply = try await Self.limit(seconds: backend.provider != nil ? 600 : backend == .cloud ? Self.cloudTimeout : 120, backend: backend) {
+                // A provider's limit covers its whole tool loop; each of its requests also has its own.
+                let reply = try await Self.limit(seconds: backend.provider != nil ? Self.providerTimeout : backend == .cloud ? Self.cloudTimeout : 120, backend: backend) {
                     try await self.run(request, workspace: workspace, selection: selection, on: backend, onText: onText)
                 }
                 history.append((request, reply))

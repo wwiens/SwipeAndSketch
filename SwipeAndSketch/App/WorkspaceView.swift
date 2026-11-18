@@ -36,6 +36,10 @@ struct WorkspaceView: View {
     /// About Swipe & Sketch: version, requirements, and the Open CASCADE notice and licenses.
     @State private var showAbout = false
     @State private var showSettings = false
+    @AppStorage(WorkspaceMode.defaultsKey) private var workspaceMode: WorkspaceMode = .essentials
+    @AppStorage(WorkspaceMode.tipsDefaultsKey) private var showTips = true
+    @State private var configuredUITestPreferences = false
+    @State private var showExtrusionOptions = false
     @AppStorage("radialToolbarEnabled") private var radialToolbarEnabled = true
     @AppStorage("radialToolbarX") private var radialToolbarX = -1.0
     @AppStorage("radialToolbarY") private var radialToolbarY = -1.0
@@ -110,6 +114,8 @@ struct WorkspaceView: View {
             let trailingInset: CGFloat = showAssistant || showNotes ? assistantWidth + 9 : 0
             let barInset: CGFloat = roomy ? trailingInset : 0
             let centerPadding: CGFloat = geometry.size.width < 900 ? 150 : 200
+            let headerLeading = showItems ? inset + 20 : centerPadding
+            let headerTrailing = showAssistant || showNotes ? trailingInset + (roomy ? centerPadding : 20) : centerPadding
             ZStack(alignment: .topLeading) {
                 ModelingCanvas(session: session)
                 if showItems {
@@ -122,7 +128,10 @@ struct WorkspaceView: View {
                 }
                 VStack(spacing: 10) {
                     // The project tab hangs from the top edge of the screen; the hint floats below it.
-                    EditorPart { projectBar(topInset: geometry.safeAreaInsets.top) }
+                    EditorPart {
+                        projectBar(topInset: geometry.safeAreaInsets.top,
+                                   compact: geometry.size.width - headerLeading - headerTrailing < 440)
+                    }
                     if !access.canEdit && !access.isUnrestricted {
                         Button { session.showPurchaseOffer = true } label: {
                             Text("Viewing mode · Unlock to create and edit")
@@ -135,8 +144,8 @@ struct WorkspaceView: View {
                     EditorPart { hintBox }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.leading, showItems ? inset + 20 : centerPadding)
-                .padding(.trailing, showAssistant || showNotes ? trailingInset + (roomy ? centerPadding : 20) : centerPadding)
+                .padding(.leading, headerLeading)
+                .padding(.trailing, headerTrailing)
                 EditorPart { utilityRail }.padding(.leading, 10).padding(.top, top)
                 if (!showAssistant && !showNotes) || roomy {
                     EditorPart { rightRail }.frame(maxWidth: .infinity, alignment: .trailing).padding(.trailing, 10 + trailingInset).padding(.top, top)
@@ -176,7 +185,7 @@ struct WorkspaceView: View {
                 // Pencil drags, so it is decided in its own part.
                 EditorPart {
                     if radialVisible {
-                        RadialToolbar(session: session, sketching: sketching,
+                        RadialToolbar(session: session, sketching: sketching, mode: workspaceMode,
                                       // Beside the Notes or Assistant panel, in portrait too.
                                       bounds: radialBounds(in: geometry, leading: dockMoves ? inset : 0, trailing: trailingInset),
                                       requestedCenter: radialToolbarX < 0 || radialToolbarY < 0 ? nil
@@ -210,7 +219,7 @@ struct WorkspaceView: View {
                 }
                 if let group = openGroup, let frame = groupFrames[group] {
                     // Above its tile, kept on screen.
-                    let height = CGFloat(group.tools.count) * 48 + 12 + 8
+                    let height = CGFloat(workspaceMode.tools(in: group).count) * 48 + 12 + 8
                     EditorPart { groupMenu(group) }
                         .position(x: min(max(frame.midX, 120), geometry.size.width - 120), y: frame.minY - 10 - height / 2)
                         .transition(.opacity).zIndex(5)
@@ -241,6 +250,8 @@ struct WorkspaceView: View {
             if session.isEditingNotes { NotesPanel.dismissKeyboard(); session.endEditingNotes(finalize: false) }
         }
         .onChange(of: radialToolbarEnabled) { _, enabled in openGroup = nil; radialOpen = enabled }
+        .onChange(of: workspaceMode) { openGroup = nil }
+        .onChange(of: session.isExtruding) { showExtrusionOptions = false }
         .onPencilSqueeze { phase in
             // Match the system palette gesture; active/cancelled squeezes never toggle twice.
             if preferredPencilSqueezeAction == .showContextualPalette, case .ended = phase {
@@ -248,11 +259,17 @@ struct WorkspaceView: View {
             }
         }
         .onAppear {
-            if ModelingSession.isRunningUITests {
+            if ModelingSession.isRunningUITests && !configuredUITestPreferences {
+                configuredUITestPreferences = true
                 if ProcessInfo.processInfo.arguments.contains("--ui-testing-purchases") { session.showPurchaseOffer = true }
                 radialToolbarEnabled = ProcessInfo.processInfo.arguments.contains("--radial-toolbar")
                 radialOpen = radialToolbarEnabled
                 radialToolbarX = -1; radialToolbarY = -1
+                // Existing UI scenarios keep their complete catalog; dedicated mode tests opt in.
+                if !ProcessInfo.processInfo.arguments.contains("--preserve-workspace-mode") {
+                    workspaceMode = ProcessInfo.processInfo.arguments.contains("--essentials-workspace") ? .essentials : .allTools
+                    showTips = true
+                }
             }
         }
         .sheet(isPresented: $session.showHelp) { ControlsGuide { session.showHelp = false }.presentationSizing(.page) }
@@ -336,24 +353,33 @@ struct WorkspaceView: View {
     /// The hint above the canvas: at most two lines, with a help button that opens the floating help
     /// card for what is being done.
     private var hintBox: some View {
-        HStack(spacing: 10) {
-            // What the hint is about, in a small lavender tile (not when that is just general help).
-            let topicIcon = session.helpTopic.icon
-            if topicIcon != .help {
-                SSIconGlyph(icon: topicIcon, size: 20, color: violet)
-                    .frame(width: 32, height: 32).background(Color("ss-lavender"), in: RoundedRectangle(cornerRadius: 9))
+        VStack(spacing: 8) {
+            HStack(spacing: 10) {
+                // What the hint is about, in a small lavender tile (not when that is just general help).
+                let topicIcon = session.helpTopic.icon
+                if topicIcon != .help {
+                    SSIconGlyph(icon: topicIcon, size: 20, color: violet)
+                        .frame(width: 32, height: 32).background(Color("ss-lavender"), in: RoundedRectangle(cornerRadius: 9))
+                }
+                Text(session.hint)
+                    .font(.system(size: 15)).foregroundStyle(ink).multilineTextAlignment(.center)
+                    .lineLimit(2).truncationMode(.tail)
+                    .frame(maxWidth: .infinity)
+                    .accessibilityIdentifier("hint.text")
+                Button {
+                    withAnimation(.easeOut(duration: 0.15)) { helpTopic = helpTopic == nil ? session.helpTopic : nil }
+                } label: {
+                    SSIconGlyph(icon: .help, size: 22, color: helpTopic == nil ? muted : violet).frame(width: 32, height: 32).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain).accessibilityLabel("Help").accessibilityIdentifier("hint.help")
             }
-            Text(session.hint)
-                .font(.system(size: 15)).foregroundStyle(ink).multilineTextAlignment(.center)
-                .lineLimit(2).truncationMode(.tail)
-                .frame(maxWidth: .infinity)
-                .accessibilityIdentifier("hint.text")
-            Button {
-                withAnimation(.easeOut(duration: 0.15)) { helpTopic = helpTopic == nil ? session.helpTopic : nil }
-            } label: {
-                SSIconGlyph(icon: .help, size: 22, color: helpTopic == nil ? muted : violet).frame(width: 32, height: 32).contentShape(Rectangle())
+            if workspaceMode == .essentials && showTips {
+                Text(session.helpTopic.overview.summary)
+                    .font(.system(size: 13)).foregroundStyle(muted).multilineTextAlignment(.center)
+                    .lineLimit(3).fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 12)
+                    .accessibilityIdentifier("workspace.guidance")
             }
-            .buttonStyle(.plain).accessibilityLabel("Help").accessibilityIdentifier("hint.help")
         }
         .padding(.leading, session.helpTopic.icon == .help ? 22 : 10).padding(.trailing, 10).padding(.vertical, 10)
         .frame(minHeight: 56)
@@ -373,59 +399,118 @@ struct WorkspaceView: View {
         return (CGPoint(x: x, y: y), CGSize(width: x - home.x, height: y - home.y))
     }
 
-    /// The project tab, attached to the top edge of the screen: home, the project's name with its save
-    /// state and contents underneath, and the project menu.
-    private func projectBar(topInset: CGFloat) -> some View {
-        HStack(spacing: 16) {
-            Button { session.onOpenProjects?() } label: {
-                SSIconGlyph(icon: .home, size: 25, color: ink).opacity(session.hasProjectFile ? 1 : 0.35)
-            }
-            .buttonStyle(.plain).accessibilityLabel("Projects").accessibilityIdentifier("project.home").disabled(!session.hasProjectFile)
-            VStack(spacing: 1) {
-                Text(session.projectName).font(.system(size: 17, weight: .semibold)).lineLimit(1).truncationMode(.middle)
-                    .accessibilityIdentifier("project.title")
-                HStack(spacing: 4) {
-                    Text(session.status).lineLimit(1)
-                    Text("·").accessibilityHidden(true)
-                    Text(Self.counts(sketches: session.workspace.sketches.count, solids: session.workspace.bodies.count))
-                        .lineLimit(1).layoutPriority(1).accessibilityIdentifier("workspace.counts")
+    /// Document identity leads; the workspace selector is a secondary control beside the file menu.
+    /// In a narrow window or beside a panel it sits below the document, keeping 44-point targets.
+    private func projectBar(topInset: CGFloat, compact: Bool) -> some View {
+        HStack(spacing: 10) {
+            projectHomeButton
+            if compact {
+                VStack(alignment: .leading, spacing: 0) {
+                    projectDetails
+                    workspaceModeMenu
                 }
-                .font(.system(size: 11).monospacedDigit()).foregroundStyle(muted)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                projectDetails
+                Rectangle().fill(hairline).frame(width: 1, height: 24)
+                    .padding(.horizontal, 3).accessibilityHidden(true)
+                workspaceModeMenu
             }
-            .frame(maxWidth: 260)
-            Menu {
-                // The usual file order: New and Open, then Save and Save As.
-                menuButton("New Project…", icon: .newProject) { session.onNewProject?() }
-                    .disabled(!session.hasProjectFile).accessibilityIdentifier("project.new")
-                menuButton("Open Project…", icon: .open) { session.onOpenProjects?() }
-                    .disabled(!session.hasProjectFile).accessibilityIdentifier("project.open")
-                menuButton("Save", icon: .save) { session.save() }
-                    .disabled(!session.hasProjectFile || session.isReadOnly).accessibilityIdentifier("project.save")
-                menuButton("Save As…", icon: .saveAs) { session.onSaveAs?() }
-                    .disabled(!session.hasProjectFile).accessibilityIdentifier("project.saveAs")
-                Divider()
-                menuButton(showNotes ? "Hide Notes" : "Notes", icon: .text) { toggleNotes() }
-                .accessibilityIdentifier("project.notes")
-                Divider()
-                // Files in and out: each opens a sheet with all its choices.
-                menuButton("Import…", icon: .open) { showImport = true }
-                    .disabled(session.isEditingBlocked).accessibilityIdentifier("project.import")
-                menuButton("Export…", icon: .export) { session.printSheet = .export }
-                    .disabled(!session.canExport).accessibilityIdentifier("project.export")
-                Divider()
-                menuButton("Settings", icon: .assistant) { showSettings = true }.accessibilityIdentifier("project.settings")
-                menuButton("Purchases", icon: .brand) { session.showPurchaseOffer = true }.accessibilityIdentifier("project.purchases")
-                menuButton("About Swipe & Sketch", icon: .brand) { showAbout = true }.accessibilityIdentifier("project.about")
-            } label: { SSIconGlyph(icon: .more, size: 25, color: ink) }
-            .accessibilityLabel("Project menu")
+            projectMenu
         }
         .foregroundStyle(ink)
-        .padding(.horizontal, 18 + TopTab.flare).padding(.top, topInset + 4).padding(.bottom, 6).frame(minHeight: 54 + topInset)
+        .padding(.horizontal, 12 + TopTab.flare).padding(.top, topInset + 8).padding(.bottom, 8)
+        .frame(maxWidth: 642, minHeight: 64 + topInset)
         .background {
             TopTab().fill(white).shadow(color: .black.opacity(0.08), radius: 8, y: 3)
                 .overlay(TopTab().stroke(hairline.opacity(0.6)))
         }
+        .allowsHitTesting(!session.isPencilDown)
         .accessibilityElement(children: .contain).accessibilityIdentifier("project.tab")
+    }
+
+    private var projectHomeButton: some View {
+        Button { session.onOpenProjects?() } label: {
+            SSIconGlyph(icon: .home, size: 25, color: ink).opacity(session.hasProjectFile ? 1 : 0.35)
+                .frame(width: 44, height: 44).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain).accessibilityLabel("Projects").accessibilityIdentifier("project.home").disabled(!session.hasProjectFile)
+    }
+
+    private var projectDetails: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(session.projectName).font(.system(size: 17, weight: .semibold)).lineLimit(1).truncationMode(.middle)
+                .accessibilityIdentifier("project.title")
+            HStack(spacing: 4) {
+                Text(session.status).lineLimit(1)
+                Text("·").accessibilityHidden(true)
+                Text(Self.counts(sketches: session.workspace.sketches.count, solids: session.workspace.bodies.count))
+                    .lineLimit(1).layoutPriority(1).accessibilityIdentifier("workspace.counts")
+            }
+            .font(.system(size: 11).monospacedDigit()).foregroundStyle(muted)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var projectMenu: some View {
+        Menu {
+            // The usual file order: New and Open, then Save and Save As.
+            menuButton("New Project…", icon: .newProject) { session.onNewProject?() }
+                .disabled(!session.hasProjectFile).accessibilityIdentifier("project.new")
+            menuButton("Open Project…", icon: .open) { session.onOpenProjects?() }
+                .disabled(!session.hasProjectFile).accessibilityIdentifier("project.open")
+            menuButton("Save", icon: .save) { session.save() }
+                .disabled(!session.hasProjectFile || session.isReadOnly).accessibilityIdentifier("project.save")
+            menuButton("Save As…", icon: .saveAs) { session.onSaveAs?() }
+                .disabled(!session.hasProjectFile).accessibilityIdentifier("project.saveAs")
+            Divider()
+            menuButton(showNotes ? "Hide Notes" : "Notes", icon: .text) { toggleNotes() }
+            .accessibilityIdentifier("project.notes")
+            Divider()
+            // Files in and out: each opens a sheet with all its choices.
+            menuButton("Import…", icon: .open) { showImport = true }
+                .disabled(session.isEditingBlocked).accessibilityIdentifier("project.import")
+            menuButton("Export…", icon: .export) { session.printSheet = .export }
+                .disabled(!session.canExport).accessibilityIdentifier("project.export")
+            Divider()
+            menuButton("Settings", icon: .assistant) { showSettings = true }.accessibilityIdentifier("project.settings")
+            menuButton("Purchases", icon: .brand) { session.showPurchaseOffer = true }.accessibilityIdentifier("project.purchases")
+            menuButton("About Swipe & Sketch", icon: .brand) { showAbout = true }.accessibilityIdentifier("project.about")
+        } label: {
+            SSIconGlyph(icon: .more, size: 25, color: ink)
+                .frame(width: 44, height: 44).contentShape(Rectangle())
+        }
+        .accessibilityLabel("Project menu")
+    }
+
+    /// Always available, including during an operation. Switching changes chrome, not the draft.
+    private var workspaceModeMenu: some View {
+        Menu {
+            ForEach(WorkspaceMode.allCases) { mode in
+                menuButton(mode.title, icon: workspaceMode == mode ? .done : .more) {
+                    workspaceMode = mode
+                }
+                .accessibilityLabel(mode.title)
+                .accessibilityIdentifier("workspace.mode.\(mode.rawValue)")
+            }
+            Divider()
+            Toggle("Show Tips", isOn: $showTips)
+                .accessibilityLabel("Show Tips").accessibilityIdentifier("workspace.showTips")
+            Divider()
+            menuButton("About Workspace Modes", icon: .help) { helpTopic = .workspaceModes }
+        } label: {
+            HStack(spacing: 5) {
+                Text(workspaceMode.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                SSIconGlyph(icon: .disclosure, size: 14, color: muted).rotationEffect(.degrees(90))
+            }
+            .foregroundStyle(muted).padding(.horizontal, 8).frame(minHeight: 44)
+            .fixedSize(horizontal: true, vertical: false).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Workspace mode").accessibilityValue(workspaceMode.title)
+        .accessibilityHint("Choose Essentials or All Tools")
+        .accessibilityIdentifier("workspace.mode")
+        .allowsHitTesting(!session.isPencilDown)
     }
 
     private func openObjectNotes(_ item: ModelSelection) {
@@ -487,7 +572,7 @@ struct WorkspaceView: View {
     /// again puts it down. Group tiles (`ToolGroup`) pop up their tools above them.
     private var dock: some View {
         HStack(alignment: .top, spacing: 4) {
-            ForEach(ToolbarEntry.roots(sketching: sketching, onFace: session.sketchMode?.face != nil)) { entry in
+            ForEach(ToolbarEntry.roots(sketching: sketching, onFace: session.sketchMode?.face != nil, mode: workspaceMode)) { entry in
                 switch entry {
                 case .group(let group): groupTile(group)
                 default:
@@ -595,7 +680,7 @@ struct WorkspaceView: View {
     /// colored tile and name, the one in use in Swipe Violet.
     private func groupMenu(_ group: ToolGroup) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            ForEach(group.tools, id: \.rawValue) { tool in
+            ForEach(workspaceMode.tools(in: group), id: \.rawValue) { tool in
                 let active = session.tool == tool
                 Button {
                     // Like a dock tile: tapping the tool in use puts it down (Slot switches how it draws).
@@ -1346,26 +1431,44 @@ struct WorkspaceView: View {
                     }
                     .padding(6).background(white.opacity(0.94), in: RoundedRectangle(cornerRadius: 10))
                     // The Extrude options: both ways, a taper, up to a face, and how many regions.
-                    HStack(spacing: 7) {
-                        Toggle(isOn: $session.extrusionSymmetric) { optionLabel("Symmetric", icon: .symmetric) }
-                            .toggleStyle(.button).accessibilityIdentifier("extrusion.symmetric")
-                        Button {
-                            session.openDimension(.extrusionTaper, at: CGPoint(x: taperFrame.midX - 55, y: taperFrame.minY - 20))
-                        } label: {
-                            optionLabel("Taper \(formatted(session.extrusionTaper))°", icon: .taper)
-                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(violet, lineWidth: session.extrusionTaper == 0 ? 0 : 1.2))
+                    if workspaceMode == .essentials {
+                        Button { showExtrusionOptions.toggle() } label: {
+                            optionLabel(showExtrusionOptions ? "Fewer Options" : "More Options", icon: .more)
+                                .padding(.horizontal, 8).frame(minHeight: 44)
+                                .background(white, in: RoundedRectangle(cornerRadius: 10))
                         }
-                        .accessibilityLabel("Taper").accessibilityValue("\(formatted(session.extrusionTaper)) degrees").accessibilityIdentifier("extrusion.taper")
-                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("workspace")) } action: { taperFrame = $0 }
-                        Toggle(isOn: $session.isPickingExtrusionTarget) { optionLabel("Up To", icon: .extrudeTo) }
-                            .toggleStyle(.button).accessibilityIdentifier("extrusion.upTo")
-                        if session.extrusionProfiles.count > 1 {
-                            Text("Regions · \(session.extrusionProfiles.count)").font(.system(size: 15, weight: .medium)).foregroundStyle(ink)
-                                .padding(.horizontal, 6).accessibilityIdentifier("extrusion.regions")
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("extrusion.options")
+                        .accessibilityValue(showExtrusionOptions ? "Expanded" : "Collapsed")
+                        .allowsHitTesting(!session.isPencilDown)
+                        if !showExtrusionOptions, !extrusionOptionsSummary.isEmpty {
+                            Text(extrusionOptionsSummary).font(.system(size: 13)).foregroundStyle(ink)
+                                .padding(6).background(white, in: Capsule())
+                                .accessibilityIdentifier("extrusion.optionsSummary")
                         }
                     }
-                    .disabled(session.extrusionMode == .cut && session.cutThroughAll)
-                    .padding(6).background(white.opacity(0.94), in: RoundedRectangle(cornerRadius: 10))
+                    if workspaceMode == .allTools || showExtrusionOptions {
+                        HStack(spacing: 7) {
+                            Toggle(isOn: $session.extrusionSymmetric) { optionLabel("Symmetric", icon: .symmetric) }
+                                .toggleStyle(.button).accessibilityIdentifier("extrusion.symmetric")
+                            Button {
+                                session.openDimension(.extrusionTaper, at: CGPoint(x: taperFrame.midX - 55, y: taperFrame.minY - 20))
+                            } label: {
+                                optionLabel("Taper \(formatted(session.extrusionTaper))°", icon: .taper)
+                                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(violet, lineWidth: session.extrusionTaper == 0 ? 0 : 1.2))
+                            }
+                            .accessibilityLabel("Taper").accessibilityValue("\(formatted(session.extrusionTaper)) degrees").accessibilityIdentifier("extrusion.taper")
+                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("workspace")) } action: { taperFrame = $0 }
+                            Toggle(isOn: $session.isPickingExtrusionTarget) { optionLabel("Up To", icon: .extrudeTo) }
+                                .toggleStyle(.button).accessibilityIdentifier("extrusion.upTo")
+                            if session.extrusionProfiles.count > 1 {
+                                Text("Regions · \(session.extrusionProfiles.count)").font(.system(size: 15, weight: .medium)).foregroundStyle(ink)
+                                    .padding(.horizontal, 6).accessibilityIdentifier("extrusion.regions")
+                            }
+                        }
+                        .disabled(session.extrusionMode == .cut && session.cutThroughAll)
+                        .padding(6).background(white.opacity(0.94), in: RoundedRectangle(cornerRadius: 10))
+                    }
                 }
                 HStack(spacing: 8) {
                     actionButton("Cancel", icon: .exit, id: "extrusion.cancel") { session.cancelExtrusion() }
@@ -1731,6 +1834,16 @@ struct WorkspaceView: View {
                     .disabled(session.finishError != nil || session.finishPreview == nil)
             }
         }
+    }
+
+    /// Collapsed options still disclose active values; changing presentation never resets them.
+    private var extrusionOptionsSummary: String {
+        var values: [String] = []
+        if session.extrusionSymmetric { values.append("Symmetric") }
+        if session.extrusionTaper != 0 { values.append("Taper \(formatted(session.extrusionTaper))°") }
+        if session.isPickingExtrusionTarget { values.append("Pick an Up To face") }
+        if session.extrusionProfiles.count > 1 { values.append("Regions · \(session.extrusionProfiles.count)") }
+        return values.joined(separator: " · ")
     }
 
     private var bottomBar: some View {

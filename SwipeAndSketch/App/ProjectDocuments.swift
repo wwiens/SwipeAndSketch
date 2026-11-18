@@ -182,6 +182,7 @@ final class FilesBrowserController: UIDocumentBrowserViewController {
         super.init(nibName: nil, bundle: nil)
         overrideUserInterfaceStyle = .light
         browser.delegate = self
+        ShortcutsBridge.home = self
         home.newBlankProject = { [weak self] in self?.create(Project(), name: "Untitled Project") }
         home.create = { [weak self] in self?.create($0, name: $1) }
         home.open = { [weak self] project in self?.openFile(project.url) }
@@ -225,6 +226,14 @@ final class FilesBrowserController: UIDocumentBrowserViewController {
             }
             if let url = pendingURL { pendingURL = nil; openFile(url) }
         } catch { showError("Could not open project", error.localizedDescription) }
+    }
+
+    /// The editor's session when `url` is the project open in it (Shortcuts read what is on
+    /// screen, unsaved changes included).
+    func session(showing url: URL) -> ModelingSession? {
+        guard let session = activeSession, let open = activeDocument?.fileURL,
+              RecentProjects.key(open) == RecentProjects.key(url) else { return nil }
+        return session
     }
 
     func openExternal(_ url: URL) {

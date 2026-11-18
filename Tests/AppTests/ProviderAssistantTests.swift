@@ -45,6 +45,16 @@ import Foundation
         XCTAssertEqual(AssistantModelChoice.stored(nil), .automatic)
     }
 
+    /// OpenAI and Gemini are offered beside Claude again (November 17, 2026).
+    func testOpenAIAndGeminiAreOffered() throws {
+        try XCTSkipUnless(AIProvider.offersOpenAIAndGemini, "OpenAI and Gemini are hidden.")
+        XCTAssertEqual(AIProvider.offered, [.claude, .openAI, .gemini])
+        XCTAssertEqual(AIProvider.offeredNames, "Claude, OpenAI, or Gemini")
+        XCTAssertEqual(AssistantModelChoice.offered, [.automatic, .cloud, .onDevice, .claude, .openAI, .gemini])
+        XCTAssertEqual(AssistantModelChoice.stored("openai"), .openAI)
+        XCTAssertEqual(AssistantModelChoice.stored("gemini"), .gemini)
+    }
+
     func testOpenAIRunsToolsStatelesslyAndReturnsReasoning() async throws {
         ProviderSettings.setModel(ProviderModel(id: "gpt-test", name: "GPT Test"), for: .openAI)
         ProviderSettings.setEffort(.medium, for: .openAI)
@@ -149,6 +159,70 @@ import Foundation
         XCTAssertEqual(input[3]["is_error"]?.bool, false)
     }
 
+    func testGeminiRetriesWithoutThinkingWhenAModelRefusesIt() async throws {
+        var bodies: [AssistantJSON] = []
+        let client = GeminiAssistant { request in
+            bodies.append(try self.payload(request))
+            if bodies.count == 1 {
+                return try self.http(.object(["error": .object(["message": .string("Thinking level is not supported for this model."),
+                                                                "code": .string("invalid_request")])]), status: 400)
+            }
+            return try self.http(.object(["status": .string("completed"), "steps": .array([.object(["type": .string("model_output"),
+                "content": .array([.object(["type": .string("text"), "text": .string("It is 20 mm tall.")])])])])]))
+        }
+        let engine = AssistantEngine(gemini: client, providerKey: { _ in self.fakeKey })
+        let turn = try await engine.respond(to: "How tall is it?", workspace: ClaudeAssistantTests.fixture("block"), selection: nil, choice: .gemini,
+                                            onActivity: { _ in }, onText: { _ in })
+        XCTAssertEqual(turn.reply, "It is 20 mm tall.")
+        XCTAssertNotNil(bodies[0]["generation_config"]?["thinking_level"])
+        XCTAssertNil(bodies[1]["generation_config"]?["thinking_level"], "Asked again at the model's own default")
+    }
+
+    /// Gemini 4 Carbon can spend its whole output budget thinking (November 17, 2026): the request
+    /// comes back incomplete with a continuation token and no steps, and carries on with a larger budget.
+    func testGeminiContinuesARequestThatRanOutOfOutputTokens() async throws {
+        let call: AssistantJSON = .object(["type": .string("function_call"), "id": .string("call_1"), "name": .string("make_container"), "arguments": container])
+        let output: AssistantJSON = .object(["type": .string("model_output"), "content": .array([.object(["type": .string("text"), "text": .string("Shelled.")])])])
+        var bodies: [AssistantJSON] = []
+        let client = GeminiAssistant { request in
+            XCTAssertEqual(request.timeoutInterval, GeminiAssistant.requestTimeout)
+            bodies.append(try self.payload(request))
+            switch bodies.count {
+            case 1, 2: return try self.http(.object(["status": .string("incomplete"), "continuation_token": .string("token-\(bodies.count)")]))
+            case 3: return try self.http(.object(["status": .string("requires_action"), "steps": .array([call])]))
+            default: return try self.http(.object(["status": .string("completed"), "steps": .array([output])]))
+            }
+        }
+        let turn = try await run(AssistantEngine(gemini: client, providerKey: { _ in self.fakeKey }), choice: .gemini)
+        XCTAssertEqual(turn.reply, "Shelled.")
+        XCTAssertTrue(turn.bench.hasChanges)
+        XCTAssertEqual(bodies.map { $0["generation_config"]?["max_output_tokens"]?.number }, [16384, 32768, 49152, 16384],
+                       "The budget counts across continuations and starts over for the next round")
+        XCTAssertEqual(bodies.map { $0["continuation_token"]?.string }, [nil, "token-1", "token-2", nil])
+        XCTAssertEqual(bodies[1]["input"], bodies[0]["input"], "A continuation repeats the request")
+        XCTAssertEqual(bodies[2]["generation_config"]?["thinking_level"]?.string, "high")
+    }
+
+    func testGeminiPastGooglesDeadlineSuggestsLowerEffort() async throws {
+        let client = GeminiAssistant { _ in
+            try self.http(.object(["error": .object(["message": .string("Deadline expired before operation could complete."),
+                                                     "code": .string("deadline_exceeded")])]), status: 504)
+        }
+        do { _ = try await run(AssistantEngine(gemini: client, providerKey: { _ in self.fakeKey }), choice: .gemini); XCTFail("Must fail") }
+        catch { XCTAssertTrue(error.localizedDescription.contains("lower Effort"), error.localizedDescription) }
+    }
+
+    func testGeminiThatNeverFinishesThinkingSaysSo() async throws {
+        var count = 0
+        let client = GeminiAssistant { _ in
+            count += 1
+            return try self.http(.object(["status": .string("incomplete"), "continuation_token": .string("token")]))
+        }
+        do { _ = try await run(AssistantEngine(gemini: client, providerKey: { _ in self.fakeKey }), choice: .gemini); XCTFail("Must fail") }
+        catch { XCTAssertTrue(error.localizedDescription.contains("response limit"), error.localizedDescription) }
+        XCTAssertEqual(count, GeminiAssistant.maximumContinuations + 1)
+    }
+
     func testGeminiBadKeyIsClear() async throws {
         let client = GeminiAssistant { _ in
             (Data(#"{"error":{"status":"INVALID_ARGUMENT","details":[{"reason":"API_KEY_INVALID"}]}}"#.utf8),
@@ -232,20 +306,26 @@ import Foundation
         let openAI = Data(#"""
         {"data":[{"id":"gpt-5.5","created":100},{"id":"gpt-6-astra","created":300},{"id":"gpt-6-astra-2026-09-01","created":301},
                  {"id":"text-embedding-3-large","created":400},{"id":"gpt-realtime","created":350},{"id":"o4-mini","created":50},
-                 {"id":"tts-1","created":10},{"id":"gpt-6.1-sol","created":320}]}
+                 {"id":"tts-1","created":10},{"id":"gpt-6.1-sol","created":320},{"id":"gpt-5.3-codex","created":90},
+                 {"id":"chat-latest","created":200},{"id":"gpt-image-2","created":330},{"id":"gpt-live-1","created":340}]}
         """#.utf8)
         let openAIModels = try ProviderCatalog.parse(.openAI, data: openAI)
-        XCTAssertEqual(openAIModels.map(\.id), ["gpt-6.1-sol", "gpt-6-astra", "gpt-5.5", "o4-mini"])
-        XCTAssertEqual(openAIModels.map(\.name), ["GPT-6.1 Sol", "GPT-6 Astra", "GPT-5.5", "o4-mini"])
+        XCTAssertEqual(openAIModels.map(\.id), ["gpt-6.1-sol", "gpt-6-astra", "chat-latest", "gpt-5.5", "gpt-5.3-codex", "o4-mini"])
+        XCTAssertEqual(openAIModels.map(\.name), ["GPT-6.1 Sol", "GPT-6 Astra", "ChatGPT Latest", "GPT-5.5", "GPT-5.3 Codex", "o4-mini"])
 
         let gemini = Data(#"""
         {"models":[{"name":"models/gemini-3.8-flash","displayName":"Gemini 3.8 Flash","supportedGenerationMethods":["generateContent","countTokens"]},
                    {"name":"models/gemini-embedding-002","displayName":"Embedding","supportedGenerationMethods":["embedContent"]},
                    {"name":"models/gemini-4-hydrogen","displayName":"Gemini 4 Hydrogen","supportedGenerationMethods":["generateContent"]},
                    {"name":"models/gemini-3.6-flash-tts","displayName":"TTS","supportedGenerationMethods":["generateContent"]},
-                   {"name":"models/imagen-5","displayName":"Imagen"}]}
+                   {"name":"models/imagen-5","displayName":"Imagen"},
+                   {"name":"models/gemini-pro-latest","displayName":"Gemini Pro Latest","supportedGenerationMethods":["generateContent"]},
+                   {"name":"models/gemini-omni-1.2-flash","displayName":"Omni","supportedGenerationMethods":["generateContent"]},
+                   {"name":"models/gemini-nano-banana-2.1","displayName":"Nano Banana","supportedGenerationMethods":["generateContent"]},
+                   {"name":"models/gemini-3.8-live","displayName":"Live","supportedGenerationMethods":["bidiGenerateContent"]}]}
         """#.utf8)
-        XCTAssertEqual(try ProviderCatalog.parse(.gemini, data: gemini).map(\.id), ["gemini-4-hydrogen", "gemini-3.8-flash"])
+        XCTAssertEqual(try ProviderCatalog.parse(.gemini, data: gemini).map(\.id), ["gemini-4-hydrogen", "gemini-3.8-flash", "gemini-pro-latest"],
+                       "Numbered versions newest first, then aliases; no image, Omni, or Live models")
     }
 
     func testSettingsKeepTheChosenModelAndEffortPerProvider() {
