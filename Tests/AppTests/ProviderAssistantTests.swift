@@ -178,6 +178,51 @@ import Foundation
         XCTAssertNil(bodies[1]["generation_config"]?["thinking_level"], "Asked again at the model's own default")
     }
 
+    /// Gemini 4 Carbon can spend its whole output budget thinking (November 17, 2026): the request
+    /// comes back incomplete with a continuation token and no steps, and carries on with a larger budget.
+    func testGeminiContinuesARequestThatRanOutOfOutputTokens() async throws {
+        let call: AssistantJSON = .object(["type": .string("function_call"), "id": .string("call_1"), "name": .string("make_container"), "arguments": container])
+        let output: AssistantJSON = .object(["type": .string("model_output"), "content": .array([.object(["type": .string("text"), "text": .string("Shelled.")])])])
+        var bodies: [AssistantJSON] = []
+        let client = GeminiAssistant { request in
+            XCTAssertEqual(request.timeoutInterval, GeminiAssistant.requestTimeout)
+            bodies.append(try self.payload(request))
+            switch bodies.count {
+            case 1, 2: return try self.http(.object(["status": .string("incomplete"), "continuation_token": .string("token-\(bodies.count)")]))
+            case 3: return try self.http(.object(["status": .string("requires_action"), "steps": .array([call])]))
+            default: return try self.http(.object(["status": .string("completed"), "steps": .array([output])]))
+            }
+        }
+        let turn = try await run(AssistantEngine(gemini: client, providerKey: { _ in self.fakeKey }), choice: .gemini)
+        XCTAssertEqual(turn.reply, "Shelled.")
+        XCTAssertTrue(turn.bench.hasChanges)
+        XCTAssertEqual(bodies.map { $0["generation_config"]?["max_output_tokens"]?.number }, [16384, 32768, 49152, 16384],
+                       "The budget counts across continuations and starts over for the next round")
+        XCTAssertEqual(bodies.map { $0["continuation_token"]?.string }, [nil, "token-1", "token-2", nil])
+        XCTAssertEqual(bodies[1]["input"], bodies[0]["input"], "A continuation repeats the request")
+        XCTAssertEqual(bodies[2]["generation_config"]?["thinking_level"]?.string, "high")
+    }
+
+    func testGeminiPastGooglesDeadlineSuggestsLowerEffort() async throws {
+        let client = GeminiAssistant { _ in
+            try self.http(.object(["error": .object(["message": .string("Deadline expired before operation could complete."),
+                                                     "code": .string("deadline_exceeded")])]), status: 504)
+        }
+        do { _ = try await run(AssistantEngine(gemini: client, providerKey: { _ in self.fakeKey }), choice: .gemini); XCTFail("Must fail") }
+        catch { XCTAssertTrue(error.localizedDescription.contains("lower Effort"), error.localizedDescription) }
+    }
+
+    func testGeminiThatNeverFinishesThinkingSaysSo() async throws {
+        var count = 0
+        let client = GeminiAssistant { _ in
+            count += 1
+            return try self.http(.object(["status": .string("incomplete"), "continuation_token": .string("token")]))
+        }
+        do { _ = try await run(AssistantEngine(gemini: client, providerKey: { _ in self.fakeKey }), choice: .gemini); XCTFail("Must fail") }
+        catch { XCTAssertTrue(error.localizedDescription.contains("response limit"), error.localizedDescription) }
+        XCTAssertEqual(count, GeminiAssistant.maximumContinuations + 1)
+    }
+
     func testGeminiBadKeyIsClear() async throws {
         let client = GeminiAssistant { _ in
             (Data(#"{"error":{"status":"INVALID_ARGUMENT","details":[{"reason":"API_KEY_INVALID"}]}}"#.utf8),
