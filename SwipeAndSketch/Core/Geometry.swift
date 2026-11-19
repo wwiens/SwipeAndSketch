@@ -817,11 +817,15 @@ enum Geometry {
             return true
         }
         // Long outlines (projected curves, up to thousands of points): only segments whose boxes
-        // share a cell of a grid of about n cells can meet, so test just those pairs.
+        // share a cell of a grid can meet, so test just those pairs. Cells are a few segments long,
+        // so an outline running around a large area (a ring of thousands of short pieces) does not
+        // crowd hundreds of segments into each cell.
         let xs = points.map(\.x), ys = points.map(\.y)
         let low = Point2(x: xs.min() ?? 0, y: ys.min() ?? 0)
-        let side = Int(Double(n).squareRoot())
-        let cell = max(xs.max()! - low.x, ys.max()! - low.y, 1e-9) / Double(side)
+        let extent = max(xs.max()! - low.x, ys.max()! - low.y, 1e-9)
+        let perimeter = points.indices.reduce(0) { $0 + points[$1].distance(to: points[($1 + 1) % n]) }
+        let side = min(1 << 14, max(Int(Double(n).squareRoot()), Int(extent / max(1e-9, 4 * perimeter / Double(n)))))
+        let cell = extent / Double(side)
         func index(_ value: Double) -> Int { Int(max(0, min(Double(side), (value / cell).rounded(.down)))) }
         var cells: [Int: [Int]] = [:]
         for i in 0..<n {

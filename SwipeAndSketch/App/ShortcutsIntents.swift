@@ -364,7 +364,7 @@ struct GetPrintEstimateIntent: AppIntent {
         let total = PartsList.total(entries), settings = FilamentSettings.stored
         let material = settings.material == .custom ? "filament" : settings.material.title
         let summary = "About \(total.weightText) of \(material) (\(total.lengthText)), \(total.costText(currency: estimateCurrency))"
-        var item = PrintEstimateItem()
+        let item = PrintEstimateItem()
         item.grams = (total.grams * 10).rounded() / 10
         item.meters = (total.meters * 100).rounded() / 100
         item.cost = (total.cost * 100).rounded() / 100
@@ -410,7 +410,7 @@ extension ModelingSession {
             guard let project = await RecentProjects.shared.current().first(where: { $0.id == RecentProjects.key(url) }) else { return }
             let entity = ProjectEntity(project, picture: nil)
             if toFolder {
-                var intent = SendToSlicerIntent()
+                let intent = SendToSlicerIntent()
                 intent.project = entity
                 intent.format = format == .threeMF ? .threeMF : .stl
                 _ = try? await intent.donate()

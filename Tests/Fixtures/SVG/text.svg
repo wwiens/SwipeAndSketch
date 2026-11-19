@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" width="200mm" height="60mm">
+  <text x="10" y="45" font-family="Helvetica" font-size="40" font-weight="bold">Hi</text>
+  <text x="190" y="45" font-family="'Imaginary Sans Pro', sans-serif" font-size="30" text-anchor="end">o<tspan fill="#e53935">k</tspan></text>
+</svg>

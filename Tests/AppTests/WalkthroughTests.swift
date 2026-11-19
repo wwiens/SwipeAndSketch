@@ -276,7 +276,7 @@ import WebKit
     }
 
     /// Help topics added after the reviewed v5 catalog was published.
-    static let newerThanV5: Set<HelpTopic> = [.radialToolbar, .notes, .purchases, .workspaceModes]
+    static let newerThanV5: Set<HelpTopic> = [.radialToolbar, .notes, .purchases, .workspaceModes, .svgImport]
     /// Topics the v5 catalog still maps that the app no longer has (its lookups ignore them).
     static let retiredSinceV5: Set<String> = ["moveShape"]
 

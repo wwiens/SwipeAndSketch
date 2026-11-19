@@ -826,6 +826,52 @@ struct AssistantWorkbench: Sendable {
         return reply
     }
 
+    /// Brings in an SVG drawing (markup the model wrote, or the user pasted) through SVG import:
+    /// sketches of lines, arcs, and circles on `target`, centered on `center` (world mm, projected
+    /// onto the plane; the plane's origin when nil), `width` mm wide (the file's own size when nil),
+    /// one sketch per color when `byColor`, and solids `solidHeight` tall when given, one per region
+    /// of each color, colored to match.
+    @discardableResult mutating func addSVG(_ markup: String, on target: PlaneTarget, center: SIMD3<Double>?, width: Double?,
+                                            byColor: Bool, solidHeight: Double?) throws -> String {
+        guard !markup.isEmpty, markup.utf8.count <= 2_000_000 else { throw Failure("Give SVG markup of at most 2 MB.") }
+        let (plane, _, label) = try sketchPlane(for: target)
+        let drawing: SVGImport.Drawing
+        do { drawing = try SVGImport.read(data: Data(markup.utf8), name: "Drawing") } catch {
+            throw Failure("That SVG could not be read: \(error.localizedDescription)")
+        }
+        var options = SVGImport.defaultOptions(for: drawing)
+        if let width {
+            guard width.isFinite, width >= 0.1, width <= 10_000 else { throw Failure("A drawing's width must be 0.1–10000 mm.") }
+            options.width = width
+        }
+        options.grouping = byColor && drawing.colors.count > 1 ? .colors : .single
+        options.solidHeight = solidHeight
+        let placement = SVGImport.Placement(plane: plane, center: center.map(plane.coordinates(of:)) ?? .zero)
+        let layout: SVGImport.Layout
+        do { layout = try SVGImport.layout(drawing, options: options, placement: placement) } catch {
+            throw Failure("That SVG could not be laid out: \(error.localizedDescription)")
+        }
+        guard !layout.isEmpty || !layout.solids.isEmpty else { throw Failure("That SVG draws nothing that makes a shape (only filled or stroked shapes, text, and pictures do).") }
+        guard let added = SVGImport.adding(layout, name: "Drawing", to: workspace) else {
+            throw Failure("The project cannot hold that drawing: it has too many shapes.")
+        }
+        let before = Set(workspace.sketches.map(\.id)), beforeBodies = Set(workspace.bodies.map(\.id))
+        let newSketches = added.workspace.sketches.filter { !before.contains($0.id) }.map(\.id)
+        let newBodies = added.workspace.bodies.filter { !beforeBodies.contains($0.id) }.map(\.id)
+        var result = self
+        result.workspace = added.workspace
+        let sketchNames = newSketches.map { result.name(of: .sketch($0)) }, bodyNames = newBodies.map { result.bodyName($0) }
+        let size = String(format: "%.4g × %.4g mm", layout.size.width, layout.size.height)
+        try keep(added.workspace, change: "Imported a \(size) drawing on \(label): " +
+                 ([sketchNames.joined(separator: ", ")] + (bodyNames.isEmpty ? [] : [bodyNames.joined(separator: ", ")])).joined(separator: "; "),
+                 checking: newBodies, focus: newSketches.first.map { .sketch($0) })
+        var reply = "Imported the drawing, \(size), on \(label) as \(sketchNames.count) sketch\(sketchNames.count == 1 ? "" : "es") (\(sketchNames.joined(separator: ", ")); \(layout.shapeCount) lines, arcs, and circles)"
+        if !bodyNames.isEmpty { reply += " and \(bodyNames.count) solid\(bodyNames.count == 1 ? "" : "s") \(String(format: "%g", solidHeight ?? 0)) mm tall (\(bodyNames.joined(separator: ", ")))" }
+        reply += "."
+        if !layout.warnings.isEmpty { reply += " Notes: " + layout.warnings.messages.joined(separator: "; ") + "." }
+        return reply
+    }
+
     /// Extrudes sketch regions (1-based; nil means the only one) by a signed distance along the
     /// sketch normal, as new solids, joined bosses, or cuts.
     @discardableResult mutating func extrude(sketch sketchName: String, regions numbers: [Int], distance: Double, mode: ExtrudeMode, throughAll: Bool,

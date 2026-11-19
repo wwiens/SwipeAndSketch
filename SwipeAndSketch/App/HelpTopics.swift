@@ -27,12 +27,14 @@ enum HelpTopic: String, CaseIterable, Identifiable {
     case radialToolbar
     case purchases
     case workspaceModes
+    case svgImport
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .workspaceModes: "Workspace Modes"
+        case .svgImport: "Importing SVG Drawings"
         case .purchases: "Purchases and Trial"
         case .notes: "Project Notes"
         case .radialToolbar: "Radial Toolbar"
@@ -114,6 +116,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
     var icon: SSIcon {
         switch self {
         case .workspaceModes: .more
+        case .svgImport: .spline
         case .purchases: .brand
         case .notes: .text
         case .radialToolbar: .more
@@ -184,6 +187,21 @@ enum HelpTopic: String, CaseIterable, Identifiable {
     /// What it is, how to do it, and what is worth knowing, in plain words.
     var overview: HelpOverview {
         switch self {
+        case .svgImport:
+            HelpOverview(
+                summary: "Bring a logo, icon, sign, or cut file from an SVG drawing into the project as sketches you can edit and extrude, or straight in as colored solids for a multicolor print.",
+                steps: ["To put the drawing on a solid, select a flat face first. Otherwise it goes on the plane you are sketching on, or the current plane.",
+                        "Choose Import… in the project menu, then Vector Drawing (SVG). You can also drop an .svg file on the canvas, or copy a drawing as SVG in a design app and tap Paste SVG in the Import sheet.",
+                        "Set the width or height. A file that gives a real size starts at that size; one sized in pixels is read at 96 to the inch.",
+                        "Choose One Sketch, By Layer, or By Color, how strokes come in, and how closely curves are followed. The preview shows exactly what will be added.",
+                        "To make solids, turn on Make Solids and give a height. Each color becomes solids of its own, colored to match. Tap Import."],
+                tips: ["Everything arrives in a Model Tree group named after the file, selected and ready to move, as one step you can undo.",
+                       "Curves come in as lines, arcs, and circles, so Trim, Fillet, Offset, and Dimension work on them.",
+                       "Text in the file comes in as letter outlines. When the file's font is not on this iPad, the closest one is used, and the notes say which.",
+                       "With By Color, a color painted over another takes its place there, so the solids of a multicolor sign fit together without overlapping.",
+                       "Thin cut lines come in as the line itself; wider strokes as their outline, which can be extruded. Choose Outline to make line art solid.",
+                       "Pictures inside the file are traced into outlines. Raise the threshold to take in lighter shades, or trace the light parts instead.",
+                       "Masks, filters, and pattern fills are not geometry; the notes list what was left out."])
         case .workspaceModes:
             HelpOverview(
                 summary: "Choose how many tools and how much guidance the workspace shows. Essentials and All Tools edit the same projects with the same precision.",

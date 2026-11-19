@@ -118,6 +118,8 @@ struct WorkspaceView: View {
             let headerTrailing = showAssistant || showNotes ? trailingInset + (roomy ? centerPadding : 20) : centerPadding
             ZStack(alignment: .topLeading) {
                 ModelingCanvas(session: session)
+                    // Files dropped from Files or another app: STEP, meshes, SVG drawings, projects.
+                    .onDrop(of: [.fileURL, .svg, .data], isTargeted: nil) { ImportDrop.drop($0, into: session) }
                 if showItems {
                     EditorPart {
                         itemsPanel.frame(width: itemsWidth).frame(maxHeight: .infinity, alignment: .top)
@@ -281,6 +283,9 @@ struct WorkspaceView: View {
         .sheet(item: $session.exportItem) { item in ShareSheet(url: item.url).ignoresSafeArea() }
         .sheet(item: $session.printSheet) { mode in PrintSheet(session: session, mode: mode) }
         .sheet(isPresented: $showImport) { ImportSheet(session: session) { showImport = false } }
+        .sheet(item: Binding(get: { session.svgImport }, set: { if $0 == nil { session.cancelSVGImport() } })) { request in
+            SVGImportSheet(session: session, request: request).presentationSizing(.page)
+        }
         .alert("Project needs attention", isPresented: Binding(get: { session.saveError != nil }, set: { if !$0 { session.saveError = nil } })) {
             Button("OK", role: .cancel) { }
         } message: { Text(session.saveError ?? "") }
@@ -1379,9 +1384,18 @@ struct WorkspaceView: View {
 
     /// The file types Import STEP (or Import Mesh) offers: whatever this iPad calls the extensions,
     /// plus the app's own declarations (Info.plist), so the files are never greyed out in the picker.
-    static let projectTypes = [UTType(Project.formatIdentifier)].compactMap { $0 }
+    nonisolated static let projectTypes = [UTType(Project.formatIdentifier)].compactMap { $0 }
 
-    static func importTypes(mesh: Bool) -> [UTType] {
+    /// SVG drawings, compressed ones (.svgz) too.
+    nonisolated static let svgTypes: [UTType] = {
+        var types: [UTType] = [.svg]
+        for type in [UTType(filenameExtension: "svgz", conformingTo: .data), UTType("noventix.SwipeAndSketch.svgz")].compactMap({ $0 }) where !types.contains(type) {
+            types.append(type)
+        }
+        return types
+    }()
+
+    nonisolated static func importTypes(mesh: Bool) -> [UTType] {
         let extensions = mesh ? ["stl", "3mf"] : ["step", "stp"]
         let declared = (mesh ? ["stl", "3mf"] : ["step"]).compactMap { UTType("noventix.SwipeAndSketch.\($0)") }
         var types: [UTType] = []
