@@ -318,6 +318,31 @@ final class SVGImportTests: XCTestCase {
         XCTAssertTrue(linked.warnings.messages.contains { $0.hasPrefix("Pictures linked from other files") })
     }
 
+    // MARK: Regions of moved and copied sketches
+
+    /// Regions found once serve the same shapes moved to another plane or copied with new ids,
+    /// and are exactly what finding them afresh gives (so dragging a large drawing stays quick).
+    func testRegionsOfMovedAndCopiedSketchesComeFromTheCache() throws {
+        let shapes = try layout("sign") { $0.grouping = .single }.sketches[0].shapes
+        RegionCache.shared.removeAll()
+        let original = Geometry.profiles(in: shapes, on: .top)
+        let plane = try XCTUnwrap(SketchPlane.top.transformed(by: .move([5, 2, 0])))
+        let moved = shapes.map { var shape = $0; shape.plane = plane; return shape }
+        let copies = shapes.map { var shape = $0; shape.id = UUID(); shape.plane = plane; return shape }
+        let start = Date()
+        let movedRegions = Geometry.profiles(in: moved, on: plane)
+        let copiedRegions = Geometry.profiles(in: copies, on: plane)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 0.05)
+        XCTAssertEqual(movedRegions.map(\.id), original.map(\.id))
+        XCTAssertTrue(movedRegions.allSatisfy { $0.plane == plane })
+        RegionCache.shared.removeAll()
+        XCTAssertEqual(movedRegions, Geometry.profiles(in: moved, on: plane))
+        RegionCache.shared.removeAll()
+        let fresh = Geometry.profiles(in: copies, on: plane)
+        XCTAssertEqual(copiedRegions, fresh)
+        XCTAssertTrue(Set(copiedRegions.flatMap(\.sourceIDs)).isSubset(of: Set(copies.map(\.id))))
+    }
+
     // MARK: The assistant
 
     func testTheAssistantCanBringInADrawing() throws {

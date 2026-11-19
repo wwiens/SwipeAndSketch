@@ -26,19 +26,73 @@ extension Geometry {
     }
 }
 
-/// Recently found regions, keyed by the shapes (and face edges) they came from.
+/// Recently found regions, keyed by the shapes (and face edges) they came from. Regions are
+/// worked out in the sketch's own coordinates and depend only on the shapes' geometry, so the key
+/// leaves out the plane and the shapes' ids: a sketch moved or turned with its plane, or a copy
+/// of it, has the same regions, moved to its plane and named after its own shapes. Dragging a
+/// large sketch (an imported drawing of a thousand shapes) found its regions again on every step,
+/// and with Create Copy too (November 19, 2026).
 final class RegionCache: @unchecked Sendable {
     static let shared = RegionCache()
     private let lock = NSLock()
-    private var entries: [(shapes: [SketchShape], plane: SketchPlane, face: [FaceEdge], besides: [[SketchShape]], profiles: [SketchProfile])] = []
+    private struct Entry {
+        var shapes: [SketchShape]
+        var ids: [UUID]
+        var besidesIDs: [[UUID]]
+        var plane: SketchPlane
+        var face: [FaceEdge]
+        var besides: [[SketchShape]]
+        var profiles: [SketchProfile]
+    }
+    private var entries: [Entry] = []
+
+    private static let anyID = UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+
+    /// The shapes as the key keeps them: on one plane and with one id, which stand for any.
+    private static func geometry(_ shapes: [SketchShape]) -> [SketchShape] {
+        shapes.map { var shape = $0; shape.plane = .top; shape.id = anyID; shape.sketch = nil; return shape }
+    }
+
+    /// Regions found for shapes named `from`, renamed for the same shapes named `to`.
+    private static func renamed(_ profiles: [SketchProfile], from old: [UUID], to new: [UUID]) -> [SketchProfile] {
+        var names: [UUID: UUID] = [:]
+        for (a, b) in zip(old, new) where a != b { names[a] = b }
+        guard !names.isEmpty else { return profiles }
+        let texts = Dictionary(names.map { ($0.key.uuidString, $0.value.uuidString) }, uniquingKeysWith: { first, _ in first })
+        return profiles.map { profile in
+            var profile = profile
+            // A region's shapes are listed by id, as finding them lists them.
+            let wasSorted = profile.sourceIDs.map(\.uuidString) == profile.sourceIDs.map(\.uuidString).sorted()
+            profile.sourceIDs = profile.sourceIDs.map { names[$0] ?? $0 }
+            if wasSorted { profile.sourceIDs.sort { $0.uuidString < $1.uuidString } }
+            // An id is its shapes' ids joined with ":" (in order), and for a piece of divided shapes
+            // where it lies after "#".
+            let place = profile.id.firstIndex(of: "#").map { String(profile.id[$0...]) } ?? ""
+            let tokens = profile.id.dropLast(place.count).split(separator: ":", omittingEmptySubsequences: false).map { texts[String($0)] ?? String($0) }
+            let sortedSources = profile.sourceIDs.map(\.uuidString).sorted()
+            let joined = Set(tokens) == Set(sortedSources) && tokens.count == sortedSources.count ? sortedSources : tokens
+            profile.id = joined.joined(separator: ":") + place
+            return profile
+        }
+    }
 
     func profiles(_ shapes: [SketchShape], plane: SketchPlane, face: [FaceEdge] = [], besides: [[SketchShape]] = [],
                   compute: () -> [SketchProfile]) -> [SketchProfile] {
+        let key = Self.geometry(shapes), others = besides.map(Self.geometry)
+        let ids = shapes.map(\.id), besidesIDs = besides.map { $0.map(\.id) }
         lock.lock()
-        // The shape count and last shape first, the whole lists only when those agree.
-        if let index = entries.firstIndex(where: { $0.shapes.count == shapes.count && $0.shapes.last?.id == shapes.last?.id && $0.plane == plane &&
-                                                    $0.shapes == shapes && $0.face == face && $0.besides == besides }) {
-            let entry = entries.remove(at: index)
+        // The shape count first, the whole lists only when it agrees.
+        if let index = entries.firstIndex(where: { $0.shapes.count == key.count && $0.shapes == key && $0.face == face && $0.besides == others }) {
+            var entry = entries.remove(at: index)
+            if entry.ids != ids || entry.besidesIDs != besidesIDs {
+                entry.profiles = Self.renamed(entry.profiles, from: entry.ids + entry.besidesIDs.flatMap { $0 }, to: ids + besidesIDs.flatMap { $0 })
+                entry.ids = ids
+                entry.besidesIDs = besidesIDs
+            }
+            if entry.plane != plane {
+                entry.plane = plane
+                entry.profiles = entry.profiles.map { var profile = $0; profile.plane = plane; return profile }
+            }
             entries.insert(entry, at: 0)
             lock.unlock()
             return entry.profiles
@@ -46,7 +100,7 @@ final class RegionCache: @unchecked Sendable {
         lock.unlock()
         let profiles = compute()
         lock.lock()
-        entries.insert((shapes, plane, face, besides, profiles), at: 0)
+        entries.insert(Entry(shapes: key, ids: ids, besidesIDs: besidesIDs, plane: plane, face: face, besides: others, profiles: profiles), at: 0)
         // Room for every sketch of a large project, so drawing one does not push out the others.
         if entries.count > 256 { entries.removeLast() }
         lock.unlock()

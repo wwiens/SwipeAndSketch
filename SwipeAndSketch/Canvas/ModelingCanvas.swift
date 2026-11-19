@@ -278,9 +278,19 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
     /// Region fills and sketch outlines from the last content rebuild, with what made them, so a
     /// rebuild (a selection or tool change, a drag of one sketch) reuses every one that is the same
     /// instead of tessellating and uploading all of them again (November 8, 2026).
-    private struct FillKey: Equatable { var profile: SketchProfile; var color: UIColor; var onTop: Bool }
+    /// Fills and outlines are built in their plane's own coordinates and placed on it by their
+    /// node's transform, so their keys leave the plane out: a sketch moved or turned (dragging a
+    /// large imported drawing, November 19, 2026) keeps its nodes and only places them again.
+    private struct FillKey: Equatable {
+        var profile: SketchProfile; var color: UIColor; var onTop: Bool
+        init(profile: SketchProfile, color: UIColor, onTop: Bool) {
+            var planeless = profile
+            planeless.plane = .top
+            self.profile = planeless; self.color = color; self.onTop = onTop
+        }
+    }
     private struct OutlineKey: Equatable {
-        var points: [Point2]; var plane: SketchPlane; var color: UIColor; var closed: Bool; var dashed: Bool; var weight: Double
+        var points: [Point2]; var color: UIColor; var closed: Bool; var dashed: Bool; var weight: Double
         var onTop: Bool
         /// Dashes are laid out in screen points, so a dashed outline also depends on the zoom.
         var zoom: Double
@@ -1075,7 +1085,15 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         let pickedShapes = Set(pickedProfiles.flatMap(\.sourceIDs)).union(session.selectedChain?.map(\.id) ?? [])
         let pickedSketches = Set(session.selectedItems.compactMap { item -> UUID? in if case .sketch(let id) = item { id } else { nil } })
             .union(session.selectedGroup != nil ? session.selectedMembers.sketches : [])
-        for profile in session.visibleWorkspace.profiles {
+        // Nodes of regions and shapes that are gone, which a newcomer drawn exactly the same may
+        // take over: dragging with Create Copy makes new copies (new ids) on every step.
+        let profilesNow = session.visibleWorkspace.profiles
+        let profileIDs = Set(profilesNow.map(\.id)), shapeIDs = Set(session.visibleWorkspace.shapes.map(\.id))
+        func signature(_ points: [Point2]) -> String { points.first.map { "\(points.count) \($0.x) \($0.y)" } ?? "" }
+        var spareFills: [String: [String]] = [:], spareOutlines: [String: [UUID]] = [:]
+        for (id, entry) in fillNodes where !profileIDs.contains(id) { spareFills[signature(entry.key.profile.outline), default: []].append(id) }
+        for (id, entry) in outlineNodes where !shapeIDs.contains(id) { spareOutlines[signature(entry.key.points), default: []].append(id) }
+        for profile in profilesNow {
             let plane = profile.plane
             let selected = pickedIDs.contains(profile.id)
             if isCovered(profile) {
@@ -1091,8 +1109,17 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             let onTop = sketching && (plane == session.plane || selected)
             let key = FillKey(profile: profile, color: fillColor, onTop: onTop)
             let fill: SCNNode
+            let spare = spareFills[signature(key.profile.outline)]?.firstIndex { fillNodes[$0]?.key == key }
             if let cached = fillNodes[profile.id], cached.key == key, keptFills[profile.id] == nil {
                 fill = cached.node
+                fill.simdTransform = plane.basis
+                fill.simdPosition = plane.position(height: 0.01)
+            } else if keptFills[profile.id] == nil, let spare, let id = spareFills[signature(key.profile.outline)]?.remove(at: spare),
+                      let cached = fillNodes[id] {
+                fill = cached.node
+                fill.name = "profile|" + profile.id
+                fill.simdTransform = plane.basis
+                fill.simdPosition = plane.position(height: 0.01)
             } else {
                 fill = planarNode(path: path(for: profile), plane: plane, height: 0.01, color: fillColor, name: "profile|" + profile.id)
                 if onTop { drawOnTop(fill, order: 9) }
@@ -1115,11 +1142,20 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
                 : highlightsPlane ? UIColor.systemGray.withAlphaComponent(0.45) : .systemGray
             let weight = highlightsPlane && (active || selected || picked) ? 1.35 : 1
             let onTop = sketching && (active || selected)
-            let key = OutlineKey(points: shape.outline, plane: shape.plane, color: color, closed: shape.isClosed, dashed: shape.isConstruction,
+            let key = OutlineKey(points: shape.outline, color: color, closed: shape.isClosed, dashed: shape.isConstruction,
                                  weight: weight, onTop: onTop, zoom: shape.isConstruction ? orthographicHeight : 0)
             let outline: SCNNode
+            let spare = spareOutlines[signature(key.points)]?.firstIndex { outlineNodes[$0]?.key == key }
             if let cached = outlineNodes[shape.id], cached.key == key, keptOutlines[shape.id] == nil {
                 outline = cached.node
+                outline.simdTransform = shape.plane.basis
+                outline.simdPosition = shape.plane.position(height: 0.035)
+            } else if keptOutlines[shape.id] == nil, let spare, let id = spareOutlines[signature(key.points)]?.remove(at: spare),
+                      let cached = outlineNodes[id] {
+                outline = cached.node
+                outline.name = "shape|" + shape.id.uuidString
+                outline.simdTransform = shape.plane.basis
+                outline.simdPosition = shape.plane.position(height: 0.035)
             } else {
                 outline = outlineNode(shape.outline, plane: shape.plane, color: color, closed: shape.isClosed,
                                       name: "shape|" + shape.id.uuidString, dashed: shape.isConstruction, weight: weight)
