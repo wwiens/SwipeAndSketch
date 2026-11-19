@@ -7,6 +7,15 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		65080FDA668A7B5402372FFC /* SwipeAndSketch/Core/SVGDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 319453462BF7BE4605F61C78 /* SwipeAndSketch/Core/SVGDocument.swift */; };
+		F2596B9D3188A27F9568C7AB /* SwipeAndSketch/Core/SVGPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E223F9830D90EA6DF620836 /* SwipeAndSketch/Core/SVGPaths.swift */; };
+		2E3058498077169D8C9B424C /* SwipeAndSketch/Core/SVGRender.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD1CC8EA76DE63BEB7665B53 /* SwipeAndSketch/Core/SVGRender.swift */; };
+		8C5A5305E0EFFCE8C71E8199 /* SwipeAndSketch/Core/SVGText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A87E58560F72A1A3C5D7DEF /* SwipeAndSketch/Core/SVGText.swift */; };
+		4D458D9EBD1C67B2F7FCF340 /* SwipeAndSketch/Core/CurveFitting.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD179363FA8518E4E8B99330 /* SwipeAndSketch/Core/CurveFitting.swift */; };
+		C14B82B2DA630D26C2303000 /* SwipeAndSketch/Core/ImageTracing.swift in Sources */ = {isa = PBXBuildFile; fileRef = B395142D690CFA3D87F59BBE /* SwipeAndSketch/Core/ImageTracing.swift */; };
+		A40ABEEDA1FD3B3C35962954 /* SwipeAndSketch/Core/SVGImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83E759BA20B9D7DFD48A6B82 /* SwipeAndSketch/Core/SVGImport.swift */; };
+		774B02D41E8D9B8DC0C8D927 /* SwipeAndSketch/App/SVGImportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2991925B447D8F4D47761ECA /* SwipeAndSketch/App/SVGImportSheet.swift */; };
+		19CEDA47A80D2304FA49A4EC /* Tests/AppTests/SVGImportToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E101DEC24BBD212A79C32BB9 /* Tests/AppTests/SVGImportToolTests.swift */; };
 		01FD45B97FC94BB9B65F50A1 /* Tests/AppTests/SketchToolsToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43691DD3546F4AC69431AACC /* Tests/AppTests/SketchToolsToolTests.swift */; };
 		0236E86CE05A9AC7687A13C5 /* Tests/AppTests/FaceSketchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BDF94EC4AAE4DC5771E16D6 /* Tests/AppTests/FaceSketchTests.swift */; };
 		03066284C6AF3282C8640C25 /* SwipeAndSketch/Core/Workspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6E7E8C055A07A444FDA8585 /* SwipeAndSketch/Core/Workspace.swift */; };
@@ -203,6 +212,15 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		319453462BF7BE4605F61C78 /* SwipeAndSketch/Core/SVGDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/SVGDocument.swift; sourceTree = SOURCE_ROOT; };
+		6E223F9830D90EA6DF620836 /* SwipeAndSketch/Core/SVGPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/SVGPaths.swift; sourceTree = SOURCE_ROOT; };
+		DD1CC8EA76DE63BEB7665B53 /* SwipeAndSketch/Core/SVGRender.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/SVGRender.swift; sourceTree = SOURCE_ROOT; };
+		8A87E58560F72A1A3C5D7DEF /* SwipeAndSketch/Core/SVGText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/SVGText.swift; sourceTree = SOURCE_ROOT; };
+		CD179363FA8518E4E8B99330 /* SwipeAndSketch/Core/CurveFitting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/CurveFitting.swift; sourceTree = SOURCE_ROOT; };
+		B395142D690CFA3D87F59BBE /* SwipeAndSketch/Core/ImageTracing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/ImageTracing.swift; sourceTree = SOURCE_ROOT; };
+		83E759BA20B9D7DFD48A6B82 /* SwipeAndSketch/Core/SVGImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/SVGImport.swift; sourceTree = SOURCE_ROOT; };
+		2991925B447D8F4D47761ECA /* SwipeAndSketch/App/SVGImportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/SVGImportSheet.swift; sourceTree = SOURCE_ROOT; };
+		E101DEC24BBD212A79C32BB9 /* Tests/AppTests/SVGImportToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/SVGImportToolTests.swift; sourceTree = SOURCE_ROOT; };
 		01FF8B448E584D2685A229CA /* SwipeAndSketch/App/HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/HomeView.swift; sourceTree = SOURCE_ROOT; };
 		021BB602308717C800AA9C34 /* SwipeAndSketch.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = SwipeAndSketch.entitlements; path = SwipeAndSketch/SwipeAndSketch.entitlements; sourceTree = "<group>"; };
 		02855DB21DA44D3BB2F01188 /* Tests/AppTests/ThreadToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/ThreadToolTests.swift; sourceTree = SOURCE_ROOT; };
@@ -478,6 +496,14 @@
 				37B6030E3768484F99114843 /* SwipeAndSketch/Core/Text.swift */,
 				5E04ABF4886C481D8E38456F /* SwipeAndSketch/Core/Threads.swift */,
 				CB449467744B407693813A4D /* SwipeAndSketch/Core/Import.swift */,
+				319453462BF7BE4605F61C78 /* SwipeAndSketch/Core/SVGDocument.swift */,
+				6E223F9830D90EA6DF620836 /* SwipeAndSketch/Core/SVGPaths.swift */,
+				DD1CC8EA76DE63BEB7665B53 /* SwipeAndSketch/Core/SVGRender.swift */,
+				8A87E58560F72A1A3C5D7DEF /* SwipeAndSketch/Core/SVGText.swift */,
+				CD179363FA8518E4E8B99330 /* SwipeAndSketch/Core/CurveFitting.swift */,
+				B395142D690CFA3D87F59BBE /* SwipeAndSketch/Core/ImageTracing.swift */,
+				83E759BA20B9D7DFD48A6B82 /* SwipeAndSketch/Core/SVGImport.swift */,
+				2991925B447D8F4D47761ECA /* SwipeAndSketch/App/SVGImportSheet.swift */,
 				670776899FD3227D80DC1FE1 /* SwipeAndSketch/Core/Export.swift */,
 				948AB146F9322C1A874D7EE2 /* SwipeAndSketch/Core/SketchGuides.swift */,
 				66060981B3FBCA6E212ECB79 /* SwipeAndSketch/Core/SketchPlanes.swift */,
@@ -571,6 +597,7 @@
 				7B38294A86F84D149339BA18 /* Tests/AppTests/AssistantTests.swift */,
 				7A1FA58EB4C61842032C3FBF /* Tests/AppTests/GeneratedPartTests.swift */,
 				ED2E242DCD8B46688AB73B71 /* Tests/AppTests/ImportToolTests.swift */,
+				E101DEC24BBD212A79C32BB9 /* Tests/AppTests/SVGImportToolTests.swift */,
 				F738E7ECEBDB2192068EE6C9 /* Tests/AppTests/JoinToolTests.swift */,
 				8147A9E314B42887C310D656 /* Tests/AppTests/FaceExtrusionToolTests.swift */,
 				618180C2B1650579CC894D34 /* Tests/AppTests/SketchingTests.swift */,
@@ -805,6 +832,7 @@
 				3033A63182D64B4494837FAD /* Tests/AppTests/AssistantTests.swift in Sources */,
 				8933CB1E12A988FD6619AEA9 /* Tests/AppTests/GeneratedPartTests.swift in Sources */,
 				EDCF250D54664EFE990AADBF /* Tests/AppTests/ImportToolTests.swift in Sources */,
+				19CEDA47A80D2304FA49A4EC /* Tests/AppTests/SVGImportToolTests.swift in Sources */,
 				8F89FEE67D1AAED9C942104F /* Tests/AppTests/JoinToolTests.swift in Sources */,
 				8E75D50EB316D922054EDEEA /* Tests/AppTests/FaceExtrusionToolTests.swift in Sources */,
 				C84D4254B84FA4B2DE25C0E2 /* Tests/AppTests/SketchingTests.swift in Sources */,
@@ -904,6 +932,14 @@
 				7F64811E9BD34DCE89D76A04 /* SwipeAndSketch/Core/Text.swift in Sources */,
 				4AD14F4282874B73AF348CD2 /* SwipeAndSketch/Core/Threads.swift in Sources */,
 				3FE26E7AE8C54D45B1513397 /* SwipeAndSketch/Core/Import.swift in Sources */,
+				65080FDA668A7B5402372FFC /* SwipeAndSketch/Core/SVGDocument.swift in Sources */,
+				F2596B9D3188A27F9568C7AB /* SwipeAndSketch/Core/SVGPaths.swift in Sources */,
+				2E3058498077169D8C9B424C /* SwipeAndSketch/Core/SVGRender.swift in Sources */,
+				8C5A5305E0EFFCE8C71E8199 /* SwipeAndSketch/Core/SVGText.swift in Sources */,
+				4D458D9EBD1C67B2F7FCF340 /* SwipeAndSketch/Core/CurveFitting.swift in Sources */,
+				C14B82B2DA630D26C2303000 /* SwipeAndSketch/Core/ImageTracing.swift in Sources */,
+				A40ABEEDA1FD3B3C35962954 /* SwipeAndSketch/Core/SVGImport.swift in Sources */,
+				774B02D41E8D9B8DC0C8D927 /* SwipeAndSketch/App/SVGImportSheet.swift in Sources */,
 				96B02BCF046A174438AAA9C2 /* SwipeAndSketch/Core/Export.swift in Sources */,
 				FFED0DC3AEE810B781D45B4C /* SwipeAndSketch/Core/SketchGuides.swift in Sources */,
 				CB1790C5EAB3EDB1A9319743 /* SwipeAndSketch/Core/SketchPlanes.swift in Sources */,

@@ -570,7 +570,7 @@ import XCTest
         }
         XCTAssertFalse(app.buttons["Reset View"].exists)
         app.buttons["project.import"].tap()
-        for kind in ["import.step", "import.mesh", "import.project"] {
+        for kind in ["import.step", "import.mesh", "import.svg", "import.project", "import.pasteSVG"] {
             XCTAssertTrue(app.buttons[kind].waitForExistence(timeout: 5), kind)
         }
         attach("Import sheet")
@@ -716,6 +716,52 @@ import XCTest
             Thread.sleep(forTimeInterval: 0.5)
         }
         field.typeText(text)
+    }
+
+    /// SVG pasted from a design app comes in through the SVG Import sheet as colored solids.
+    func testPastedSVGComesInThroughTheImportSheet() {
+        continueAfterFailure = false
+        let app = app()
+        XCTAssertTrue(app.staticTexts["project.title"].waitForExistence(timeout: 20))
+        func attach(_ name: String) {
+            let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); shot.name = name; shot.lifetime = .keepAlways; add(shot)
+        }
+        UIPasteboard.general.string = """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 60" width="120mm" height="60mm">
+              <rect width="120" height="60" fill="#fff"/>
+              <rect x="5" y="5" width="110" height="50" rx="6" fill="#111"/>
+              <circle cx="30" cy="30" r="15" fill="#d32f2f"/>
+              <text x="52" y="38" font-family="Helvetica" font-weight="bold" font-size="22" fill="#d32f2f">SVG</text>
+            </svg>
+            """
+        app.buttons["Project menu"].tap()
+        app.buttons["project.import"].tap()
+        let paste = app.buttons["import.pasteSVG"]
+        XCTAssertTrue(paste.waitForExistence(timeout: 5))
+        paste.tap()
+        let confirm = app.buttons["svgImport.confirm"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 20))
+        let summary = app.staticTexts["svgImport.summary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        let fitted = NSPredicate(format: "label CONTAINS 'sketches'")
+        expectation(for: fitted, evaluatedWith: summary)
+        waitForExpectations(timeout: 20)
+        XCTAssertTrue(app.segmentedControls["svgImport.grouping"].buttons["By Color"].isSelected)
+        attach("SVG Import sheet")
+        let sheet = app.collectionViews.firstMatch
+        let solids = app.switches["svgImport.solids"]
+        for _ in 0..<4 where !solids.isHittable { sheet.swipeUp() }
+        solids.switches.firstMatch.tap()
+        let made = NSPredicate(format: "label CONTAINS 'solids'")
+        expectation(for: made, evaluatedWith: summary)
+        for _ in 0..<4 where !summary.isHittable { sheet.swipeDown() }
+        waitForExpectations(timeout: 20)
+        attach("SVG Import sheet with solids")
+        confirm.tap()
+        XCTAssertFalse(confirm.waitForExistence(timeout: 3))
+        let status = NSPredicate(format: "label BEGINSWITH 'Imported Pasted Drawing'")
+        XCTAssertTrue(app.staticTexts.containing(status).firstMatch.waitForExistence(timeout: 10))
+        attach("Imported SVG solids")
     }
 
     func app(arguments: [String] = []) -> XCUIApplication {

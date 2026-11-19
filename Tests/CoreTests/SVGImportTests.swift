@@ -223,6 +223,18 @@ final class SVGImportTests: XCTestCase {
         XCTAssertTrue(red.contains { $0.profile.holes?.count == 1 }, "The red circle around the white dot")
         XCTAssertEqual(placed.solids.filter { $0.color == .black }.count, 1)
         XCTAssertFalse(placed.solids.contains { $0.color == .white }, "White makes no solids")
+        // Regions whose middle is outside them (a V, a G) still go to the right color.
+        let lettering = try SVGImport.read(data: Data("""
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 60" width="120mm" height="60mm">
+              <rect x="5" y="5" width="110" height="50" fill="#111"/>
+              <text x="20" y="40" font-family="Helvetica" font-weight="bold" font-size="30" fill="#d32f2f">VG</text>
+            </svg>
+            """.utf8), name: "letters")
+        var options = SVGImport.defaultOptions(for: lettering)
+        options.solidHeight = 1
+        let letters = try SVGImport.layout(lettering, options: options, placement: top)
+        XCTAssertEqual(letters.solids.filter { $0.color == .red }.count, 2)
+        XCTAssertEqual(letters.solids.filter { $0.color == .black }.count, 1)
 
         let added = try XCTUnwrap(SVGImport.adding(placed, name: "sign", to: Workspace()))
         let workspace = added.workspace

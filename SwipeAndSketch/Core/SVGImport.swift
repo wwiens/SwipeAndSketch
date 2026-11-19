@@ -104,6 +104,8 @@ enum SVGImport {
         struct SketchPart {
             var name: String
             var shapes: [SketchShape]
+            /// The drawing's color for a sketch of one color.
+            var color: SVGColor?
         }
         struct SolidPart {
             var name: String
@@ -340,7 +342,8 @@ enum SVGImport {
                 guard !ofColor.isEmpty else { continue }
                 shapes += fitted(ofColor.compactMap(\.geometry.areaPath), lines: ofColor.compactMap(\.geometry.linePath))
             }
-            if !shapes.isEmpty { parts.append(Layout.SketchPart(name: name, shapes: deduplicated(shapes))) }
+            let used = Set(selected.map(\.color))
+            if !shapes.isEmpty { parts.append(Layout.SketchPart(name: name, shapes: deduplicated(shapes), color: used.count == 1 ? used.first.map { colors[$0] } : nil)) }
         }
 
         switch options.grouping {
@@ -355,7 +358,7 @@ enum SVGImport {
             for color in order {
                 let lines = items.filter { $0.color == color }.compactMap(\.geometry.linePath)
                 let shapes = fitted(visible[color], lines: lines)
-                if !shapes.isEmpty { parts.append(Layout.SketchPart(name: colorName(color), shapes: shapes)) }
+                if !shapes.isEmpty { parts.append(Layout.SketchPart(name: colorName(color), shapes: shapes, color: colors[color])) }
             }
         }
 
@@ -372,8 +375,9 @@ enum SVGImport {
                 let loops = CurveFitting.loops(of: area, tolerance: tolerance, gap: nil)
                 let shapes = CurveFitting.shapes(loops, plane: placement.plane)
                 for profile in Geometry.profiles(in: shapes, on: placement.plane) {
-                    let anchor = profile.anchor
-                    guard area.contains(CGPoint(x: anchor.x, y: anchor.y), using: .winding) else { continue }
+                    // A point surely inside the region (a V's or a G's middle is not).
+                    let inside = profile.insidePoint
+                    guard area.contains(CGPoint(x: inside.x, y: inside.y), using: .winding) else { continue }
                     guard profile.isSolidProfile, ProjectCodec.polygonWork(of: profile) != nil else { skipped += 1; continue }
                     solids.append(Layout.SolidPart(name: colorName(color), profile: profile, color: bodyColor(colors[color])))
                 }

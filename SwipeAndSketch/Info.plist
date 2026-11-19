@@ -114,6 +114,23 @@
 				<string>model/3mf</string>
 			</dict>
 		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Compressed SVG Drawing</string>
+			<key>UTTypeIdentifier</key>
+			<string>noventix.SwipeAndSketch.svgz</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>svgz</string>
+				</array>
+			</dict>
+		</dict>
 	</array>
 </dict>
 </plist>

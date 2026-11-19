@@ -165,6 +165,20 @@ struct FaceSelection: Equatable {
     var point: SIMD3<Double>?
 }
 
+/// An SVG drawing waiting for the SVG Import sheet: what it is and where it goes.
+struct SVGImportRequest: Identifiable {
+    struct Target: Sendable {
+        var placement: SVGImport.Placement
+        /// The selected face's size on its plane, when it goes on a face.
+        var face: CGSize?
+        /// That face's edges, kept with the sketches (see `Sketch.faceEdges`).
+        var faceEdges: [FaceEdge]?
+    }
+    let id = UUID()
+    var drawing: SVGImport.Drawing
+    var target: Target
+}
+
 /// Sketching locked to one plane, entered from a face's Sketch button or a drawing tool.
 struct SketchMode: Equatable {
     var plane: SketchPlane
@@ -1234,6 +1248,8 @@ struct DimensionEdit: Identifiable {
     var gridSpacing = 5.0
     var status = "Ready"
     var saveError: String?
+    /// An SVG drawing read and waiting for its options (the SVG Import sheet).
+    var svgImport: SVGImportRequest?
     var cameraRequest = 0
     var cameraAction: CameraAction = .align(.top)
     var showHelp = false
@@ -5236,6 +5252,108 @@ struct DimensionEdit: Identifiable {
             let result = Result { try ProjectImport.read(url, name: name) }
             await self?.finishProjectImport(result)
         }
+    }
+
+    // MARK: SVG import
+
+    /// Reads an SVG drawing (off the main thread), then opens the SVG Import sheet to size and
+    /// place it. It goes on the selected flat face, the plane being sketched on, or the current
+    /// plane, centered there.
+    func importSVG(from url: URL) {
+        let name = url.deletingPathExtension().lastPathComponent
+        startSVGImport(name: name) {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            return try SVGImport.read(url, name: name)
+        }
+    }
+
+    /// SVG markup from somewhere other than a file: pasted, or dropped from another app.
+    func importSVG(data: Data, name: String) {
+        startSVGImport(name: name) { try SVGImport.read(data: data, name: name) }
+    }
+
+    private func startSVGImport(name: String, read: @escaping @Sendable () throws -> SVGImport.Drawing) {
+        guard requireNewEditingAccess() else { return }
+        guard !isEditingBlocked, svgImport == nil else { return }
+        // Where it goes, worked out before the selection and sketch mode are put away.
+        let target = svgPlacement()
+        cancelTransient()
+        endSketchMode()
+        selection = nil
+        isProjectBusy = true
+        isImportingGeometry = true
+        status = "Reading \(name)…"
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let result = Result { try read() }
+            await self?.showSVGImport(result, target: target)
+        }
+    }
+
+    private func showSVGImport(_ result: Result<SVGImport.Drawing, any Error>, target: SVGImportRequest.Target) {
+        isProjectBusy = false
+        switch result {
+        case .failure(let error):
+            isImportingGeometry = false
+            status = "Not imported"
+            saveError = "Import failed. \(error.localizedDescription)"
+        case .success(let drawing):
+            status = "Choose how \(drawing.name) comes in"
+            svgImport = SVGImportRequest(drawing: drawing, target: target)
+        }
+    }
+
+    /// The selected flat face (its plane, centered on it), the plane being sketched on, or the
+    /// current plane at its origin.
+    private func svgPlacement() -> SVGImportRequest.Target {
+        let face = selectedFace?.plane != nil ? selectedFace : sketchMode?.face
+        if let face, let plane = face.plane, let body = workspace.bodies.first(where: { $0.id == face.bodyID }),
+           let solid = try? SolidKernel.solid(for: body) {
+            let edges = face.point.flatMap { solid.face(containing: $0, normal: plane.normalAxis) }.flatMap { solid.faceEdges($0, on: plane) } ??
+                solid.faceEdges(face.face, on: plane)
+            let points = (edges ?? []).flatMap { $0.shape(on: plane, id: UUID()).outline }
+            if let minX = points.map(\.x).min(), let maxX = points.map(\.x).max(), let minY = points.map(\.y).min(), let maxY = points.map(\.y).max() {
+                let box = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+                return .init(placement: .init(plane: plane, center: Point2(x: box.midX, y: box.midY)), face: box.size, faceEdges: edges)
+            }
+            return .init(placement: .init(plane: plane, center: plane.coordinates(of: face.center)), face: nil, faceEdges: nil)
+        }
+        return .init(placement: .init(plane: sketchMode?.plane ?? plane), face: nil, faceEdges: nil)
+    }
+
+    /// Adds the laid-out drawing (from the SVG Import sheet) as one undo step, in a Model Tree group
+    /// named after it, and selects the group, ready to move.
+    func confirmSVGImport(_ layout: SVGImport.Layout) {
+        guard let request = svgImport else { return }
+        svgImport = nil
+        defer { isImportingGeometry = false }
+        guard !isEditingBlocked else { return }
+        guard var next = SVGImport.adding(layout, name: request.drawing.name, to: workspace) else {
+            status = "Not imported"
+            saveError = "Import failed. The project cannot hold this drawing: it has too many shapes, or they are too large for a project file."
+            return
+        }
+        // On a face, the sketches know its edges, so the face less the drawing is a region too.
+        if let edges = request.target.faceEdges {
+            let before = Set(workspace.sketches.map(\.id))
+            for index in next.workspace.sketches.indices where !before.contains(next.workspace.sketches[index].id) {
+                next.workspace.sketches[index].faceEdges = edges
+            }
+        }
+        tool = .select
+        commit(next.workspace)
+        selection = .group(next.group)
+        let sketches = layout.sketches.count, solids = layout.solids.count
+        status = "Imported \(request.drawing.name): " + (solids > 0 ? "\(solids) solid\(solids == 1 ? "" : "s") and " : "") +
+            "\(sketches) sketch\(sketches == 1 ? "" : "es")" + (workspace.groupNames[next.group].map { " in the group \($0)" } ?? "")
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    func cancelSVGImport() {
+        guard svgImport != nil else { return }
+        svgImport = nil
+        isImportingGeometry = false
+        status = "Not imported"
     }
 
     private func finishProjectImport(_ result: Result<ProjectImport.Result, any Error>) {
