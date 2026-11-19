@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50" width="100mm" height="50mm">
+  <!-- A circle drawn as two half-turn arcs, and a rounded rectangle. -->
+  <path d="M10 25 a15 15 0 1 0 30 0 a15 15 0 1 0 -30 0z"/>
+  <rect x="50" y="5" width="45" height="40" rx="8" fill="#000"/>
+</svg>

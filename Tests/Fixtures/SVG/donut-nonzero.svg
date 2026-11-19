@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100mm" height="100mm">
+  <!-- Both loops turn the same way: under nonzero the inside is filled too. -->
+  <path d="M10 50a40 40 0 1 0 80 0a40 40 0 1 0-80 0zM30 50a20 20 0 1 0 40 0a20 20 0 1 0-40 0z"/>
+</svg>

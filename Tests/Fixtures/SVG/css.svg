@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40" width="100mm" height="40mm">
+  <defs><style>
+    /* written the way Illustrator writes it */
+    .cls-1{fill:#e53935;}
+    .cls-2{fill:#1e88e5}
+    g .cls-3 { fill: #e53935 }
+  </style></defs>
+  <rect class="cls-1" x="0" y="0" width="30" height="30"/>
+  <rect class="cls-2" x="35" y="0" width="30" height="30"/>
+  <g><rect class="cls-3" x="70" y="0" width="30" height="30" style="fill: #1e88e5"/></g>
+</svg>

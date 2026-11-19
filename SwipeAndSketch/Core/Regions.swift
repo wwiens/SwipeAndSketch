@@ -136,8 +136,19 @@ struct SketchCurve: Sendable {
         switch kind {
         case .polyline(let points):
             return (Point2(x: points.map(\.x).min()!, y: points.map(\.y).min()!), Point2(x: points.map(\.x).max()!, y: points.map(\.y).max()!))
-        case .arc(let center, let radius, _, _):
-            return (center - Point2(x: radius, y: radius), center + Point2(x: radius, y: radius))
+        case .arc(let center, let radius, let from, let sweep):
+            // The ends, and the circle's extreme points the arc passes (a short arc of a large
+            // circle has a small box, so it is tested against few others).
+            var xs = [cos(from), cos(from + sweep)], ys = [sin(from), sin(from + sweep)]
+            for quarter in 0..<4 {
+                let angle = Double(quarter) * .pi / 2
+                var t = angle - from
+                t -= 2 * .pi * (t / (2 * .pi)).rounded(.down)
+                if t <= sweep + 1e-12 { xs.append(cos(angle)); ys.append(sin(angle)) }
+            }
+            let slack = radius * 1e-9
+            return (center + Point2(x: xs.min()! * radius - slack, y: ys.min()! * radius - slack),
+                    center + Point2(x: xs.max()! * radius + slack, y: ys.max()! * radius + slack))
         }
     }
 
@@ -331,8 +342,25 @@ struct SketchRegions {
         // Where shapes meet, as parameters along each curve.
         var splits = curves.map { $0.map { _ in [Double]() } }
         var touched = [Bool](repeating: false, count: shapes.count)
-        for i in shapes.indices {
-            for j in shapes.indices where j > i {
+        // Only shapes whose boxes overlap can meet: swept left to right by their boxes, each shape
+        // is tested against those starting before it ends (rather than every other shape).
+        let boxes = curves.map { pieces -> (low: Point2, high: Point2) in
+            let all = pieces.map(\.bounds)
+            return (Point2(x: all.map(\.low.x).min() ?? 0, y: all.map(\.low.y).min() ?? 0),
+                    Point2(x: all.map(\.high.x).max() ?? 0, y: all.map(\.high.y).max() ?? 0))
+        }
+        let byLeft = shapes.indices.sorted { boxes[$0].low.x < boxes[$1].low.x }
+        var pairs: [(Int, Int)] = []
+        for (position, first) in byLeft.enumerated() {
+            for second in byLeft[(position + 1)...] {
+                guard boxes[second].low.x <= boxes[first].high.x + 1e-5 else { break }
+                guard boxes[second].low.y <= boxes[first].high.y + 1e-5, boxes[first].low.y <= boxes[second].high.y + 1e-5 else { continue }
+                pairs.append((min(first, second), max(first, second)))
+            }
+        }
+        pairs.sort { $0 < $1 }
+        for (i, j) in pairs {
+            do {
                 for (ci, a) in curves[i].enumerated() {
                     for (cj, b) in curves[j].enumerated() {
                         let meetings = a.meetings(with: b)
