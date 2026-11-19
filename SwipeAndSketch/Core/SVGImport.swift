@@ -430,10 +430,30 @@ enum SVGImport {
         return shapes.filter { seen.insert(key($0)).inserted }
     }
 
+    /// The app's color nearest a drawing's, by hue first: a dark navy is blue, not black.
+    /// Colors with little saturation, or too dark or light to show any, are black, gray, or white.
     static func nearestBodyColor(_ color: SVGColor) -> BodyColor {
-        BodyColor.allCases.min { a, b in
-            SVGColor(red: a.rgb.red, green: a.rgb.green, blue: a.rgb.blue).distance(to: color) <
-                SVGColor(red: b.rgb.red, green: b.rgb.green, blue: b.rgb.blue).distance(to: color)
+        func hsl(_ r: Double, _ g: Double, _ b: Double) -> (hue: Double, saturation: Double, lightness: Double) {
+            let high = max(r, g, b), low = min(r, g, b), lightness = (high + low) / 2, range = high - low
+            guard range > 1e-9 else { return (0, 0, lightness) }
+            let saturation = range / (1 - abs(2 * lightness - 1))
+            var hue: Double
+            if high == r { hue = (g - b) / range } else if high == g { hue = (b - r) / range + 2 } else { hue = (r - g) / range + 4 }
+            hue = (hue * 60 + 360).truncatingRemainder(dividingBy: 360)
+            return (hue, saturation, lightness)
+        }
+        let own = hsl(color.red, color.green, color.blue)
+        if own.saturation < 0.25 || own.lightness < 0.12 || own.lightness > 0.94 {
+            return own.lightness < 0.3 ? .black : own.lightness > 0.8 ? .white : .gray
+        }
+        let chromatic: [BodyColor] = [.red, .orange, .yellow, .green, .blue, .purple, .pink]
+        return chromatic.min { a, b in
+            func cost(_ candidate: BodyColor) -> Double {
+                let other = hsl(candidate.rgb.red, candidate.rgb.green, candidate.rgb.blue)
+                let turn = abs(own.hue - other.hue), hue = min(turn, 360 - turn) / 180
+                return hue + 0.5 * abs(own.lightness - other.lightness)
+            }
+            return cost(a) < cost(b)
         } ?? .gray
     }
 

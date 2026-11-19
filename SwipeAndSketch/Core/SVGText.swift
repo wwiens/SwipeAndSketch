@@ -18,7 +18,7 @@ enum SVGText {
         var layout = Layout(sheet: sheet, viewport: viewport)
         layout.walk(text, style: style, root: true)
         layout.finishChunk()
-        warnings.add(layout.warnings)
+        for message in layout.warnings.messages { warnings.note(message) }
         return layout.runs
     }
 
@@ -120,7 +120,7 @@ enum SVGText {
             guard size > 0, size.isFinite else { return }
             let (font, substitute) = SVGFonts.font(family: style["font-family"] ?? "sans-serif", weight: style["font-weight"] ?? "normal",
                                                    italic: ["italic", "oblique"].contains(style["font-style"]?.lowercased() ?? ""), size: size)
-            if let substitute { warnings.add(substitute) }
+            if let substitute { warnings.note(substitute) }
             let spacing = SVGValues.userLength(style["letter-spacing"].flatMap { $0.lowercased() == "normal" ? nil : $0 }, fontSize: size) ?? 0
             let wordSpacing = SVGValues.userLength(style["word-spacing"].flatMap { $0.lowercased() == "normal" ? nil : $0 }, fontSize: size) ?? 0
             let attributed = NSAttributedString(string: string, attributes: [NSAttributedString.Key(kCTFontAttributeName as String): font])

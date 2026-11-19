@@ -40,6 +40,8 @@ struct SVGWarnings: Sendable, Equatable {
         counts[message, default: 0] += count
     }
     mutating func add(_ other: SVGWarnings) { for message in other.order { add(message, count: other.counts[message] ?? 1) } }
+    /// A message that says the same however often it happens (which font stood in for which).
+    mutating func note(_ message: String) { if counts[message] == nil { add(message) } }
     var isEmpty: Bool { order.isEmpty }
     var messages: [String] { order.map { message in (counts[message] ?? 1) > 1 ? "\(message) (\(counts[message] ?? 1)×)" : message } }
 }
@@ -153,7 +155,7 @@ struct SVGRenderer {
         if let clipID = style.reference("clip-path") {
             if let clip = clipPath(clipID, for: node, style: style, context: context) { context.clips.append(clip) }
         }
-        if topLevel, ["g", "svg", "a", "switch"].contains(node.name) || node.name == "use" {
+        if topLevel, ["g", "svg", "a", "switch"].contains(node.name) {
             context.layer = layer(for: node)
         } else if node.name == "g", node["inkscape:groupmode"] == "layer" {
             context.layer = layer(for: node)

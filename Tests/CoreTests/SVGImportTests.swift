@@ -337,6 +337,19 @@ final class SVGImportTests: XCTestCase {
         XCTAssertThrowsError(try bench.addSVG("hello", on: .world(.top), center: nil, width: nil, byColor: false, solidHeight: nil))
     }
 
+    func testDrawingColorsGoToTheNearestAppColorByHue() {
+        func nearest(_ hex: String) -> BodyColor { SVGImport.nearestBodyColor(SVGValues.color(hex)!.color) }
+        XCTAssertEqual(nearest("#1e3a8a"), .blue, "Dark navy is blue")
+        XCTAssertEqual(nearest("#111827"), .black)
+        XCTAssertEqual(nearest("#64748b"), .gray)
+        XCTAssertEqual(nearest("#e5e7eb"), .white)
+        XCTAssertEqual(nearest("#d32f2f"), .red)
+        XCTAssertEqual(nearest("#ec4899"), .pink)
+        XCTAssertEqual(nearest("#8b4513"), .orange, "Brown is closest to orange")
+        XCTAssertEqual(nearest("#0f766e"), .green)
+        XCTAssertEqual(nearest("#7c3aed"), .purple)
+    }
+
     // MARK: Values
 
     func testValues() {
