@@ -245,8 +245,12 @@ final class SVGImportTests: XCTestCase {
         XCTAssertTrue(workspace.sketches.allSatisfy(\.isHidden), "With solids, the sketches are hidden")
         XCTAssertEqual(workspace.groups.count, 2, "The two red solids share a group")
         XCTAssertEqual(try ProjectCodec.decode(ProjectCodec.encode(Project(workspace: workspace))).workspace, workspace)
-        // The solids build.
+        // The solids build, and a 3MF carries their colors for the slicer.
         for body in workspace.bodies { XCTAssertGreaterThan(try SolidKernel.solid(for: body).volume, 0) }
+        let package = try Zip.entries(ModelExport.threeMF(workspace.bodies, title: "sign"))
+        let model = String(decoding: try XCTUnwrap(package.first { $0.key.hasSuffix(".model") }?.value), as: UTF8.self)
+        XCTAssertTrue(model.contains("displaycolor=\"\(BodyColor.red.hex)FF\""))
+        XCTAssertTrue(model.contains("displaycolor=\"\(BodyColor.black.hex)FF\""))
     }
 
     func testLayersBecomeSketches() throws {
@@ -312,6 +316,25 @@ final class SVGImportTests: XCTestCase {
             <image href='https://example.com/a.png' width='10' height='10'/></svg>
             """.utf8), name: "linked")
         XCTAssertTrue(linked.warnings.messages.contains { $0.hasPrefix("Pictures linked from other files") })
+    }
+
+    // MARK: The assistant
+
+    func testTheAssistantCanBringInADrawing() throws {
+        var bench = AssistantWorkbench(workspace: Workspace())
+        let reply = try bench.addSVG("""
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 20"><rect width="40" height="20" fill="#1e88e5"/><circle cx="10" cy="10" r="5" fill="#fff"/></svg>
+            """, on: .world(.front), center: [0, 0, 30], width: 80, byColor: true, solidHeight: 3)
+        XCTAssertTrue(reply.hasPrefix("Imported the drawing, 80 × 40 mm, on Front"), reply)
+        XCTAssertEqual(bench.workspace.sketches.count, 2, "Blue and white")
+        XCTAssertTrue(bench.workspace.sketches.allSatisfy { $0.plane == .front })
+        XCTAssertEqual(bench.workspace.bodies.map(\.color), [.blue], "White makes no solid")
+        let bounds = try SolidKernel.solid(for: bench.workspace.bodies[0]).bounds
+        XCTAssertEqual(bounds.max.z - bounds.min.z, 40, accuracy: 1e-3)
+        XCTAssertEqual((bounds.max.z + bounds.min.z) / 2, 30, accuracy: 1e-3)
+        XCTAssertEqual(bench.changes.count, 1)
+        XCTAssertThrowsError(try bench.addSVG("<svg xmlns='http://www.w3.org/2000/svg'/>", on: .world(.top), center: nil, width: nil, byColor: false, solidHeight: nil))
+        XCTAssertThrowsError(try bench.addSVG("hello", on: .world(.top), center: nil, width: nil, byColor: false, solidHeight: nil))
     }
 
     // MARK: Values

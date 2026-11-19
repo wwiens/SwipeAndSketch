@@ -309,6 +309,32 @@ struct AddSketchTool: Tool {
     }
 }
 
+struct AddSVGTool: Tool {
+    let context: AssistantContext
+    let name = "add_svg"
+    let description = "Brings in an SVG drawing as sketches (lines, arcs, circles) on a plane or flat face: a logo, icon, emblem, or lettering the user pasted, or an outline you write as SVG for a shape add_sketch cannot draw. Fills, strokes, text, and colors are read; optionally makes solids of a height, one per region of each color, colored to match."
+    @Generable struct Arguments {
+        @Guide(description: "The SVG markup, a whole <svg> element with a viewBox (and width/height in mm for a real size)") var svg: String
+        @Guide(description: "top, front, right, a construction plane (Plane 01), an existing sketch's plane (Sketch 02), or a body name to put it on its face")
+        var on: String
+        @Guide(description: "When on is a body: the face, e.g. top, front, or a face number") var face: String?
+        @Guide(description: "Where the drawing's middle goes, world mm (projected onto the plane); omit for the plane's origin") var x: Double?
+        var y: Double?
+        var z: Double?
+        @Guide(description: "The drawing's width in mm; omit to use the size the SVG gives") var width: Double?
+        @Guide(description: "true for one sketch per color (for multicolor prints)") var byColor: Bool?
+        @Guide(description: "Make solids this many mm tall, one per region of each color; omit for sketches only") var solidHeight: Double?
+    }
+    func call(arguments: Arguments) async throws -> String {
+        await context.run("Importing a drawing on \(arguments.on)") { bench in
+            let target = try planeTarget(arguments.on, face: arguments.face, in: bench)
+            let center = arguments.x != nil || arguments.y != nil || arguments.z != nil ? SIMD3(arguments.x ?? 0, arguments.y ?? 0, arguments.z ?? 0) : nil
+            return try bench.addSVG(arguments.svg, on: target, center: center, width: arguments.width, byColor: arguments.byColor ?? true,
+                                    solidHeight: arguments.solidHeight)
+        }
+    }
+}
+
 struct SketchAndExtrudeTool: Tool {
     let context: AssistantContext
     let name = "sketch_and_extrude"
@@ -1148,7 +1174,7 @@ extension AssistantContext {
          MoveItemsTool(context: self), SetDimensionTool(context: self), DeleteItemsTool(context: self), SetVisibilityTool(context: self), CombineTool(context: self),
          MirrorTool(context: self), PatternTool(context: self), AddPlaneTool(context: self), RevolveTool(context: self), RoundSketchCornersTool(context: self), MeasureTool(context: self),
          ScaleItemsTool(context: self), DeleteFacesTool(context: self), DeleteHoleTool(context: self), EditFinishTool(context: self), EditFeatureTool(context: self), AddPrimitiveTool(context: self), AddConstructionTool(context: self), ShapeOperationTool(context: self), ResizeFaceTool(context: self), OffsetSketchTool(context: self), ExtendLineTool(context: self), AddScrewLidTool(context: self), RenameItemTool(context: self), GroupItemsTool(context: self), UngroupTool(context: self),
-         SetColorTool(context: self)]
+         SetColorTool(context: self), AddSVGTool(context: self)]
         let recipes: [any Tool] = AssistantEngine.nativeTemplatesEnabled ? [CADRecipeTool(context: self), MakeSlipLidBoxTool(context: self)] : []
         return (AssistantEngine.requirementChecksEnabled ? [RecordRequirementsTool(context: self)] : []) + recipes + tools
     }
