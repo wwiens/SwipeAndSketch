@@ -228,12 +228,35 @@ struct DesignProposal: Codable, Equatable, Sendable {
         var target: String?
         var expected: [Double]
     }
-    struct Transform: Codable, Equatable, Sendable {
-        var body: String
-        var move: [Double]
-        var rotateDegrees: Double
+    /// An operation on whole solids, after the features: move (and turn), mirror, or a linear or
+    /// circular pattern. One shape for all four keeps the schema within Claude's grammar limit.
+    struct SolidOp: Codable, Equatable, Sendable {
+        enum Kind: String, Codable, CaseIterable, Sendable { case move, mirror, linear, circular }
+        var op: Kind
+        var bodies: [String]
+        /// move: the axis to turn about; mirror: the plane's normal; linear: the direction; circular: the axis.
         var axis: String
-        var pivot: [Double]?
+        /// move: [dx, dy, dz] mm.
+        var vector: [Double]
+        /// move: the turning pivot; mirror: a point on the plane; circular: the center. [] is the
+        /// solid's center for a move and the origin otherwise.
+        var point: [Double]
+        /// move: degrees to turn; circular: the degrees the pattern spans (0 or 360: a whole turn).
+        var angle: Double
+        /// linear and circular: instances, the original included.
+        var count: Int
+        /// linear: mm between neighbors, negative toward the axis's negative side.
+        var spacing: Double
+        /// mirror: add the image beside the original instead of replacing it.
+        var keepInput: Bool
+        /// circular: turn each copy with the pattern.
+        var rotateCopies: Bool
+
+        init(op: Kind, bodies: [String], axis: String = "z", vector: [Double] = [], point: [Double] = [], angle: Double = 0,
+             count: Int = 0, spacing: Double = 0, keepInput: Bool = false, rotateCopies: Bool = false) {
+            self.op = op; self.bodies = bodies; self.axis = axis; self.vector = vector; self.point = point; self.angle = angle
+            self.count = count; self.spacing = spacing; self.keepInput = keepInput; self.rotateCopies = rotateCopies
+        }
     }
     var intent: Intent
     var message: String
@@ -242,12 +265,13 @@ struct DesignProposal: Codable, Equatable, Sendable {
     var features: [DesignFeature]
     /// Features to remove; a solid's alias removes the whole solid.
     var removeIDs: [String]
-    var transforms: [Transform]
+    /// After the features, in order.
+    var solidOps: [SolidOp]
 
     init(intent: Intent = .change, message: String = "", requirements: [Requirement] = [], features: [DesignFeature] = [],
-         removeIDs: [String] = [], transforms: [Transform] = []) {
+         removeIDs: [String] = [], solidOps: [SolidOp] = []) {
         self.intent = intent; self.message = message; self.requirements = requirements
-        self.features = features; self.removeIDs = removeIDs; self.transforms = transforms
+        self.features = features; self.removeIDs = removeIDs; self.solidOps = solidOps
     }
 
     init(from decoder: any Decoder) throws {
@@ -258,7 +282,7 @@ struct DesignProposal: Codable, Equatable, Sendable {
         requirements = try c.decodeIfPresent([Requirement].self, forKey: .requirements) ?? []
         features = try c.decodeIfPresent([DesignFeature].self, forKey: .features) ?? []
         removeIDs = try c.decodeIfPresent([String].self, forKey: .removeIDs) ?? []
-        transforms = try c.decodeIfPresent([Transform].self, forKey: .transforms) ?? []
+        solidOps = try c.decodeIfPresent([SolidOp].self, forKey: .solidOps) ?? []
     }
 
     /// Reads a model's reply: the JSON object, also when wrapped in a code fence or prose.
@@ -304,7 +328,7 @@ enum DesignSchema {
             "requirements": ["type": "array", "items": requirement],
             "features": ["type": "array", "items": feature],
             "removeIDs": ["type": "array", "items": ["type": "string"]],
-            "transforms": ["type": "array", "items": transform]
+            "solidOps": ["type": "array", "items": solidOp]
         ])
     }
 
@@ -355,13 +379,15 @@ enum DesignSchema {
         ])
     }
 
-    static var transform: [String: Any] {
-        object([
-            "body": ["type": "string"],
-            "move": ["type": "array", "items": ["type": "number"]],
-            "rotateDegrees": ["type": "number"],
+    static var solidOp: [String: Any] {
+        let number: [String: Any] = ["type": "number"], numbers: [String: Any] = ["type": "array", "items": number]
+        return object([
+            "op": ["type": "string", "enum": DesignProposal.SolidOp.Kind.allCases.map(\.rawValue)],
+            "bodies": ["type": "array", "items": ["type": "string"]],
             "axis": ["type": "string", "enum": ["x", "y", "z"]],
-            "pivot": ["type": "array", "items": ["type": "number"]]
+            "vector": numbers, "point": numbers, "angle": number,
+            "count": ["type": "integer"], "spacing": number,
+            "keepInput": ["type": "boolean"], "rotateCopies": ["type": "boolean"]
         ])
     }
 

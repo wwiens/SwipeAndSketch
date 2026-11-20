@@ -88,7 +88,7 @@ import Foundation
             let body = try self.payload(request)
             requests.append(body)
             if body["output_config"]?["format"] != nil {
-                return try self.http(self.claudeAnswer(#"{"intent":"handOff","message":"","requirements":[],"features":[],"removeIDs":[],"transforms":[]}"#),
+                return try self.http(self.claudeAnswer(#"{"intent":"handOff","message":"","requirements":[],"features":[],"removeIDs":[],"solidOps":[]}"#),
                                      url: ClaudeAssistant.endpoint)
             }
             return try self.http(self.claudeAnswer("Threads need the thread tool."), url: ClaudeAssistant.endpoint)
@@ -115,7 +115,7 @@ import Foundation
             if stage == 2 {
                 // The second request sees the plate the first one made, by alias.
                 XCTAssertTrue(input.contains("\"id\":\"B1.F4\""), input)
-                let edit = #"{"intent":"change","message":"","requirements":[],"removeIDs":[],"transforms":[],"features":["#
+                let edit = #"{"intent":"change","message":"","requirements":[],"removeIDs":[],"solidOps":[],"features":["#
                     + #"{"id":"B1.F4","body":"B1","kind":"cylinder","operation":"cut","axis":"+z","x":34,"y":-19,"z":0,"height":5,"radius":3},"#
                     + #"{"id":"B1.F5","body":"B1","kind":"cylinder","operation":"cut","axis":"+z","x":34,"y":19,"z":0,"height":5,"radius":3}]}"#
                 return try self.http(self.claudeAnswer(edit), url: ClaudeAssistant.endpoint)

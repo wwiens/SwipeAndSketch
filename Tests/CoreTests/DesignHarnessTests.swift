@@ -206,11 +206,62 @@ final class DesignHarnessTests: XCTestCase {
 
     func testTransformsMoveWholeSolidsAfterTheirFeatures() throws {
         var proposal = plateProposal()
-        proposal.transforms = [.init(body: "Plate", move: [100, 0, 0], rotateDegrees: 0, axis: "z", pivot: nil)]
+        proposal.solidOps = [.init(op: .move, bodies: ["Plate"], vector: [100, 0, 0])]
         let bench = try applied(proposal).bench
         let bounds = try SolidKernel.solid(for: bench.workspace.bodies[0]).bounds
         XCTAssertEqual(bounds.min.x, 60, accuracy: 1e-6)
         XCTAssertEqual(bench.changes.count, 2)
+    }
+
+    func testMirrorsAndPatternsCopyWholeSolidsAfterTheFeatures() throws {
+        // A new plate, mirrored across X = 60 beside itself, then that pair in a row of 2 along +Y.
+        var proposal = plateProposal()
+        proposal.solidOps = [.init(op: .mirror, bodies: ["Plate"], axis: "x", point: [60, 0, 0], keepInput: true)]
+        let mirrored = try applied(proposal).bench
+        XCTAssertEqual(mirrored.workspace.bodies.count, 2)
+        let image = try SolidKernel.solid(for: mirrored.workspace.bodies[1])
+        XCTAssertEqual(image.bounds.min.x, 80, accuracy: 1e-6)
+        XCTAssertEqual(image.bounds.max.x, 160, accuracy: 1e-6)
+        XCTAssertEqual(image.volume, 19_574.613, accuracy: 0.1)
+        XCTAssertTrue(mirrored.changes.last?.hasPrefix("Mirrored Plate across the plane X = 60, keeping the originals") ?? false, "\(mirrored.changes)")
+
+        // Replacing instead: still one solid, now on the other side.
+        var replace = plateProposal()
+        replace.solidOps = [.init(op: .mirror, bodies: ["Plate"], axis: "y", point: [0, 30, 0])]
+        let flipped = try applied(replace).bench.workspace
+        XCTAssertEqual(flipped.bodies.count, 1)
+        XCTAssertEqual(try SolidKernel.solid(for: flipped.bodies[0]).bounds.min.y, 35, accuracy: 1e-6)
+
+        // A linear grid on an existing solid, and a circular pattern of a post.
+        let workspace = try applied(plateProposal()).bench.workspace
+        let (_, aliases) = DesignExport.document(of: workspace)
+        var grid = AssistantWorkbench(workspace: workspace)
+        try grid.applyDesign(DesignProposal(solidOps: [.init(op: .linear, bodies: ["B1"], axis: "x", count: 3, spacing: 90),
+                                                       .init(op: .linear, bodies: ["B1"], axis: "y", count: 2, spacing: 60)]), aliases: aliases)
+        XCTAssertEqual(grid.workspace.bodies.count, 6)
+        XCTAssertEqual(try SolidKernel.solid(for: grid.workspace.bodies.last!).bounds.max.x, 220, accuracy: 1e-6)
+        var round = AssistantWorkbench(workspace: Workspace())
+        let post = Feature(id: "post", body: "Post", kind: .cylinder, operation: .add, axis: .pz, x: 30, y: 0, z: 0, height: 10, radius: 3)
+        try round.applyDesign(DesignProposal(features: [post], solidOps: [.init(op: .circular, bodies: ["Post"], axis: "z", point: [0, 0, 0],
+                                                                              count: 6, rotateCopies: true)]), aliases: DesignAliases())
+        XCTAssertEqual(round.workspace.bodies.count, 6, "Angle 0 spreads them over a whole turn")
+        let centers = try round.workspace.bodies.map { body -> SIMD3<Double> in
+            let b = try SolidKernel.solid(for: body).bounds
+            return (b.min + b.max) / 2
+        }
+        XCTAssertEqual(centers.map { simd_length(SIMD2($0.x, $0.y)) }.min() ?? 0, 30, accuracy: 1e-6)
+        XCTAssertEqual(centers[3].x, -30, accuracy: 1e-6)
+
+        // Mistakes say why.
+        let bench = AssistantWorkbench(workspace: workspace)
+        XCTAssertThrowsError(try bench.applying(DesignProposal(solidOps: [.init(op: .mirror, bodies: ["B9"], axis: "x", keepInput: true)]), aliases: aliases)) { error in
+            XCTAssertTrue((error as? AssistantWorkbench.Failure)?.message.contains("not a solid in the design") ?? false, "\(error)")
+        }
+        XCTAssertThrowsError(try bench.applying(DesignProposal(solidOps: [.init(op: .linear, bodies: ["B1"], axis: "x", count: 1, spacing: 10)]), aliases: aliases))
+        // A negative spacing runs toward -X.
+        var left = AssistantWorkbench(workspace: workspace)
+        try left.applyDesign(DesignProposal(solidOps: [.init(op: .linear, bodies: ["B1"], axis: "x", count: 2, spacing: -90)]), aliases: aliases)
+        XCTAssertEqual(try SolidKernel.solid(for: left.workspace.bodies[1]).bounds.min.x, -130, accuracy: 1e-6)
     }
 
     func testSchemaIsStrict() throws {

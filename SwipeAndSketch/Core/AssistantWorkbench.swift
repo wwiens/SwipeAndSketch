@@ -703,17 +703,59 @@ struct AssistantWorkbench: Sendable {
             try keep(result.workspace, change: first, checking: result.touched, focus: result.touched.first.map { .body($0) })
             changes += result.changes.dropFirst()
         }
-        for transform in proposal.transforms {
-            guard let id = aliases.bodies[transform.body] ?? result.newBodies[transform.body],
-                  workspace.bodies.contains(where: { $0.id == id }) else {
-                throw Failure("Transform names \(transform.body), which is not a solid in the design.")
+        func solids(_ names: [String], for use: String) throws -> [UUID] {
+            guard !names.isEmpty else { throw Failure("Name the solids to \(use).") }
+            return try names.map { name in
+                guard let id = aliases.bodies[name] ?? result.newBodies[name], workspace.bodies.contains(where: { $0.id == id }) else {
+                    throw Failure("A \(use) names \(name), which is not a solid in the design.")
+                }
+                return id
             }
-            guard transform.move.count == 3 || transform.move.isEmpty, transform.pivot.map({ $0.count == 3 || $0.isEmpty }) ?? true else {
-                throw Failure("A transform's move and pivot are [x, y, z] in mm.")
+        }
+        func point(_ values: [Double], _ what: String) throws -> SIMD3<Double>? {
+            guard !values.isEmpty else { return nil }
+            guard values.count == 3, values.allSatisfy({ $0.isFinite && abs($0) <= 100_000 }) else { throw Failure("A \(what) is [x, y, z] in mm.") }
+            return SIMD3(values[0], values[1], values[2])
+        }
+        let axes: [String: Int] = ["x": 0, "y": 1, "z": 2]
+        var index = 0
+        let ops = proposal.solidOps
+        while index < ops.count {
+            let op = ops[index]
+            guard let axisIndex = axes[op.axis.lowercased()] else { throw Failure("Axes are x, y, or z.") }
+            switch op.op {
+            case .move:
+                let ids = try solids(op.bodies, for: "move")
+                let offset = try point(op.vector, "move") ?? .zero
+                try transform(items: ids.map(bodyName), move: offset, rotate: op.angle, axis: op.axis, pivot: try point(op.point, "pivot"), copy: false)
+            case .mirror:
+                let ids = try solids(op.bodies, for: "mirror")
+                var normal = SIMD3<Double>(repeating: 0)
+                normal[axisIndex] = 1
+                let through = try point(op.point, "mirror point") ?? .zero
+                guard let plane = SketchPlane.through(through, normal: normal),
+                      let made = Mirroring.mirror(workspace, bodies: ids, sketches: [], across: plane, keepOriginals: op.keepInput) else {
+                    throw Failure("Those solids cannot be mirrored there.")
+                }
+                let label = "the plane \(op.axis.uppercased()) = \(Self.mm(through[axisIndex]))"
+                try keep(made.workspace, change: "Mirrored \(ids.map(bodyName).joined(separator: ", ")) across \(label)\(op.keepInput ? ", keeping the originals" : "")",
+                         checking: made.bodies, focus: made.bodies.first.map { .body($0) })
+            case .linear:
+                // Up to three linear operations in a row on the same solids make one grid.
+                var rows: [(direction: String, count: Int, spacing: Double)] = []
+                while index < ops.count, ops[index].op == .linear, ops[index].bodies == op.bodies, rows.count < 3 {
+                    let row = ops[index]
+                    rows.append(((row.spacing < 0 ? "-" : "+") + row.axis.lowercased(), row.count, abs(row.spacing)))
+                    index += 1
+                }
+                try linearPattern(items: try solids(op.bodies, for: "pattern").map(bodyName), rows: rows)
+                continue
+            case .circular:
+                let ids = try solids(op.bodies, for: "pattern")
+                try circularPattern(items: ids.map(bodyName), axis: op.axis, center: try point(op.point, "center") ?? .zero, count: op.count,
+                                    angle: op.angle == 0 ? 360 : op.angle, rotateCopies: op.rotateCopies)
             }
-            let move = transform.move.count == 3 ? SIMD3(transform.move[0], transform.move[1], transform.move[2]) : .zero
-            let pivot = transform.pivot.flatMap { $0.count == 3 ? SIMD3($0[0], $0[1], $0[2]) : nil }
-            try self.transform(items: [bodyName(id)], move: move, rotate: transform.rotateDegrees, axis: transform.axis, pivot: pivot, copy: false)
+            index += 1
         }
         return result.newBodies
     }
