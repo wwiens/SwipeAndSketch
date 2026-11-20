@@ -56,9 +56,9 @@ enum DesignApply {
         for id in removals where aliases.bodies[id] == nil {
             guard let feature = aliases.exported[id] else { continue }
             lists[feature.body]?.removeAll { $0.id == id }
-            removedLines[feature.body, default: []].append("removed \(describe(feature))")
+            removedLines[feature.body, default: []].append(describe(feature))
         }
-        var newOrder: [String] = [], changedLines: [String: [String]] = [:]
+        var newOrder: [String] = [], changedLines: [String: [String]] = [:], addedLines: [String: [String]] = [:]
         for raw in proposal.features {
             var feature = raw.normalized()
             if let original = aliases.exported[feature.id] {
@@ -82,7 +82,7 @@ enum DesignApply {
                 guard feature.kind != .locked else { throw Failure("\(feature.id): locked features cannot be added; use block, cylinder, polygon, hole, fillet, chamfer, or shell.") }
                 if aliases.bodies[feature.body] == nil, lists[feature.body] == nil { newOrder.append(feature.body) }
                 lists[feature.body, default: []].append(Entry(id: feature.id, feature: feature, rebuilt: true, role: nil))
-                if aliases.bodies[feature.body] != nil { changedLines[feature.body, default: []].append("added \(describe(feature))") }
+                if aliases.bodies[feature.body] != nil { addedLines[feature.body, default: []].append(describe(feature)) }
             }
         }
 
@@ -96,12 +96,15 @@ enum DesignApply {
                 changes.append("Deleted \(name)")
                 continue
             }
-            let lines = (removedLines[alias] ?? []) + (changedLines[alias] ?? [])
-            guard !lines.isEmpty, let list = lists[alias] else { continue }
+            var parts: [String] = []
+            if let changed = changedLines[alias] { parts.append(grouped(changed)) }
+            if let added = addedLines[alias] { parts.append("added " + grouped(added)) }
+            if let removed = removedLines[alias] { parts.append("removed " + grouped(removed)) }
+            guard !parts.isEmpty, let list = lists[alias] else { continue }
             let rebuilt = try build(list, from: body, alias: alias, bench: bench)
             if let position = next.bodies.firstIndex(where: { $0.id == body.id }) { next.bodies[position] = rebuilt } else { next.bodies.insert(rebuilt, at: min(index, next.bodies.count)) }
             touched.append(body.id)
-            changes.append("\(name): " + lines.joined(separator: "; "))
+            changes.append("\(name): " + parts.joined(separator: "; "))
         }
         // New solids, in the order the proposal first named them.
         for key in newOrder {
@@ -115,9 +118,8 @@ enum DesignApply {
             next.bodies.append(body)
             touched.append(body.id)
             newBodies[key] = body.id
-            let rest = list.count - 1
-            changes.append("New \(body.name ?? key): \(describe(first.feature))" + (rest > 0 ? ", then \(rest) more feature\(rest == 1 ? "" : "s"): " +
-                list.dropFirst().map { describe($0.feature) }.joined(separator: "; ") : ""))
+            let rest = list.dropFirst().map { describe($0.feature) }
+            changes.append("New \(body.name ?? key): \(describe(first.feature))" + (rest.isEmpty ? "" : "; then " + grouped(rest)))
         }
         return Result(workspace: next, changes: changes, touched: touched, newBodies: newBodies)
     }
@@ -361,28 +363,46 @@ enum DesignApply {
 
     // MARK: Words
 
-    /// A feature in a few words, for the review card.
+    /// A feature in a few words, for the review card ("60 × 40 × 20 mm block", "Ø6 mm cut
+    /// through", "M3 countersink hole 6 mm deep", "3 mm fillet on vertical edges"). The direction is
+    /// given only when it is not the usual one (up for material, down for a cut).
     static func describe(_ f: DesignFeature) -> String {
         let mm = AssistantWorkbench.mm
-        let reach = f.throughAll == true ? "through all" : f.height.map { "\(mm($0)) mm" } ?? ""
-        let along = f.axis.map { " along \($0.rawValue.uppercased())" } ?? ""
-        let verb = f.operation == .cut ? "cut " : ""
+        let cut = f.operation == .cut, through = f.throughAll == true
+        let usual: DesignFeature.Axis = cut ? .nz : .pz
+        let along = f.axis.map { through || $0 == usual ? "" : " along \($0.rawValue.uppercased())" } ?? ""
+        let deep = through ? "through" : "\(mm(f.height ?? 0)) mm deep"
         switch f.kind {
         case .block:
             let corners = (f.radius ?? 0) > 0 ? ", R\(mm(f.radius ?? 0)) corners" : ""
-            return "\(verb)\(mm(f.width ?? 0)) × \(mm(f.depth ?? 0)) block \(reach)\(along)\(corners)"
-        case .cylinder: return "\(verb)Ø\(mm((f.radius ?? 0) * 2)) cylinder \(reach)\(along)"
-        case .polygon: return "\(verb)\(f.points?.count ?? 0)-point outline \(reach)\(along)"
+            let size = "\(mm(f.width ?? 0)) × \(mm(f.depth ?? 0))"
+            return (cut ? "\(size) mm pocket \(deep)" : "\(size) × \(mm(f.height ?? 0)) mm block") + along + corners
+        case .cylinder:
+            let diameter = "Ø\(mm((f.radius ?? 0) * 2))"
+            return (cut ? "\(diameter) mm cut \(deep)" : "\(diameter) × \(mm(f.height ?? 0)) mm cylinder") + along
+        case .polygon:
+            let sides = "\(f.points?.count ?? 0)-sided"
+            return (cut ? "\(sides) cut \(deep)" : "\(sides) outline \(mm(f.height ?? 0)) mm thick") + along
         case .hole:
             let hole = f.hole
-            let label = hole?.size ?? hole?.diameter.map { "Ø\(mm($0))" } ?? ""
+            let label = hole?.size ?? hole?.diameter.map { "Ø\(mm($0)) mm" } ?? "Hole"
             let type = hole.map { $0.type == .simple ? "" : " \($0.type.rawValue)" } ?? ""
-            return "\(label)\(type) hole \(reach) at \(AssistantWorkbench.point(SIMD3(f.x ?? 0, f.y ?? 0, f.z ?? 0)))"
+            return "\(label)\(type) hole \(deep)"
         case .fillet: return "\(mm(f.size ?? 0)) mm fillet" + (f.edges.map { " on \($0) edges" } ?? "")
         case .chamfer: return "\(mm(f.size ?? 0)) mm chamfer" + (f.edges.map { " on \($0) edges" } ?? "")
-        case .shell: return "shell, \(mm(f.size ?? 0)) mm walls" + ((f.faces ?? []).isEmpty ? "" : ", open at \((f.faces ?? []).joined(separator: ", "))")
+        case .shell: return "\(mm(f.size ?? 0)) mm shell" + ((f.faces ?? []).isEmpty ? "" : ", open at \((f.faces ?? []).joined(separator: ", "))")
         case .locked: return f.note ?? "locked feature"
         }
+    }
+
+    /// Phrases in order, a repeated one once with its count ("M3 hole through ×4").
+    static func grouped(_ phrases: [String]) -> String {
+        var order: [String] = [], counts: [String: Int] = [:]
+        for phrase in phrases {
+            if counts[phrase] == nil { order.append(phrase) }
+            counts[phrase, default: 0] += 1
+        }
+        return order.map { counts[$0]! > 1 ? "\($0) ×\(counts[$0]!)" : $0 }.joined(separator: "; ")
     }
 
     private static func duplicates(_ ids: [String]) -> [String] {

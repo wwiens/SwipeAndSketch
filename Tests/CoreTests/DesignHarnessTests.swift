@@ -49,7 +49,7 @@ final class DesignHarnessTests: XCTestCase {
             XCTAssertEqual(actual, expected, accuracy: 0.025)
         }
         XCTAssertEqual(bench.changes.count, 1)
-        XCTAssertTrue(bench.changes[0].hasPrefix("New Plate: 80 × 50 block 5 mm along +Z, R5 corners, then 4 more features"), bench.changes[0])
+        XCTAssertEqual(bench.changes, ["New Plate: 80 × 50 × 5 mm block, R5 corners; then Ø4.5 mm cut 5 mm deep along +Z ×4"])
     }
 
     func testExportReadsTheNativePlateBackAsTheSameFeatures() throws {
@@ -92,7 +92,7 @@ final class DesignHarnessTests: XCTestCase {
         XCTAssertEqual(zip(before.cuts, after.cuts).filter { $0 != $1 }.count, 2)
         XCTAssertEqual(try volume(after), 19_450.913, accuracy: 0.1)
         XCTAssertEqual(bench.changes.count, 1)
-        XCTAssertEqual(bench.changes[0], "Plate: cut Ø4.5 cylinder 5 mm along +Z → cut Ø6 cylinder 5 mm along +Z; cut Ø4.5 cylinder 5 mm along +Z → cut Ø6 cylinder 5 mm along +Z")
+        XCTAssertEqual(bench.changes[0], "Plate: Ø4.5 mm cut 5 mm deep along +Z → Ø6 mm cut 5 mm deep along +Z ×2")
         // And the same edit read from the model's JSON.
         let text = json(DesignProposal(features: right))
         var fromText = AssistantWorkbench(workspace: original)
@@ -273,7 +273,7 @@ final class DesignHarnessTests: XCTestCase {
         let united = try applied(DesignProposal(features: [base, tower], solidOps: [.init(op: .union, bodies: ["Base", "Tower"])])).bench
         XCTAssertEqual(united.workspace.bodies.map(\.name), ["Base"])
         XCTAssertEqual(try volume(united.workspace.bodies[0]), 40 * 40 * 10 + 10 * 10 * 20, accuracy: 1e-6)
-        XCTAssertTrue(united.changes.last?.hasPrefix("United Tower into Base") ?? false, "\(united.changes)")
+        XCTAssertEqual(united.changes, ["New Base: 40 × 40 × 10 mm block", "United Tower into Base"], "The used-up tower is told by the union's line")
 
         // A cutter made and subtracted in one proposal; then one kept, with 0.2 mm clearance.
         let cut = try applied(DesignProposal(features: [base, cutter], solidOps: [.init(op: .subtract, bodies: ["Base", "Cutter"])])).bench.workspace
@@ -301,6 +301,23 @@ final class DesignHarnessTests: XCTestCase {
         let far = Feature(id: "far", body: "Far", kind: .block, operation: .add, axis: .pz, x: 200, y: 0, z: 0, width: 10, depth: 10, height: 10)
         XCTAssertTrue(message(DesignProposal(features: [base, far], solidOps: [.init(op: .subtract, bodies: ["Base", "Far"])])).contains("do not overlap"))
         XCTAssertTrue(message(DesignProposal(features: [base, far], solidOps: [.init(op: .union, bodies: ["Base", "Far"])])).contains("do not touch"))
+    }
+
+    func testChangeLinesReadAsWordsNotIDs() throws {
+        let workspace = try applied(plateProposal()).bench.workspace
+        let (document, aliases) = DesignExport.document(of: workspace)
+        var base = document.features[0]
+        base.height = 8
+        let proposal = DesignProposal(features: [base,
+            Feature(id: "slot", body: "B1", kind: .block, operation: .cut, axis: .nz, x: 0, y: 0, z: 8, width: 20, depth: 6, height: 3),
+            Feature(id: "edge", body: "B1", kind: .chamfer, edges: "top outside", size: 0.5),
+            Feature(id: "m3", body: "B1", kind: .hole, axis: .pz, x: 0, y: 15, z: 8, throughAll: true, hole: .init(type: .countersink, size: "M3"))],
+                                      removeIDs: ["B1.F2"])
+        var bench = AssistantWorkbench(workspace: workspace)
+        try bench.applyDesign(proposal, aliases: aliases)
+        XCTAssertEqual(bench.changes, ["Plate: 80 × 50 × 5 mm block, R5 corners → 80 × 50 × 8 mm block, R5 corners; added 20 × 6 mm pocket 3 mm deep; "
+                                       + "0.5 mm chamfer on top outside edges; M3 countersink hole through; removed Ø4.5 mm cut 5 mm deep along +Z"])
+        XCTAssertFalse(bench.changes.joined().contains("B1"), "No feature IDs in the review card")
     }
 
     func testSchemaIsStrict() throws {

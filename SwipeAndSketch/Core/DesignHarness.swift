@@ -90,10 +90,11 @@ enum DesignHarness {
             attempts.append(attempt)
             if attempt.passed {
                 let bench = outcome.bench ?? start
-                let done = bench.changes.joined(separator: ". ")
+                // The review card lists the changes the app made; the reply is the model's own
+                // sentence about them, or those changes when it wrote none.
                 let note = proposal.message.trimmingCharacters(in: .whitespacesAndNewlines)
-                var reply = done.isEmpty ? (note.isEmpty ? "Nothing needed to change." : note) : done + "."
-                if !done.isEmpty, !note.isEmpty, note.count <= 300 { reply += " " + note }
+                let done = bench.changes.joined(separator: ". ")
+                let reply = !note.isEmpty ? String(note.prefix(600)) : done.isEmpty ? "Nothing needed to change." : done + "."
                 return Result(bench: bench, reply: reply, requirements: outcome.report, handOff: false, attempts: attempts)
             }
             if let bench = outcome.bench { last = (bench, outcome.report) }
@@ -245,7 +246,7 @@ enum DesignHarness {
     - intent "answer": a question about the design, or a question you must ask the user; message holds it; nothing changes.
     - intent "handOff": the request needs something outside this document: sketches, construction planes, threads, text, pegs, mirroring or patterning sketches or single features (only whole solids are mirrored or patterned here), split, revolve, loft, sweep, scale, colors, names, groups, hiding, or a locked feature's settings. Leave the lists empty.
     - requirements (with "change"): explicit, checkable requirements from the request, quoting the user's exact words, the expected numbers appearing in the quote. kind bodySize: target the solid's id or new name, expected [X size, Y size, Z size]; bodyCount: expected [count of all solids]; hole: expected [entry x, y, z, outward normal x, y, z, diameter, depth or -1 for through]; unchangedBody: target, expected []; notChecked for anything else. Never invent requirements or numbers.
-    - message: one short sentence for the user, such as sizes you chose when the request gave none.
+    - message: one or two plain sentences for the user, shown above the app's own list of the changes, in the past tense ("Rounded the four vertical edges…"): what the result is, and any size, position, or reading of the request you chose. Do not list feature IDs.
 
     Change only what the request asks; keep every other feature and id. New solids go beside existing ones, resting on z = 0, unless placed otherwise. Make solid, printable parts with as few features as do the job.
     """

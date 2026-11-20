@@ -77,8 +77,8 @@ import Foundation
         XCTAssertEqual(turn.backend, .openAI)
         XCTAssertEqual(turn.bench.workspace.bodies.count, 1)
         XCTAssertEqual(try SolidKernel.solid(for: turn.bench.workspace.bodies[0]).volume, 19_574.613, accuracy: 0.1)
-        XCTAssertTrue(turn.reply.hasPrefix("New Plate:"), turn.reply)
-        XCTAssertTrue(turn.reply.hasSuffix("Corner radius 5 mm."), turn.reply)
+        XCTAssertEqual(turn.reply, "Corner radius 5 mm.", "The model's sentence; the card lists the changes")
+        XCTAssertTrue(turn.bench.changes.first?.hasPrefix("New Plate: 80 × 50 × 5 mm block, R5 corners") ?? false, "\(turn.bench.changes)")
         XCTAssertEqual(turn.requirements.results.map(\.status), [.passed])
     }
 
@@ -131,7 +131,7 @@ import Foundation
         XCTAssertEqual(after.id, before.id)
         XCTAssertEqual(after.cuts.map(\.id), before.cuts.map(\.id))
         XCTAssertEqual(try SolidKernel.solid(for: after).volume, 19_450.913, accuracy: 0.1)
-        XCTAssertTrue(second.reply.hasPrefix("Plate: cut Ø4.5 cylinder 5 mm along +Z → cut Ø6 cylinder"), second.reply)
+        XCTAssertEqual(second.reply, "Plate: Ø4.5 mm cut 5 mm deep along +Z → Ø6 mm cut 5 mm deep along +Z ×2.", "With no sentence, the reply is the changes")
     }
 
     func testClaudeRefusalsAndCutOffRepliesAreErrorsNotDesigns() async throws {

@@ -699,9 +699,19 @@ struct AssistantWorkbench: Sendable {
     /// solids by the names the proposal gave them.
     @discardableResult mutating func applyDesign(_ proposal: DesignProposal, aliases: DesignAliases) throws -> [String: UUID] {
         let result = try DesignApply.apply(proposal, aliases: aliases, bench: self)
+        let before = changes.count
         if result.workspace != workspace, let first = result.changes.first {
             try keep(result.workspace, change: first, checking: result.touched, focus: result.touched.first.map { .body($0) })
             changes += result.changes.dropFirst()
+        }
+        // A new solid a later operation used up (a cutter subtracted, a tool united) is told by
+        // that operation's line, not as a new solid.
+        defer {
+            let gone = result.newBodies.filter { entry in !workspace.bodies.contains { $0.id == entry.value } }
+            if !gone.isEmpty {
+                let made = Set(gone.keys.compactMap { ItemNames.cleaned($0) }.map { "New " + $0 + ":" })
+                changes = changes.enumerated().filter { index, line in index < before || !made.contains { line.hasPrefix($0) } }.map(\.element)
+            }
         }
         func solids(_ names: [String], for use: String) throws -> [UUID] {
             guard !names.isEmpty else { throw Failure("Name the solids to \(use).") }
