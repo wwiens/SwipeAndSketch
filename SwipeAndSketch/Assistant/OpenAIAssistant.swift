@@ -116,6 +116,58 @@ import Foundation
         throw AssistantFailure(message: "OpenAI reached the request limit. Ask for fewer changes at a time.")
     }
 
+    /// One design proposal (DesignHarness): a single request with no tools, its reply held to the
+    /// proposal's JSON schema by strict structured output. Nothing is kept between requests.
+    func propose(_ design: DesignPlannerRequest, key: String, model: String, effort: String?) async throws -> DesignPlannerReply {
+        let schema = try JSONDecoder().decode(AssistantJSON.self, from: design.schema)
+        var fields: [String: AssistantJSON] = [
+            "model": .string(model), "instructions": .string(design.instructions),
+            "input": .string(design.input), "store": .bool(false), "max_output_tokens": .number(16384),
+            "text": .object(["format": .object(["type": .string("json_schema"), "name": .string(design.schemaName),
+                                                "strict": .bool(true), "schema": schema])])
+        ]
+        let sendsEffort = effort != nil && !noEffort.contains(model)
+        if sendsEffort, let effort { fields["reasoning"] = .object(["effort": .string(effort)]) }
+        var request = URLRequest(url: Self.endpoint)
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        try ProviderHTTP.json(&request, .object(fields))
+        let data: Data
+        do {
+            var (received, response) = try await ProviderHTTP.send(request, with: transport)
+            if response.statusCode == 400, sendsEffort, String(decoding: received, as: UTF8.self).localizedCaseInsensitiveContains("reasoning") {
+                noEffort.insert(model)
+                fields["reasoning"] = nil
+                try ProviderHTTP.json(&request, .object(fields))
+                (received, response) = try await ProviderHTTP.send(request, with: transport)
+            }
+            try Task.checkCancellation()
+            try Self.checkStatus(response.statusCode, data: received, model: model)
+            data = received
+        } catch is CancellationError { throw CancellationError() }
+        catch let error as URLError where error.code == .cancelled { throw CancellationError() }
+        catch let error as AssistantFailure { throw error }
+        catch { throw AssistantFailure(message: "OpenAI could not be reached. Check your internet connection and try again.", kind: .service) }
+
+        guard let response = try? JSONDecoder().decode(AssistantJSON.self, from: data), let output = response["output"]?.array else {
+            throw AssistantFailure(message: "OpenAI returned an incomplete response. Try again.", kind: .service)
+        }
+        let status = response["status"]?.string ?? "completed"
+        if status == "incomplete" {
+            let reason = response["incomplete_details"]?["reason"]?.string
+            throw AssistantFailure(message: reason == "content_filter" ? "OpenAI declined this request."
+                : "OpenAI reached its response limit before finishing the design. Ask for fewer changes at a time.",
+                kind: reason == "content_filter" ? .refusal : .execution)
+        }
+        guard status == "completed" else { throw AssistantFailure(message: "OpenAI stopped before completing this request. Try a smaller request.") }
+        let content = output.filter { $0["type"]?.string == "message" && $0["phase"]?.string != "commentary" }.flatMap { $0["content"]?.array ?? [] }
+        if content.contains(where: { $0["type"]?.string == "refusal" }) {
+            throw AssistantFailure(message: "OpenAI declined this request.", kind: .refusal)
+        }
+        let text = content.filter { $0["type"]?.string == "output_text" }.compactMap { $0["text"]?.string }.joined()
+        guard !text.isEmpty else { throw AssistantFailure(message: "OpenAI returned no design. Try again.") }
+        return DesignPlannerReply(text: text, model: response["model"]?.string ?? model)
+    }
+
     private static func checkStatus(_ status: Int, data: Data, model: String) throws {
         switch status {
         case 200..<300: return

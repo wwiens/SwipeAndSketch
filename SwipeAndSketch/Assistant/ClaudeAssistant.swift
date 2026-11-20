@@ -213,6 +213,59 @@ typealias ClaudeJSON = AssistantJSON
         throw AssistantFailure(message: "Claude reached the request limit. Ask for fewer changes at a time.")
     }
 
+    /// One design proposal (DesignHarness): a single request with no tools, its reply held to the
+    /// proposal's JSON schema by structured output (`output_config.format`). The instructions are
+    /// cached, so a correction, which repeats them, reads them from the cache.
+    func propose(_ design: DesignPlannerRequest, key: String, model: String = ClaudeAssistant.model,
+                 effort: String? = ClaudeAssistant.effort) async throws -> DesignPlannerReply {
+        let schema = try JSONDecoder().decode(ClaudeJSON.self, from: design.schema)
+        var output: [String: ClaudeJSON] = ["format": .object(["type": .string("json_schema"), "schema": schema])]
+        if let effort { output["effort"] = .string(effort) }
+        let body: ClaudeJSON = .object([
+            "model": .string(model), "max_tokens": .number(16384), "stream": .bool(false),
+            "system": .array([.object(["type": .string("text"), "text": .string(design.instructions),
+                                       "cache_control": .object(["type": .string("ephemeral")])])]),
+            "messages": .array([.object(["role": .string("user"), "content": .string(design.input)])]),
+            "output_config": .object(output)
+        ])
+        var request = URLRequest(url: Self.endpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 240
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("2026-10-21", forHTTPHeaderField: "anthropic-version")
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        request.httpBody = try encoder.encode(body)
+        let data: Data
+        do {
+            let (received, response) = try await send(request)
+            try Task.checkCancellation()
+            try Self.checkStatus(response.statusCode, model: model)
+            data = received
+        } catch is CancellationError { throw CancellationError() }
+        catch let error as URLError where error.code == .cancelled { throw CancellationError() }
+        catch let error as AssistantFailure { throw error }
+        catch { throw AssistantFailure(message: "Claude could not be reached. Check your internet connection and try again.", kind: .service) }
+
+        guard let response = try? JSONDecoder().decode(ClaudeJSON.self, from: data),
+              let content = response["content"]?.array, let reason = response["stop_reason"]?.string else {
+            throw AssistantFailure(message: "Claude returned an incomplete response. Try again.", kind: .service)
+        }
+        if reason == "refusal" || response["stop_details"]?["type"]?.string == "refusal" {
+            throw AssistantFailure(message: "Claude declined this request.", kind: .refusal)
+        }
+        guard reason == "end_turn" else {
+            throw AssistantFailure(message: reason == "max_tokens"
+                ? "Claude reached its response limit before finishing the design. Ask for fewer changes at a time."
+                : "Claude stopped before completing this request. Try a smaller request.")
+        }
+        let text = content.filter { $0["type"]?.string == "text" }.compactMap { $0["text"]?.string }.joined()
+        guard !text.isEmpty else { throw AssistantFailure(message: "Claude returned no design. Try again.") }
+        return DesignPlannerReply(text: text, model: response["model"]?.string ?? model)
+    }
+
     /// Rate limits (429) and a busy or overloaded service (503, 529) are tried again a few times,
     /// after the wait the service asks for (at most 20 seconds) or 2, 4, then 8 seconds.
     private func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {

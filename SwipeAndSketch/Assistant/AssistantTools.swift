@@ -25,10 +25,18 @@ import simd
     /// The unmet checks after the last edit, and how many edits in a row left them exactly so.
     private var lastUnmet: [AssistantRequirementResult] = []
     private var unmetRepeats = 0
-    var requirementReport: AssistantRequirementReport { requirementPlan?.evaluate(in: bench.workspace) ?? .init() }
+    /// The design harness's checks, measured once on its result (it records no plan here).
+    private var designReport: AssistantRequirementReport?
+    var requirementReport: AssistantRequirementReport { designReport ?? requirementPlan?.evaluate(in: bench.workspace) ?? .init() }
 
     /// Takes over a workbench the planner changed.
     func adopt(_ bench: AssistantWorkbench) { self.bench = bench }
+
+    /// Takes over the design harness's result and its checks.
+    func adopt(_ bench: AssistantWorkbench, report: AssistantRequirementReport) {
+        self.bench = bench
+        designReport = report
+    }
 
     /// A model is about to send tool calls written after reading every earlier result: names in
     /// them mean what they mean now. Backends that do not report rounds check only retired names.
@@ -44,6 +52,7 @@ import simd
         self.request = request
         self.selection = selection
         requirementPlan = nil
+        designReport = nil
         lastUnmet = []
         unmetRepeats = 0
     }

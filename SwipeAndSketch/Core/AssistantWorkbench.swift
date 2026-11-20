@@ -694,6 +694,30 @@ struct AssistantWorkbench: Sendable {
 
     // MARK: Changing the model
 
+    /// Applies a design proposal made against the document `aliases` came from (see
+    /// DesignApply.swift), then its transforms, each kept like any other change. Returns the new
+    /// solids by the names the proposal gave them.
+    @discardableResult mutating func applyDesign(_ proposal: DesignProposal, aliases: DesignAliases) throws -> [String: UUID] {
+        let result = try DesignApply.apply(proposal, aliases: aliases, bench: self)
+        if result.workspace != workspace, let first = result.changes.first {
+            try keep(result.workspace, change: first, checking: result.touched, focus: result.touched.first.map { .body($0) })
+            changes += result.changes.dropFirst()
+        }
+        for transform in proposal.transforms {
+            guard let id = aliases.bodies[transform.body] ?? result.newBodies[transform.body],
+                  workspace.bodies.contains(where: { $0.id == id }) else {
+                throw Failure("Transform names \(transform.body), which is not a solid in the design.")
+            }
+            guard transform.move.count == 3 || transform.move.isEmpty, transform.pivot.map({ $0.count == 3 }) ?? true else {
+                throw Failure("A transform's move and pivot are [x, y, z] in mm.")
+            }
+            let move = transform.move.count == 3 ? SIMD3(transform.move[0], transform.move[1], transform.move[2]) : .zero
+            let pivot = transform.pivot.map { SIMD3($0[0], $0[1], $0[2]) }
+            try self.transform(items: [bodyName(id)], move: move, rotate: transform.rotateDegrees, axis: transform.axis, pivot: pivot, copy: false)
+        }
+        return result.newBodies
+    }
+
     /// Keeps `next` if it is valid and every solid in `bodies` builds; records `change`.
     private mutating func keep(_ next: Workspace, change: String, checking bodies: [UUID] = [], focus: AssistantItem? = nil) throws {
         var next = next

@@ -13,8 +13,13 @@ import Foundation
         try await super.setUp()
         saved = Dictionary(uniqueKeysWithValues: Self.preferenceKeys.compactMap { key in UserDefaults.standard.object(forKey: key).map { (key, $0) } })
         for key in Self.preferenceKeys { UserDefaults.standard.removeObject(forKey: key) }
+        // These tests script the tool loop; DesignHarnessProviderTests covers the design proposal.
+        harness = AssistantEngine.designHarnessEnabled
+        AssistantEngine.designHarnessEnabled = false
     }
+    private var harness = true
     override func tearDown() async throws {
+        AssistantEngine.designHarnessEnabled = harness
         for key in Self.preferenceKeys { UserDefaults.standard.set(saved[key], forKey: key) }
         try await super.tearDown()
     }

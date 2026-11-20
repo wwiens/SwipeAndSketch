@@ -10,6 +10,18 @@ import FoundationModels
 /// Script the HTTP boundary; every geometry operation below uses the actual CAD tools/kernel.
 @MainActor final class ClaudeAssistantTests: XCTestCase {
     let fakeKey = "test-credential-never-send-to-network"
+    private var harness = true
+
+    // These tests script the tool loop; DesignHarnessProviderTests covers the design proposal.
+    override func setUp() async throws {
+        try await super.setUp()
+        harness = AssistantEngine.designHarnessEnabled
+        AssistantEngine.designHarnessEnabled = false
+    }
+    override func tearDown() async throws {
+        AssistantEngine.designHarnessEnabled = harness
+        try await super.tearDown()
+    }
 
     /// Starting models built through the assistant's own workbench.
     static func fixture(_ id: String) throws -> Workspace {

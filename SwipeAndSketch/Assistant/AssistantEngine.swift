@@ -83,6 +83,10 @@ struct AssistantDiagnostic: Codable, Equatable {
     var onDiagnostic: ((AssistantDiagnostic) -> Void)?
     /// Evaluation only: exported with the run, never uploaded automatically.
     var feedbackDirectory: URL?
+    /// Claude and OpenAI change the design with one structured proposal, measured and corrected
+    /// once (DesignHarness), and use the tools only for what the proposal cannot express. On since
+    /// November 19, 2026; `SS_DESIGN_HARNESS=0` in the environment switches it off for comparisons.
+    nonisolated(unsafe) static var designHarnessEnabled = ProcessInfo.processInfo.environment["SS_DESIGN_HARNESS"] != "0"
     /// Evaluation switch: give the on-device model the cloud model's full tools and instructions.
     nonisolated(unsafe) static var onDeviceFull = false
     /// The on-device model fills one typed plan (AssistantPlanner) instead of calling tools.
@@ -316,6 +320,24 @@ struct AssistantDiagnostic: Codable, Equatable {
             let model = ProviderSettings.model(for: provider).id, effort = ProviderSettings.effortValue(for: provider)
             let hash = SHA256.hash(data: Data((key + "\n" + model).utf8))
             if hash != previousProviderHash { claude.reset(); openAI.reset(); gemini.reset(); previousProviderHash = hash }
+            // Claude and OpenAI first make one structured design proposal (DesignHarness); a request
+            // it cannot express goes on to the tools below, from the same unchanged start.
+            if Self.designHarnessEnabled, provider == .claude || provider == .openAI {
+                let claude = self.claude, openAI = self.openAI, context = self.context
+                let result = try await DesignHarness.perform(request: request, workspace: workspace, selection: selection,
+                                                             recall: AssistantPrompt.recall(history.suffix(2), limit: 400),
+                                                             onActivity: { context.onActivity?($0) }) { design in
+                    provider == .claude ? try await claude.propose(design, key: key, model: model, effort: effort)
+                                        : try await openAI.propose(design, key: key, model: model, effort: effort)
+                }
+                context.onResult?("design harness: \(result.handOff ? "hand off" : "\(result.attempts.count) attempt(s), \(result.attempts.last?.passed == true ? "passed" : "failed")")")
+                if !result.handOff {
+                    context.adopt(result.bench, report: result.requirements)
+                    onText(result.reply)
+                    return result.reply
+                }
+                context.onActivity?("Using the CAD tools")
+            }
             switch provider {
             case .claude: return try await claude.respond(prompt: prompt, key: key, context: context, model: model, effort: effort, onText: onText)
             case .openAI: return try await openAI.respond(prompt: prompt, key: key, context: context, model: model, effort: effort, onText: onText)

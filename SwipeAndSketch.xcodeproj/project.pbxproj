@@ -109,6 +109,10 @@
 		A1CAD0020000000000000001 /* SwipeAndSketch/Core/AssistantRequirements.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CAD0020000000000000011 /* SwipeAndSketch/Core/AssistantRequirements.swift */; };
 		A1CAD0030000000000000001 /* SwipeAndSketch/Core/AssistantTemplates.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CAD0030000000000000011 /* SwipeAndSketch/Core/AssistantTemplates.swift */; };
 		A1CAD0040000000000000001 /* SwipeAndSketch/Core/AssistantStructure.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CAD0040000000000000011 /* SwipeAndSketch/Core/AssistantStructure.swift */; };
+		A1CAD0050000000000000001 /* SwipeAndSketch/Core/DesignDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CAD0050000000000000011 /* SwipeAndSketch/Core/DesignDocument.swift */; };
+		A1CAD0060000000000000001 /* SwipeAndSketch/Core/DesignExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CAD0060000000000000011 /* SwipeAndSketch/Core/DesignExport.swift */; };
+		A1CAD0070000000000000001 /* SwipeAndSketch/Core/DesignApply.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CAD0070000000000000011 /* SwipeAndSketch/Core/DesignApply.swift */; };
+		A1CAD0080000000000000001 /* SwipeAndSketch/Core/DesignHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CAD0080000000000000011 /* SwipeAndSketch/Core/DesignHarness.swift */; };
 		A21E82DFCBE8368CE30A92A7 /* SwipeAndSketch/Core/Geometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E7E569F9CEB4E78C84FC119 /* SwipeAndSketch/Core/Geometry.swift */; };
 		A2A57983162A4C6FBEC73A3A /* SwipeAndSketch/App/HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01FF8B448E584D2685A229CA /* SwipeAndSketch/App/HomeView.swift */; };
 		A4999AB9BEDAA688F65B68A8 /* SwipeAndSketch/Core/Revolve.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F85DAAAC380CE1B4B2F53A8 /* SwipeAndSketch/Core/Revolve.swift */; };
@@ -125,6 +129,7 @@
 		ACCE55140000000000000004 /* Tests/AppTests/PurchaseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACCE55140000000000000014 /* Tests/AppTests/PurchaseTests.swift */; };
 		7A0C4E5100000000000000B1 /* Tests/AppTests/TouchHighlightTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0C4E5100000000000000B2 /* Tests/AppTests/TouchHighlightTests.swift */; };
 		7A0C4E5100000000000000B3 /* Tests/AppTests/ProviderAssistantTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0C4E5100000000000000B4 /* Tests/AppTests/ProviderAssistantTests.swift */; };
+		7A0C4E51000000000000D7A1 /* Tests/AppTests/DesignHarnessProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0C4E51000000000000D7A2 /* Tests/AppTests/DesignHarnessProviderTests.swift */; };
 		ACCE55140000000000000005 /* Tests/AppTests/TrialEditingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACCE55140000000000000015 /* Tests/AppTests/TrialEditingTests.swift */; };
 		ACCE55140000000000000006 /* SwipeAndSketch/Purchases.storekit in Resources */ = {isa = PBXBuildFile; fileRef = ACCE55140000000000000016 /* SwipeAndSketch/Purchases.storekit */; };
 		ACCE55140000000000000007 /* Tests/UITests/PurchaseUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACCE55140000000000000017 /* Tests/UITests/PurchaseUITests.swift */; };
@@ -318,6 +323,10 @@
 		A1CAD0020000000000000011 /* SwipeAndSketch/Core/AssistantRequirements.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/AssistantRequirements.swift; sourceTree = SOURCE_ROOT; };
 		A1CAD0030000000000000011 /* SwipeAndSketch/Core/AssistantTemplates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/AssistantTemplates.swift; sourceTree = SOURCE_ROOT; };
 		A1CAD0040000000000000011 /* SwipeAndSketch/Core/AssistantStructure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/AssistantStructure.swift; sourceTree = SOURCE_ROOT; };
+		A1CAD0050000000000000011 /* SwipeAndSketch/Core/DesignDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/DesignDocument.swift; sourceTree = SOURCE_ROOT; };
+		A1CAD0060000000000000011 /* SwipeAndSketch/Core/DesignExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/DesignExport.swift; sourceTree = SOURCE_ROOT; };
+		A1CAD0070000000000000011 /* SwipeAndSketch/Core/DesignApply.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/DesignApply.swift; sourceTree = SOURCE_ROOT; };
+		A1CAD0080000000000000011 /* SwipeAndSketch/Core/DesignHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/DesignHarness.swift; sourceTree = SOURCE_ROOT; };
 		A6E7E8C055A07A444FDA8585 /* SwipeAndSketch/Core/Workspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Workspace.swift; sourceTree = SOURCE_ROOT; };
 		A71C00000000000000000002 /* SwipeAndSketch/App/RadialToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/RadialToolbar.swift; sourceTree = SOURCE_ROOT; };
 		7A0C4E5100000000000000A2 /* SwipeAndSketch/App/TouchHighlights.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/TouchHighlights.swift; sourceTree = SOURCE_ROOT; };
@@ -331,6 +340,7 @@
 		ACCE55140000000000000014 /* Tests/AppTests/PurchaseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/PurchaseTests.swift; sourceTree = "<group>"; };
 		7A0C4E5100000000000000B2 /* Tests/AppTests/TouchHighlightTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/TouchHighlightTests.swift; sourceTree = "<group>"; };
 		7A0C4E5100000000000000B4 /* Tests/AppTests/ProviderAssistantTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/ProviderAssistantTests.swift; sourceTree = "<group>"; };
+		7A0C4E51000000000000D7A2 /* Tests/AppTests/DesignHarnessProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/DesignHarnessProviderTests.swift; sourceTree = "<group>"; };
 		ACCE55140000000000000015 /* Tests/AppTests/TrialEditingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/TrialEditingTests.swift; sourceTree = "<group>"; };
 		ACCE55140000000000000016 /* SwipeAndSketch/Purchases.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = SwipeAndSketch/Purchases.storekit; sourceTree = "<group>"; };
 		ACCE55140000000000000017 /* Tests/UITests/PurchaseUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/UITests/PurchaseUITests.swift; sourceTree = "<group>"; };
@@ -450,6 +460,10 @@
 				A1CAD0020000000000000011 /* SwipeAndSketch/Core/AssistantRequirements.swift */,
 				A1CAD0030000000000000011 /* SwipeAndSketch/Core/AssistantTemplates.swift */,
 				A1CAD0040000000000000011 /* SwipeAndSketch/Core/AssistantStructure.swift */,
+				A1CAD0050000000000000011 /* SwipeAndSketch/Core/DesignDocument.swift */,
+				A1CAD0060000000000000011 /* SwipeAndSketch/Core/DesignExport.swift */,
+				A1CAD0070000000000000011 /* SwipeAndSketch/Core/DesignApply.swift */,
+				A1CAD0080000000000000011 /* SwipeAndSketch/Core/DesignHarness.swift */,
 				F06A6B516900ED2F61446A96 /* SwipeAndSketch/Core/FaceExtrusion.swift */,
 				F5090CA8D4FA28DC90100D0E /* SwipeAndSketch/Core/Sketches.swift */,
 				49AB5A0A10216A445002500B /* SwipeAndSketch/Core/Performance.swift */,
@@ -574,6 +588,7 @@
 				ACCE55140000000000000014 /* Tests/AppTests/PurchaseTests.swift */,
 				7A0C4E5100000000000000B2 /* Tests/AppTests/TouchHighlightTests.swift */,
 				7A0C4E5100000000000000B4 /* Tests/AppTests/ProviderAssistantTests.swift */,
+				7A0C4E51000000000000D7A2 /* Tests/AppTests/DesignHarnessProviderTests.swift */,
 				ACCE55140000000000000015 /* Tests/AppTests/TrialEditingTests.swift */,
 				ACCE55140000000000000017 /* Tests/UITests/PurchaseUITests.swift */,
 				C1A0DE550000000000000014 /* Tests/AppTests/ClaudeAssistantTests.swift */,
@@ -811,6 +826,7 @@
 				ACCE55140000000000000004 /* Tests/AppTests/PurchaseTests.swift in Sources */,
 				7A0C4E5100000000000000B1 /* Tests/AppTests/TouchHighlightTests.swift in Sources */,
 				7A0C4E5100000000000000B3 /* Tests/AppTests/ProviderAssistantTests.swift in Sources */,
+				7A0C4E51000000000000D7A1 /* Tests/AppTests/DesignHarnessProviderTests.swift in Sources */,
 				ACCE55140000000000000005 /* Tests/AppTests/TrialEditingTests.swift in Sources */,
 				C1A0DE550000000000000004 /* Tests/AppTests/ClaudeAssistantTests.swift in Sources */,
 				A1CAD0010000000000000001 /* Benchmarks/AICAD/Harness/Eval/Sources/AssistantEval/Benchmarks.swift in Sources */,
@@ -886,6 +902,10 @@
 				A1CAD0020000000000000001 /* SwipeAndSketch/Core/AssistantRequirements.swift in Sources */,
 				A1CAD0030000000000000001 /* SwipeAndSketch/Core/AssistantTemplates.swift in Sources */,
 				A1CAD0040000000000000001 /* SwipeAndSketch/Core/AssistantStructure.swift in Sources */,
+				A1CAD0050000000000000001 /* SwipeAndSketch/Core/DesignDocument.swift in Sources */,
+				A1CAD0060000000000000001 /* SwipeAndSketch/Core/DesignExport.swift in Sources */,
+				A1CAD0070000000000000001 /* SwipeAndSketch/Core/DesignApply.swift in Sources */,
+				A1CAD0080000000000000001 /* SwipeAndSketch/Core/DesignHarness.swift in Sources */,
 				253225145680B14EC426AE33 /* SwipeAndSketch/Core/FaceExtrusion.swift in Sources */,
 				03D4BB6825A26A2FA0BF0D7C /* SwipeAndSketch/Core/Sketches.swift in Sources */,
 				E607D49E552A7835913CBA3D /* SwipeAndSketch/Core/Performance.swift in Sources */,
