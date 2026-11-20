@@ -708,11 +708,11 @@ struct AssistantWorkbench: Sendable {
                   workspace.bodies.contains(where: { $0.id == id }) else {
                 throw Failure("Transform names \(transform.body), which is not a solid in the design.")
             }
-            guard transform.move.count == 3 || transform.move.isEmpty, transform.pivot.map({ $0.count == 3 }) ?? true else {
+            guard transform.move.count == 3 || transform.move.isEmpty, transform.pivot.map({ $0.count == 3 || $0.isEmpty }) ?? true else {
                 throw Failure("A transform's move and pivot are [x, y, z] in mm.")
             }
             let move = transform.move.count == 3 ? SIMD3(transform.move[0], transform.move[1], transform.move[2]) : .zero
-            let pivot = transform.pivot.map { SIMD3($0[0], $0[1], $0[2]) }
+            let pivot = transform.pivot.flatMap { $0.count == 3 ? SIMD3($0[0], $0[1], $0[2]) : nil }
             try self.transform(items: [bodyName(id)], move: move, rotate: transform.rotateDegrees, axis: transform.axis, pivot: pivot, copy: false)
         }
         return result.newBodies

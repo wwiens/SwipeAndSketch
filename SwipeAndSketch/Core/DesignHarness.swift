@@ -139,7 +139,7 @@ enum DesignHarness {
         if !proposal.requirements.isEmpty {
             // Requirement targets name solids by alias or by a new solid's name; the checks use names.
             let requirements = proposal.requirements.prefix(24).map { r in
-                AssistantRequirement(quote: r.quote, kind: r.kind, target: r.target.map { target in
+                AssistantRequirement(quote: r.quote, kind: r.kind, target: r.target.flatMap { $0.isEmpty ? nil : $0 }.map { target in
                     aliases.bodies[target].map(start.bodyName) ?? newBodies[target].map(bench.bodyName) ?? target
                 }, expected: r.expected)
             }
@@ -230,18 +230,18 @@ enum DesignHarness {
 
     The design document lists solids (bodies: id such as B1, name, bounds [minX,minY,minZ,maxX,maxY,maxZ], volume) and their features in build order (id such as B1.F2; body is the solid's id). A solid's first feature makes its base; each later feature adds to it or cuts from it, in order. Solids stay separate even where they touch.
 
-    Feature kinds (unused fields null):
-    - block: a rectangle centered on (x,y,z) on its start face, extruded height along axis (+x,-x,+y,-y,+z,-z). Width and depth run across the axis: for ±z width is X and depth Y; for ±y width X and depth Z; for ±x width Y and depth Z. radius rounds the four corners running along the axis (null or 0 for sharp).
+    Feature kinds (fields a kind does not use: 0, "", [], or false; hole null except on holes):
+    - block: a rectangle centered on (x,y,z) on its start face, extruded height along axis (+x,-x,+y,-y,+z,-z). Width and depth run across the axis: for ±z width is X and depth Y; for ±y width X and depth Z; for ±x width Y and depth Z. radius rounds the four corners running along the axis (0 for sharp).
     - cylinder: a circle of radius (half the diameter) centered on (x,y,z), extruded height along axis.
     - polygon: 3–64 points (u,v), not repeating the first, extruded height along axis from (x,y,z); u and v are offsets across the axis in the same order as width and depth.
-    - operation: add (material joined to the solid; it must touch it) or cut (removes material). A cut may set throughAll true, height null, to go right through both ways.
-    - hole: a drilled hole entering a flat face at (x,y,z) on that face; axis is the face's outward normal (the hole goes the other way). hole.type simple, counterbore, countersink, or insert; hole.size M2, M2.5, M3, M4, or M5 for screw presets, or null with hole.diameter; height is the depth, or throughAll true.
-    - fillet or chamfer: size mm on the edges a rule picks on the solid as it stands at that point: all, top, bottom, front (-y), back (+y), left (-x), right (+x), vertical, horizontal, circular, straight, face N, edge N, selected; optionally outside or inside ("outside vertical"); several rules separated by commas. An existing fillet with edges null keeps its edges and changes only its size.
+    - operation: add (material joined to the solid; it must touch it) or cut (removes material); add for features that are not extrusions. A cut may set throughAll true (height 0) to go right through both ways.
+    - hole: a drilled hole entering a flat face at (x,y,z) on that face; axis is the face's outward normal (the hole goes the other way). hole.type simple, counterbore, countersink, or insert; hole.size M2, M2.5, M3, M4, or M5 for screw presets, or "" with hole.diameter; height is the depth, or throughAll true.
+    - fillet or chamfer: size mm on the edges a rule picks on the solid as it stands at that point: all, top, bottom, front (-y), back (+y), left (-x), right (+x), vertical, horizontal, circular, straight, face N, edge N, selected; optionally outside or inside ("outside vertical"); several rules separated by commas. An existing fillet with edges "" keeps its edges and changes only its size.
     - shell: hollows the solid to walls size mm thick, open at faces (top, bottom, front, back, left, right, selected).
     - locked: a feature the document cannot describe (its note says what). Keep it or remove it; never change it, never add one.
 
     Proposal:
-    - intent "change": features lists only new or changed features, each complete. An existing id replaces that feature in place; a new id (short and unique, such as "lid-slot") is added after the last feature of its solid. removeIDs removes features, or a whole solid by its id. A new solid: give its features a new body name (short and descriptive, such as "Lid"); its first feature adds a block, cylinder, or polygon. transforms move whole solids by move [dx,dy,dz] and turn them rotateDegrees about axis x, y, or z through pivot (null: the solid's center), after the features.
+    - intent "change": features lists only new or changed features, each complete. An existing id replaces that feature in place; a new id (short and unique, such as "lid-slot") is added after the last feature of its solid. removeIDs removes features, or a whole solid by its id. A new solid: give its features a new body name (short and descriptive, such as "Lid"); its first feature adds a block, cylinder, or polygon. transforms move whole solids by move [dx,dy,dz] and turn them rotateDegrees about axis x, y, or z through pivot ([]: the solid's center), after the features.
     - intent "answer": a question about the design, or a question you must ask the user; message holds it; nothing changes.
     - intent "handOff": the request needs something outside this document: sketches, construction planes, threads, text, pegs, mirror, pattern, union, subtract, intersect, split, revolve, loft, sweep, scale, colors, names, groups, hiding, or a locked feature's settings. Leave the lists empty.
     - requirements (with "change"): explicit, checkable requirements from the request, quoting the user's exact words, the expected numbers appearing in the quote. kind bodySize: target the solid's id or new name, expected [X size, Y size, Z size]; bodyCount: expected [count of all solids]; hole: expected [entry x, y, z, outward normal x, y, z, diameter, depth or -1 for through]; unchangedBody: target, expected []; notChecked for anything else. Never invent requirements or numbers.

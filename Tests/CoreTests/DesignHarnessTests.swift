@@ -92,7 +92,7 @@ final class DesignHarnessTests: XCTestCase {
         XCTAssertEqual(zip(before.cuts, after.cuts).filter { $0 != $1 }.count, 2)
         XCTAssertEqual(try volume(after), 19_450.913, accuracy: 0.1)
         XCTAssertEqual(bench.changes.count, 1)
-        XCTAssertTrue(bench.changes[0].hasPrefix("Plate: changed B1.F4 to cut Ø6 cylinder"), bench.changes[0])
+        XCTAssertEqual(bench.changes[0], "Plate: cut Ø4.5 cylinder 5 mm along +Z → cut Ø6 cylinder 5 mm along +Z; cut Ø4.5 cylinder 5 mm along +Z → cut Ø6 cylinder 5 mm along +Z")
         // And the same edit read from the model's JSON.
         let text = json(DesignProposal(features: right))
         var fromText = AssistantWorkbench(workspace: original)
@@ -119,9 +119,13 @@ final class DesignHarnessTests: XCTestCase {
         XCTAssertEqual(bench.workspace.bodies[0], body, "The other solid is untouched")
         // Changing a locked feature is refused, with what it is.
         var locked = document.features[2]
-        locked.note = "changed"
-        locked.kind = .locked
         locked.height = 4
+        var repeated = AssistantWorkbench(workspace: workspace)
+        try repeated.applyDesign(DesignProposal(features: [locked]), aliases: aliases)
+        XCTAssertEqual(repeated.workspace, workspace, "Values a locked feature does not use are ignored")
+        locked.kind = .block
+        locked.operation = .cut
+        locked.width = 5; locked.depth = 5; locked.x = 60; locked.y = 0; locked.z = 0; locked.axis = .pz
         XCTAssertThrowsError(try AssistantWorkbench(workspace: workspace).applying(DesignProposal(features: [locked]), aliases: aliases)) { error in
             XCTAssertTrue((error as? AssistantWorkbench.Failure)?.message.contains("is locked (another solid subtracted)") ?? false, "\(error)")
         }
@@ -218,8 +222,14 @@ final class DesignHarnessTests: XCTestCase {
                 for (key, value) in properties { if let value = value as? [String: Any] { check(value, path + "." + key) } }
             }
             if let items = object["items"] as? [String: Any] { check(items, path + "[]") }
+            for choice in object["anyOf"] as? [[String: Any]] ?? [] {
+                check(choice, path + "|")
+                XCTAssertNil((choice["type"] as? [Any]), "One type per choice: \(path)")
+            }
+            XCTAssertNil(object["type"] as? [Any], "No type lists, which Claude refuses with an enum: \(path)")
         }
         check(schema, "proposal")
+        XCTAssertLessThanOrEqual(DesignSchema.unionCount(), 16, "Claude's limit on nullable fields")
         let features = try XCTUnwrap(((schema["properties"] as? [String: Any])?["features"] as? [String: Any])?["items"] as? [String: Any])
         XCTAssertEqual(Set((features["properties"] as? [String: Any])?.keys.map { $0 } ?? []),
                        ["id", "body", "kind", "operation", "axis", "x", "y", "z", "width", "depth", "height", "radius", "points",

@@ -32,4 +32,4 @@ TEST_RUNNER_LIVE_SCENE=${LIVE_SCENE:-} \
     -only-testing:SwipeAndSketchTests/AssistantTests/testLiveRequests > "$log" 2>&1 || true
 
 # The trace lines, then the result.
-grep -E "^(Live |▶︎|  ·|      ↳|  ⟵|  changes:|  [0-9.]+ s on|  ✗|    details:)|Test Case .*(passed|failed|skipped)|error:" "$log" || tail -30 "$log"
+grep -E "^(Live |▶︎|  ·|      ↳|  ⟵|  changes:|  ■|  checks:|  [0-9.]+ s on|  ✗|    details:)|Test Case .*(passed|failed|skipped)|error:" "$log" || tail -30 "$log"

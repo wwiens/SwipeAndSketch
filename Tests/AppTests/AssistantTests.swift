@@ -405,6 +405,15 @@ import UIKit
                 let turn = try await engine.respond(to: request, workspace: session.workspace, selection: nil, choice: choice,
                                                     onActivity: { print("  · \($0)") }, onText: { _ in })
                 print("  ⟵ \(turn.reply)\n  changes: \(turn.bench.changes.joined(separator: " | "))")
+                // What was built, measured, to judge the result by.
+                for body in turn.bench.workspace.bodies {
+                    guard let solid = try? SolidKernel.solid(for: body) else { print("  ■ \(turn.bench.bodyName(body.id)): does not build"); continue }
+                    let b = solid.bounds
+                    print(String(format: "  ■ %@: [%.2f, %.2f, %.2f] to [%.2f, %.2f, %.2f], %.1f mm³, %d steps%@", turn.bench.bodyName(body.id),
+                                 b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z, solid.volume, body.finishes.count + body.cuts.count,
+                                 solid.isValidSolid ? "" : ", not one valid solid"))
+                }
+                if !turn.requirements.results.isEmpty { print("  checks: \(turn.requirements.summary)") }
                 print(String(format: "  %.1f s on %@", Date().timeIntervalSince(started), turn.backend.title))
             } catch {
                 print("  ✗ \(error.localizedDescription) [\(error)]")

@@ -56,11 +56,11 @@ enum DesignApply {
         for id in removals where aliases.bodies[id] == nil {
             guard let feature = aliases.exported[id] else { continue }
             lists[feature.body]?.removeAll { $0.id == id }
-            removedLines[feature.body, default: []].append("removed \(id) (\(describe(feature)))")
+            removedLines[feature.body, default: []].append("removed \(describe(feature))")
         }
         var newOrder: [String] = [], changedLines: [String: [String]] = [:]
-        for var feature in proposal.features {
-            feature.note = nil
+        for raw in proposal.features {
+            var feature = raw.normalized()
             if let original = aliases.exported[feature.id] {
                 guard feature.body == original.body else { throw Failure("\(feature.id) belongs to \(original.body); a feature cannot move to another solid.") }
                 guard !removedBodies.contains(feature.body) else { throw Failure("\(feature.id) is in \(feature.body), which is removed.") }
@@ -73,7 +73,7 @@ enum DesignApply {
                 guard let index = lists[feature.body]?.firstIndex(where: { $0.id == feature.id }) else { continue }
                 lists[feature.body]![index].feature = feature
                 lists[feature.body]![index].rebuilt = true
-                changedLines[feature.body, default: []].append("changed \(feature.id) to \(describe(feature))")
+                changedLines[feature.body, default: []].append("\(describe(original)) → \(describe(feature))")
             } else {
                 guard aliases.features[feature.id] == nil, aliases.bodies[feature.id] == nil, !feature.id.trimmingCharacters(in: .whitespaces).isEmpty else {
                     throw Failure("Feature ID \"\(feature.id)\" is already used; give new features new IDs.")
@@ -82,7 +82,7 @@ enum DesignApply {
                 guard feature.kind != .locked else { throw Failure("\(feature.id): locked features cannot be added; use block, cylinder, polygon, hole, fillet, chamfer, or shell.") }
                 if aliases.bodies[feature.body] == nil, lists[feature.body] == nil { newOrder.append(feature.body) }
                 lists[feature.body, default: []].append(Entry(id: feature.id, feature: feature, rebuilt: true, role: nil))
-                if aliases.bodies[feature.body] != nil { changedLines[feature.body, default: []].append("added \(feature.id): \(describe(feature))") }
+                if aliases.bodies[feature.body] != nil { changedLines[feature.body, default: []].append("added \(describe(feature))") }
             }
         }
 

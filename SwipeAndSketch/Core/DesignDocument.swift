@@ -88,6 +88,49 @@ struct DesignFeature: Codable, Equatable, Sendable {
         self.edges = edges; self.faces = faces; self.size = size; self.note = note
     }
 
+    /// The feature as the app reads it: values its kind does not use are nil, and so are the
+    /// zeros, empty texts, empty lists, and false a strict structured reply fills them with.
+    func normalized() -> DesignFeature {
+        var f = self
+        f.note = nil
+        if f.throughAll == false { f.throughAll = nil }
+        if f.edges?.trimmingCharacters(in: .whitespaces).isEmpty == true { f.edges = nil }
+        if f.faces?.isEmpty == true { f.faces = nil }
+        if f.points?.isEmpty == true { f.points = nil }
+        func placeOnly() { f.width = nil; f.depth = nil; f.radius = nil; f.points = nil; f.edges = nil; f.faces = nil; f.size = nil }
+        func nothingPlaced() { f.operation = nil; f.axis = nil; f.x = nil; f.y = nil; f.z = nil; f.height = nil; f.throughAll = nil; f.hole = nil }
+        switch kind {
+        case .block, .cylinder, .polygon:
+            f.hole = nil; f.edges = nil; f.faces = nil; f.size = nil
+            if kind != .block { f.width = nil; f.depth = nil }
+            if kind == .polygon { f.radius = nil } else { f.points = nil }
+            if f.radius == 0, kind == .block { f.radius = nil }
+            if f.throughAll == true { f.height = nil }
+        case .hole:
+            f.operation = nil
+            placeOnly()
+            if f.throughAll == true || f.height == 0 { f.height = nil }
+            if var hole = f.hole {
+                func zero(_ v: Double?) -> Double? { v == 0 ? nil : v }
+                if hole.size?.trimmingCharacters(in: .whitespaces).isEmpty == true { hole.size = nil }
+                hole.diameter = zero(hole.diameter)
+                hole.counterboreDiameter = zero(hole.counterboreDiameter); hole.counterboreDepth = zero(hole.counterboreDepth)
+                hole.countersinkDiameter = zero(hole.countersinkDiameter); hole.countersinkAngle = zero(hole.countersinkAngle)
+                f.hole = hole
+            }
+        case .fillet, .chamfer:
+            nothingPlaced()
+            f.width = nil; f.depth = nil; f.radius = nil; f.points = nil; f.faces = nil
+        case .shell:
+            nothingPlaced()
+            f.width = nil; f.depth = nil; f.radius = nil; f.points = nil; f.edges = nil
+        case .locked:
+            nothingPlaced()
+            placeOnly()
+        }
+        return f
+    }
+
     /// The same feature apart from the words and rounding a model may add when it repeats one:
     /// numbers agree to 0.0001 mm, a through-all cut ignores its height, and notes are ignored.
     func matches(_ other: DesignFeature) -> Bool {
@@ -265,35 +308,49 @@ enum DesignSchema {
         ])
     }
 
+    /// Claude's structured output allows at most 16 nullable fields in a schema, so only the hole
+    /// settings are nullable; other unused values are 0, "", [], or false, which `normalized()` reads
+    /// as unused, as the exported document leaves them out.
     static var feature: [String: Any] {
-        let number = nullable("number")
+        let number: [String: Any] = ["type": "number"], text: [String: Any] = ["type": "string"]
         return object([
-            "id": ["type": "string"],
-            "body": ["type": "string"],
+            "id": text,
+            "body": text,
             "kind": ["type": "string", "enum": DesignFeature.Kind.allCases.map(\.rawValue)],
-            "operation": nullableEnum(DesignFeature.Operation.allCases.map(\.rawValue)),
-            "axis": nullableEnum(DesignFeature.Axis.allCases.map(\.rawValue)),
+            "operation": ["type": "string", "enum": DesignFeature.Operation.allCases.map(\.rawValue)],
+            "axis": ["type": "string", "enum": DesignFeature.Axis.allCases.map(\.rawValue)],
             "x": number, "y": number, "z": number, "width": number, "depth": number, "height": number, "radius": number,
-            "points": ["type": ["array", "null"], "items": object(["u": ["type": "number"], "v": ["type": "number"]])],
-            "throughAll": nullable("boolean"),
+            "points": ["type": "array", "items": object(["u": number, "v": number])],
+            "throughAll": ["type": "boolean"],
             "hole": nullableObject([
                 "type": ["type": "string", "enum": HoleSpec.Kind.allCases.map(\.rawValue)],
-                "size": nullable("string"),
+                "size": text,
                 "diameter": number, "counterboreDiameter": number, "counterboreDepth": number,
                 "countersinkDiameter": number, "countersinkAngle": number
             ]),
-            "edges": nullable("string"),
-            "faces": ["type": ["array", "null"], "items": ["type": "string"]],
+            "edges": text,
+            "faces": ["type": "array", "items": text],
             "size": number,
-            "note": nullable("string")
+            "note": text
         ])
+    }
+
+    /// How many properties are nullable or a choice of types (Claude's limit is 16).
+    static func unionCount(_ schema: Any = proposal) -> Int {
+        guard let object = schema as? [String: Any] else { return 0 }
+        var count = 0
+        for (_, value) in object["properties"] as? [String: Any] ?? [:] {
+            if let value = value as? [String: Any], value["anyOf"] != nil || value["type"] is [Any] { count += 1 }
+        }
+        let nested = (object["properties"] as? [String: Any] ?? [:]).values.map { $0 } + [object["items"] as Any] + (object["anyOf"] as? [Any] ?? [])
+        return count + nested.reduce(0) { $0 + unionCount($1) }
     }
 
     static var requirement: [String: Any] {
         object([
             "quote": ["type": "string"],
             "kind": ["type": "string", "enum": ["bodySize", "bodyCount", "hole", "unchangedBody", "notChecked"]],
-            "target": nullable("string"),
+            "target": ["type": "string"],
             "expected": ["type": "array", "items": ["type": "number"]]
         ])
     }
@@ -304,20 +361,17 @@ enum DesignSchema {
             "move": ["type": "array", "items": ["type": "number"]],
             "rotateDegrees": ["type": "number"],
             "axis": ["type": "string", "enum": ["x", "y", "z"]],
-            "pivot": ["type": ["array", "null"], "items": ["type": "number"]]
+            "pivot": ["type": "array", "items": ["type": "number"]]
         ])
     }
 
     private static func object(_ properties: [String: Any]) -> [String: Any] {
         ["type": "object", "properties": properties, "required": properties.keys.sorted(), "additionalProperties": false]
     }
-    private static func nullableObject(_ properties: [String: Any]) -> [String: Any] {
-        var schema = object(properties)
-        schema["type"] = ["object", "null"]
-        return schema
-    }
-    private static func nullable(_ type: String) -> [String: Any] { ["type": [type, "null"]] }
-    private static func nullableEnum(_ values: [String]) -> [String: Any] {
-        ["type": ["string", "null"], "enum": values + [NSNull()]]
-    }
+    // Optional values are a choice of the value or null (`anyOf`), which both Claude's and
+    // OpenAI's structured outputs accept; Claude refuses an `enum` under a ["string", "null"] type.
+    private static func orNull(_ schema: [String: Any]) -> [String: Any] { ["anyOf": [schema, ["type": "null"]]] }
+    private static func nullableObject(_ properties: [String: Any]) -> [String: Any] { orNull(object(properties)) }
+    private static func nullable(_ type: String) -> [String: Any] { orNull(["type": type]) }
+    private static func nullableEnum(_ values: [String]) -> [String: Any] { orNull(["type": "string", "enum": values]) }
 }

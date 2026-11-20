@@ -131,7 +131,7 @@ import Foundation
         XCTAssertEqual(after.id, before.id)
         XCTAssertEqual(after.cuts.map(\.id), before.cuts.map(\.id))
         XCTAssertEqual(try SolidKernel.solid(for: after).volume, 19_450.913, accuracy: 0.1)
-        XCTAssertTrue(second.reply.hasPrefix("Plate: changed B1.F4"), second.reply)
+        XCTAssertTrue(second.reply.hasPrefix("Plate: cut Ø4.5 cylinder 5 mm along +Z → cut Ø6 cylinder"), second.reply)
     }
 
     func testClaudeRefusalsAndCutOffRepliesAreErrorsNotDesigns() async throws {

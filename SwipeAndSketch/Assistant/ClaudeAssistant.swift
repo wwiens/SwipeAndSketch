@@ -242,7 +242,14 @@ typealias ClaudeJSON = AssistantJSON
         do {
             let (received, response) = try await send(request)
             try Task.checkCancellation()
-            try Self.checkStatus(response.statusCode, model: model)
+            do { try Self.checkStatus(response.statusCode, model: model) }
+            catch var failure as AssistantFailure {
+                // The API's own reason, for the failure's details.
+                if let reason = (try? JSONDecoder().decode(ClaudeJSON.self, from: received))?["error"]?["message"]?.string {
+                    failure.details.append("Claude: " + reason.prefix(300))
+                }
+                throw failure
+            }
             data = received
         } catch is CancellationError { throw CancellationError() }
         catch let error as URLError where error.code == .cancelled { throw CancellationError() }
