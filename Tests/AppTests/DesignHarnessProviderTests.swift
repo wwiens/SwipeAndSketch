@@ -107,19 +107,6 @@ import Foundation
         XCTAssertEqual(turn.reply, "Corner radius 5 mm.")
     }
 
-    /// Private Cloud Compute generates to Apple's schema: an optional value is one left out of
-    /// `required`. The conversion must be one Apple's decoder accepts.
-    func testTheProposalSchemaConvertsForPrivateCloudCompute() throws {
-        let schema = try AssistantEngine.generationSchema(DesignSchema.data, name: DesignSchema.name)
-        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(schema)) as? [String: Any])
-        let text = String(decoding: try JSONSerialization.data(withJSONObject: json, options: .sortedKeys), as: UTF8.self)
-        XCTAssertFalse(text.contains("anyOf"), "Nullable values become optional ones")
-        XCTAssertTrue(text.contains("solidOps") && text.contains("rotateCopies") && text.contains("counterboreDepth"), text.prefix(300).description)
-        // A proposal that fits the schema reads back as one.
-        let proposal = try DesignProposal.decode(plate())
-        XCTAssertEqual(proposal.features.count, 5)
-    }
-
     func testClaudeUsesStructuredOutputAndHandsUnsupportedRequestsToTheTools() async throws {
         var requests: [AssistantJSON] = []
         let claude = ClaudeAssistant { request in

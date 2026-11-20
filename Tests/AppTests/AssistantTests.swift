@@ -20,7 +20,7 @@ import UIKit
             onActivity("Working")
             var bench = AssistantWorkbench(workspace: workspace, selection: selection)
             try script(&bench)
-            return AssistantEngine.Turn(reply: reply, bench: bench, backend: .onDevice)
+            return AssistantEngine.Turn(reply: reply, bench: bench, backend: .claude)
         }
         return assistant
     }
@@ -34,7 +34,7 @@ import UIKit
         let saved = UserDefaults.standard.string(forKey: "assistant.model")
         defer { UserDefaults.standard.set(saved, forKey: "assistant.model") }
         let assistant = AssistantController(session: ModelingSession(inMemory: true))
-        let target: AssistantModelChoice = assistant.choice == .automatic ? .claude : .automatic
+        let target: AssistantModelChoice = assistant.choice == .claude ? .openAI : .claude
         await Task.detached {
             UserDefaults.standard.set(target.rawValue, forKey: "assistant.model")
             // Notifications may arrive on a cooperative executor.
@@ -48,7 +48,7 @@ import UIKit
         let assistant = AssistantController(session: ModelingSession(inMemory: true))
         assistant.responder = { _, workspace, _, _, _, _ in
             try await Task.sleep(for: .seconds(10))
-            return AssistantEngine.Turn(reply: "Done", bench: AssistantWorkbench(workspace: workspace), backend: .onDevice)
+            return AssistantEngine.Turn(reply: "Done", bench: AssistantWorkbench(workspace: workspace), backend: .claude)
         }
         assistant.send("Wait for credentials to change")
         XCTAssertTrue(assistant.isWorking)
@@ -118,7 +118,7 @@ import UIKit
             let plan = try AssistantRequirementPlan([.init(quote: request, kind: "bodySize", target: "Body 01", expected: [60, 40, 20])],
                                                     request: request, workspace: workspace, selection: selection)
             try bench.setDimension(item: "Body 01", dimension: "depth", value: 10)
-            return AssistantEngine.Turn(reply: "Done.", bench: bench, backend: .onDevice, requirements: plan.evaluate(in: bench.workspace))
+            return AssistantEngine.Turn(reply: "Done.", bench: bench, backend: .claude, requirements: plan.evaluate(in: bench.workspace))
         }
         assistant.send("Keep the block 60 by 40 by 20 mm.")
         await waitUntilIdle(assistant)
@@ -139,7 +139,7 @@ import UIKit
             let plan = try AssistantRequirementPlan([.init(quote: "How big is the box", kind: "notChecked", expected: [])],
                                                     request: request, workspace: workspace, selection: selection)
             return AssistantEngine.Turn(reply: "It is 60 × 40 × 20 mm.", bench: AssistantWorkbench(workspace: workspace, selection: selection),
-                                        backend: .onDevice, requirements: plan.evaluate(in: workspace))
+                                        backend: .claude, requirements: plan.evaluate(in: workspace))
         }
         assistant.send("How big is the box, and will it fit on a 256 mm print bed?")
         await waitUntilIdle(assistant)
@@ -194,7 +194,7 @@ import UIKit
             try? await Task.sleep(for: .milliseconds(150))
             var bench = AssistantWorkbench(workspace: workspace, selection: selection)
             try bench.finish(.chamfer, body: "Body 01", edges: "top", size: 1)
-            return AssistantEngine.Turn(reply: "Done.", bench: bench, backend: .onDevice)
+            return AssistantEngine.Turn(reply: "Done.", bench: bench, backend: .claude)
         }
         assistant.send("Chamfer the top edges 1 mm")
         session.resetAssistant()
@@ -212,7 +212,7 @@ import UIKit
         XCTAssertTrue(failed.failed)
         assistant.responder = { _, workspace, selection, _, _, _ in
             try? await Task.sleep(for: .milliseconds(150))
-            return AssistantEngine.Turn(reply: "Body 01 is 60 × 40 × 20 mm.", bench: AssistantWorkbench(workspace: workspace, selection: selection), backend: .onDevice)
+            return AssistantEngine.Turn(reply: "Body 01 is 60 × 40 × 20 mm.", bench: AssistantWorkbench(workspace: workspace, selection: selection), backend: .claude)
         }
         assistant.send("How big is it?")
         assistant.retry(failed)
@@ -279,30 +279,17 @@ import UIKit
         XCTAssertFalse(session.isEditingBlocked)
     }
 
-    func testFailureDetailsAndTheCloudFallbackAreShown() async throws {
+    func testFailureDetailsAreShown() async throws {
         let session = boxScene()
         let failing = AssistantController(session: session)
         failing.responder = { _, _, _, _, _, _ in
-            throw AssistantFailure(message: "Private Cloud Compute stopped answering.", kind: .service, details: ["Error: Test 1"])
+            throw AssistantFailure(message: "Claude is temporarily unavailable.", kind: .service, details: ["Error: Test 1"])
         }
         failing.send("Round the top edges 2 mm")
         await waitUntilIdle(failing)
         XCTAssertTrue(failing.messages[1].failed)
-        XCTAssertEqual(failing.messages[1].text, "Private Cloud Compute stopped answering.")
+        XCTAssertEqual(failing.messages[1].text, "Claude is temporarily unavailable.")
         XCTAssertEqual(failing.messages[1].details, ["Error: Test 1"])
-        XCTAssertNil(failing.messages[1].fallbackNote)
-
-        let answered = AssistantController(session: session)
-        answered.responder = { _, workspace, selection, _, _, _ in
-            AssistantEngine.Turn(reply: "It is 60 × 40 × 20 mm.", bench: AssistantWorkbench(workspace: workspace, selection: selection), backend: .onDevice,
-                                 fallback: AssistantFailure(message: "Private Cloud Compute stopped answering.", kind: .service, details: ["Error: Test 1"]))
-        }
-        answered.send("How big is it?")
-        await waitUntilIdle(answered)
-        XCTAssertFalse(answered.messages[1].failed)
-        XCTAssertEqual(answered.messages[1].text, "It is 60 × 40 × 20 mm.")
-        XCTAssertNotNil(answered.messages[1].fallbackNote)
-        XCTAssertEqual(answered.messages[1].details, ["Private Cloud Compute stopped answering.", "Error: Test 1"])
     }
 
     func testTheSelectionIsTheRequestsContext() async throws {
@@ -327,7 +314,7 @@ import UIKit
             seen = selection
             var bench = AssistantWorkbench(workspace: workspace, selection: selection)
             try bench.hole(body: "selected", face: "selected", kind: .simple, size: "M3", depth: nil)
-            return AssistantEngine.Turn(reply: "", bench: bench, backend: .cloud)
+            return AssistantEngine.Turn(reply: "", bench: bench, backend: .claude)
         }
         assistant.send("Drill an M3 hole here")
         await waitUntilIdle(assistant)
@@ -353,19 +340,8 @@ import UIKit
         XCTAssertEqual(session.workspace, before)
     }
 
-    func testTheCloudModelNeedsTheSignedEntitlement() throws {
-        // Unsigned test builds have no entitlements; signed ones carry the cloud entitlement.
-        let entitlements = PrivateCloudEntitlement.signedEntitlements()
-        XCTAssertEqual(PrivateCloudEntitlement.isPresent, entitlements?[PrivateCloudEntitlement.key] as? Bool == true)
-        if !PrivateCloudEntitlement.isPresent {
-            XCTAssertEqual(AssistantEngine.unavailableReason(.cloud), "Private Cloud Compute is not available in this version of the app. Choose On device.")
-            XCTAssertFalse(AssistantEngine.backends(for: .automatic).contains(.cloud), "Automatic never picks a cloud model that would stop the app")
-        }
-        print("Private Cloud Compute entitlement present: \(PrivateCloudEntitlement.isPresent); entitlements: \(entitlements?.keys.sorted() ?? [])")
-    }
-
     /// Live requests through the real engine. Run with TEST_RUNNER_LIVE_ASSISTANT=1 (and
-    /// TEST_RUNNER_LIVE_BACKEND=cloud, onDevice, claude, openai, or gemini); prints each request's trace.
+    /// TEST_RUNNER_LIVE_BACKEND=claude, openai, or gemini); prints each request's trace.
     /// For a provider, TEST_RUNNER_LIVE_KEYS names a folder on this Mac holding a file per provider
     /// (`claude`, `openai`, `gemini`) with just its API key; the key is read from there and never
     /// printed. TEST_RUNNER_LIVE_MODEL and TEST_RUNNER_LIVE_EFFORT (low, medium, high) pick the model.
@@ -373,9 +349,10 @@ import UIKit
     func testLiveRequests() async throws {
         let environment = ProcessInfo.processInfo.environment
         try XCTSkipUnless(environment["LIVE_ASSISTANT"] == "1", "Set TEST_RUNNER_LIVE_ASSISTANT=1 to run live model requests.")
-        let choice = AssistantModelChoice(rawValue: environment["LIVE_BACKEND"] ?? "") ?? .cloud
+        let choice = AssistantModelChoice(rawValue: environment["LIVE_BACKEND"] ?? "") ?? .claude
         var keyFor: (AIProvider) throws -> String? = { try $0.credentials.read() }
-        if let provider = choice.provider {
+        do {
+            let provider = choice.provider
             if let folder = environment["LIVE_KEYS"] {
                 let file = URL(fileURLWithPath: folder).appendingPathComponent(provider.rawValue)
                 guard let key = try? String(contentsOf: file, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines), !key.isEmpty else {
@@ -386,7 +363,7 @@ import UIKit
             if let id = environment["LIVE_MODEL"], !id.isEmpty { ProviderSettings.setModel(ProviderModel(id: id, name: id), for: provider) }
             if let effort = environment["LIVE_EFFORT"].flatMap(AssistantEffort.init(rawValue:)) { ProviderSettings.setEffort(effort, for: provider) }
             print("Live \(provider.title): \(ProviderSettings.model(for: provider).id) · \(ProviderSettings.effort(for: provider).title)")
-        } else if let reason = AssistantEngine.backends(for: choice).first.flatMap(AssistantEngine.unavailableReason) { throw XCTSkip(reason) }
+        }
         let requests = (environment["LIVE_REQUESTS"].flatMap { $0.isEmpty ? nil : $0.components(separatedBy: "|") }) ?? [
             "How big is it, and what is its volume?",
             "Round the vertical edges 3 mm",
@@ -397,7 +374,7 @@ import UIKit
         let session = environment["LIVE_SCENE"] == "empty" ? ModelingSession(inMemory: true) : boxScene()
         for request in requests {
             let engine = AssistantEngine(claudeKey: { try keyFor(.claude) }, providerKey: keyFor)
-            if let seconds = environment["LIVE_TIMEOUT"].flatMap(Double.init) { AssistantEngine.cloudTimeout = seconds }
+            if let seconds = environment["LIVE_TIMEOUT"].flatMap(Double.init) { AssistantEngine.providerTimeout = seconds }
             engine.context.onResult = { print("      ↳ \($0.prefix(240))") }
             print("▶︎ [\(choice.rawValue)] \(request)")
             let started = Date()

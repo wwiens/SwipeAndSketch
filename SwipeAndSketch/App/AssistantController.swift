@@ -20,9 +20,7 @@ import Combine
         var backend: AssistantBackend?
         var isWorking = false
         var failed = false
-        /// Says the on-device model answered because Private Cloud Compute could not.
-        var fallbackNote: String?
-        /// What the service reported when the request (or its cloud attempt) failed.
+        /// What the service reported when the request failed.
         var details: [String] = []
         var review: Review = .none
     }
@@ -85,21 +83,21 @@ import Combine
                 var bench = AssistantWorkbench(workspace: workspace, selection: selection)
                 if ProcessInfo.processInfo.arguments.contains("--ui-testing-assistant-template") {
                     try bench.addSlipLidBox(.init(reference: .closed, width: 64, depth: 44, height: 24, wall: 2, radius: 6, clearance: 0.2, vents: false))
-                    return AssistantEngine.Turn(reply: "The box and lid are ready to review.", bench: bench, backend: .onDevice)
+                    return AssistantEngine.Turn(reply: "The box and lid are ready to review.", bench: bench, backend: .claude)
                 }
                 if ProcessInfo.processInfo.arguments.contains("--ui-testing-assistant-requirements") {
                     let plan = try AssistantRequirementPlan([.init(quote: request, kind: "bodySize", target: "Body 01", expected: [60, 40, 20])],
                                                             request: request, workspace: workspace, selection: selection)
                     try bench.setDimension(item: "Body 01", dimension: "depth", value: 10)
-                    return AssistantEngine.Turn(reply: "Here is the draft.", bench: bench, backend: .onDevice, requirements: plan.evaluate(in: bench.workspace))
+                    return AssistantEngine.Turn(reply: "Here is the draft.", bench: bench, backend: .claude, requirements: plan.evaluate(in: bench.workspace))
                 }
-                if request.lowercased().hasPrefix("how") { return AssistantEngine.Turn(reply: "Body 01 is 60 × 40 × 20 mm.", bench: bench, backend: .onDevice) }
+                if request.lowercased().hasPrefix("how") { return AssistantEngine.Turn(reply: "Body 01 is 60 × 40 × 20 mm.", bench: bench, backend: .claude) }
                 if request.lowercased().contains("chamfer") {
                     try bench.finish(.chamfer, body: "Body 01", edges: "top", size: 1)
-                    return AssistantEngine.Turn(reply: "Chamfered the top edges of Body 01 by 1 mm.", bench: bench, backend: .onDevice)
+                    return AssistantEngine.Turn(reply: "Chamfered the top edges of Body 01 by 1 mm.", bench: bench, backend: .claude)
                 }
                 try bench.finish(.fillet, body: "Body 01", edges: "vertical", size: 3)
-                return AssistantEngine.Turn(reply: "Rounded the vertical edges of Body 01 by 3 mm.", bench: bench, backend: .onDevice)
+                return AssistantEngine.Turn(reply: "Rounded the vertical edges of Body 01 by 3 mm.", bench: bench, backend: .claude)
             }
         }
         session.onAssistantReset = { [weak self] in self?.abandon() }
@@ -162,12 +160,11 @@ import Combine
     func refreshModelStatus() {
         let status: ModelStatus
         if isScripted {
-            status = ModelStatus(title: "On device", available: true)
-        } else if let backend = AssistantEngine.backends(for: choice).first(where: { AssistantEngine.unavailableReason($0) == nil }) {
-            status = ModelStatus(title: backend.shortTitle, available: true)
+            status = ModelStatus(title: "Scripted", available: true)
+        } else if let reason = AssistantEngine.unavailableReason(choice.backend) {
+            status = ModelStatus(title: reason, available: false)
         } else {
-            let backend: AssistantBackend = choice.provider?.backend ?? (choice == .cloud ? .cloud : .onDevice)
-            status = ModelStatus(title: AssistantEngine.unavailableReason(backend) ?? "Unavailable", available: false)
+            status = ModelStatus(title: choice.backend.shortTitle, available: true)
         }
         if status != modelStatus { modelStatus = status }
     }
@@ -268,10 +265,6 @@ import Combine
             guard let turn else { return }
             message.text = turn.reply.isEmpty ? (turn.bench.hasChanges ? "Here are the changes." : "Done.") : turn.reply
             message.backend = turn.backend
-            if let fallback = turn.fallback {
-                message.fallbackNote = "Private Cloud Compute could not answer, so the on-device model did."
-                message.details = [fallback.message] + fallback.details
-            }
             message.changes = turn.bench.changes
             // Checks describe a draft: a question or a reply without a checklist shows none.
             if turn.bench.hasChanges && !turn.requirements.results.isEmpty { message.requirements = turn.requirements }

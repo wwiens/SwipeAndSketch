@@ -6,7 +6,7 @@ import SwiftUI
 struct AssistantSettingsView: View {
     var session: ModelingSession? = nil
     var onDone: () -> Void
-    @AppStorage("assistant.model") private var model = AssistantModelChoice.automatic.rawValue
+    @AppStorage("assistant.model") private var model = AssistantModelChoice.claude.rawValue
     @AppStorage("radialToolbarEnabled") private var radialToolbarEnabled = true
     @AppStorage(WorkspaceMode.defaultsKey) private var workspaceMode: WorkspaceMode = .essentials
     @AppStorage(WorkspaceMode.tipsDefaultsKey) private var showTips = true
@@ -89,7 +89,7 @@ struct AssistantSettingsView: View {
                     }
                     .accessibilityValue(AssistantModelChoice.stored(model).title)
                     .accessibilityIdentifier("settings.assistant.model")
-                    Text("Automatic uses Apple's models. \(AIProvider.offeredNames) uses your own API key from that company, with the model and effort you choose for it.")
+                    Text("The assistant uses \(AIProvider.offeredNames) with your own API key from that company, and the model and effort you choose for it.")
                         .font(.footnote).foregroundStyle(Color("ss-muted"))
                 }
                 Section {

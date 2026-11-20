@@ -88,14 +88,7 @@ struct AssistantPanel: View {
         .padding(.leading, 14).padding(.trailing, 6).frame(height: 52)
     }
 
-    private var modelNote: String {
-        switch assistant.choice {
-        case .automatic: "Uses Private Cloud Compute when it can, and the on-device model otherwise."
-        case .cloud: "Apple's larger model on Private Cloud Compute. Your model data is not stored."
-        case .onDevice: "Runs on this iPad, offline. Best for one or two changes at a time."
-        case .claude, .openAI, .gemini: Self.providerNote(assistant.choice.provider!)
-        }
-    }
+    private var modelNote: String { Self.providerNote(assistant.choice.provider) }
 
     private static func providerNote(_ provider: AIProvider) -> String {
         "\(ProviderSettings.model(for: provider).name) at \(ProviderSettings.effort(for: provider).title) effort. Sends requests and model details to \(provider.company) using your API key. API charges apply."
@@ -219,10 +212,6 @@ private struct MessageView: View {
                 }
                 if !message.changes.isEmpty { changeCard }
                 if let report = message.requirements { requirementCard(report) }
-                if let note = message.fallbackNote {
-                    Text(note).font(.system(size: 12)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("assistant.fallback")
-                }
                 HStack(spacing: 10) {
                     if let backend = message.backend {
                         Text(backend.shortTitle).font(.system(size: 11)).foregroundStyle(muted)

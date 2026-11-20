@@ -4,17 +4,17 @@ Swipe & Sketch is a source-available experimental iPad CAD app for designing 3D-
 
 ![A shaded solid in Swipe & Sketch](Docs/ShadedSolid.png)
 
-There are no accounts. The app reaches the network only for the optional assistant (Apple's Private Cloud Compute, or Anthropic's API when you choose Claude and add your own API key) and the walkthroughs the help card plays from swipesketch.com.
+There are no accounts. The app reaches the network only for the optional assistant (Anthropic's, OpenAI's, or Google's API, with your own API key) and the walkthroughs the help card plays from swipesketch.com.
 
 ## Status
 
 - Version 1.0, experimental and in preparation for the App Store.
-- Planned App Store pricing: free download, full 14-day trial, then a $19.99 USD one-time purchase to continue creating and editing. One complete product, with no subscription or separate feature tiers. Viewing, sharing, and full-quality export remain available after the trial. The source is available under the PolyForm Shield License. Optional Claude usage is billed separately by Anthropic to your own API account.
+- Planned App Store pricing: free download, full 14-day trial, then a $19.99 USD one-time purchase to continue creating and editing. One complete product, with no subscription or separate feature tiers. Viewing, sharing, and full-quality export remain available after the trial. The source is available under the PolyForm Shield License. Optional assistant usage is billed separately by Anthropic, OpenAI, or Google to your own API account.
 - Bug reports are welcome. Support and fixes are provided as time allows; there is no guaranteed response time or fix schedule. Keep backups of important projects. Known data-loss defects block release; see [release policy](Docs/ReleasePolicy.md).
 - iPad only, iPadOS 27 or later.
 - **Apple Pencil is required.** The Pencil draws, selects, and drags geometry. Fingers move the view and press buttons. There is no finger-drawing mode.
-- The assistant needs Apple Intelligence, or an Anthropic API key to use Claude. Modeling works offline; the help card's walkthroughs and Claude need a connection.
-- **Claude (optional):** in Settings, paste an Anthropic API key and choose Claude Opus 5.5 · High. The key stays in the iPad's Keychain. When you send a request with Claude chosen, the request, the recent conversation, a summary of the model (item names and measurements), and CAD tool results go directly to Anthropic; no project file or canvas image is sent. Anthropic bills the usage to your API account.
+- The assistant needs your own API key from Anthropic (Claude), OpenAI, or Google (Gemini). Modeling works offline; the help card's walkthroughs and the assistant need a connection.
+- **Claude (optional):** in Settings, paste an Anthropic API key and choose Claude Opus 5.5 · High. The key stays in the iPad's Keychain. When you send a request with Claude chosen, the request, the recent conversation, a description of the model (item names, features, and measurements), and CAD tool results go directly to Anthropic; no project file or canvas image is sent. Anthropic bills the usage to your API account. OpenAI and Gemini work the same way with a key from that company.
 
 ## Building
 
@@ -25,7 +25,7 @@ There are no accounts. The app reaches the network only for the optional assista
    It clones Open CASCADE 8.0.1 (tag `V8_0_1`) into `build/occt/src`, builds it for iPadOS, the iPadOS simulator, and macOS, and wraps it with the app's C facade into `Vendor/SSKernel.xcframework`. The first run takes about 25 minutes. `Scripts/build_kernel.sh --facade` later rebuilds only the facade.
 2. Open **SwipeAndSketch.xcodeproj** in Xcode 27.
 3. Select the **SwipeAndSketch** target. Under **Signing & Capabilities**, choose your own team and a bundle identifier of your own.
-4. **Private Cloud Compute:** the app's entitlements file requests `com.apple.developer.private-cloud-compute`. If your team doesn't have that entitlement, remove it from `SwipeAndSketch/SwipeAndSketch.entitlements` (or remove the capability in Xcode). The assistant then uses the on-device model only. The app checks for the entitlement (`PrivateCloudEntitlement`) and never calls the cloud model without it.
+4. **Private Cloud Compute entitlement:** the app's entitlements file still lists `com.apple.developer.private-cloud-compute`, which the app no longer uses. If your team doesn't have that entitlement, remove it from `SwipeAndSketch/SwipeAndSketch.entitlements` (or remove the capability in Xcode).
 5. Connect your iPad, trust the Mac, turn on Developer Mode if asked, choose the iPad as the run destination, and press **Run** (⌘R).
 
 **Trial and purchase in your build:** Debug builds run from Xcode with the **SwipeAndSketch** scheme have full access, with no trial or purchase. The **SwipeAndSketch Purchases** scheme uses a local test store (`SwipeAndSketch/Purchases.storekit`) for working on the purchase screens. A Release build (an archive) asks the App Store, and the products exist only for the official app, so to distribute your own build add `SWIPE_SKETCH_SELF_BUILD` to **Active Compilation Conditions** (`SWIFT_ACTIVE_COMPILATION_CONDITIONS`) for Release; it then runs with full access.
@@ -66,7 +66,7 @@ The test target lists two files under `Benchmarks/` that aren't part of this rep
 
 - `SwipeAndSketch/Core`: geometry, sketches and regions, solids and their operations, templates, document persistence, and history. Also built as a Swift package (`Package.swift`) for the core tests.
 - `SwipeAndSketch/App`: app lifecycle, the Home screen, the modeling session, the interface, help topics, third-party notices, and the assistant panel.
-- `SwipeAndSketch/Assistant`: the assistant's model layer: Apple Foundation Models and the Claude client, tools, the on-device planner, and model selection. `SwipeAndSketch/Core/AssistantWorkbench.swift` is the model layer it edits through.
+- `SwipeAndSketch/Assistant`: the assistant's model layer: the Claude, OpenAI, and Gemini clients, the CAD tools, and model selection. The design proposal it makes first is in `SwipeAndSketch/Core/Design*.swift`. `SwipeAndSketch/Core/AssistantWorkbench.swift` is the model layer it edits through.
 - `SwipeAndSketch/Canvas`: SceneKit rendering, the camera and view cube, and Pencil-only canvas input. `KernelSceneGeometry` turns kernel solids into per-face SceneKit geometry.
 - `SwipeAndSketch/Kernel`: the C facade over Open CASCADE (`SSKernel.h`). `SwipeAndSketch/Core/SolidKernel.swift` wraps it in Swift.
 - `SwipeAndSketchThumbnails`: the Quick Look extension that shows project thumbnails in Files.
