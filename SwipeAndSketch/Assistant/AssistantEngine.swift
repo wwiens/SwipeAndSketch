@@ -83,9 +83,10 @@ struct AssistantDiagnostic: Codable, Equatable {
     var onDiagnostic: ((AssistantDiagnostic) -> Void)?
     /// Evaluation only: exported with the run, never uploaded automatically.
     var feedbackDirectory: URL?
-    /// Claude and OpenAI change the design with one structured proposal, measured and corrected
-    /// once (DesignHarness), and use the tools only for what the proposal cannot express. On since
-    /// November 19, 2026; `SS_DESIGN_HARNESS=0` in the environment switches it off for comparisons.
+    /// Private Cloud Compute, Claude, OpenAI, and Gemini change the design with one structured
+    /// proposal, measured and corrected once (DesignHarness), and use the tools only for what the
+    /// proposal cannot express; the on-device model keeps its planner. On since November 19, 2026;
+    /// `SS_DESIGN_HARNESS=0` in the environment switches it off for comparisons.
     nonisolated(unsafe) static var designHarnessEnabled = ProcessInfo.processInfo.environment["SS_DESIGN_HARNESS"] != "0"
     /// Evaluation switch: give the on-device model the cloud model's full tools and instructions.
     nonisolated(unsafe) static var onDeviceFull = false
@@ -320,15 +321,18 @@ struct AssistantDiagnostic: Codable, Equatable {
             let model = ProviderSettings.model(for: provider).id, effort = ProviderSettings.effortValue(for: provider)
             let hash = SHA256.hash(data: Data((key + "\n" + model).utf8))
             if hash != previousProviderHash { claude.reset(); openAI.reset(); gemini.reset(); previousProviderHash = hash }
-            // Claude and OpenAI first make one structured design proposal (DesignHarness); a request
-            // it cannot express goes on to the tools below, from the same unchanged start.
-            if Self.designHarnessEnabled, provider == .claude || provider == .openAI {
-                let claude = self.claude, openAI = self.openAI, context = self.context
+            // Each provider first makes one structured design proposal (DesignHarness); a request it
+            // cannot express goes on to the tools below, from the same unchanged start.
+            if Self.designHarnessEnabled {
+                let claude = self.claude, openAI = self.openAI, gemini = self.gemini, context = self.context
                 let result = try await DesignHarness.perform(request: request, workspace: workspace, selection: selection,
                                                              recall: AssistantPrompt.recall(history.suffix(2), limit: 400),
                                                              onActivity: { context.onActivity?($0) }) { design in
-                    provider == .claude ? try await claude.propose(design, key: key, model: model, effort: effort)
-                                        : try await openAI.propose(design, key: key, model: model, effort: effort)
+                    switch provider {
+                    case .claude: try await claude.propose(design, key: key, model: model, effort: effort)
+                    case .openAI: try await openAI.propose(design, key: key, model: model, effort: effort)
+                    case .gemini: try await gemini.propose(design, key: key, model: model, effort: effort)
+                    }
                 }
                 context.onResult?("design harness: \(result.handOff ? "hand off" : "\(result.attempts.count) attempt(s), \(result.attempts.last?.passed == true ? "passed" : "failed")")")
                 if !result.handOff {
@@ -344,6 +348,21 @@ struct AssistantDiagnostic: Codable, Equatable {
             case .gemini: return try await gemini.respond(prompt: prompt, key: key, context: context, model: model, effort: effort, onText: onText)
             }
         case .cloud:
+            if Self.designHarnessEnabled {
+                let context = self.context
+                let result = try await DesignHarness.perform(request: request, workspace: workspace, selection: selection,
+                                                             recall: AssistantPrompt.recall(history.suffix(2), limit: 400),
+                                                             onActivity: { context.onActivity?($0) }) { design in
+                    try await Self.proposeOnCloud(design)
+                }
+                context.onResult?("design harness: \(result.handOff ? "hand off" : "\(result.attempts.count) attempt(s), \(result.attempts.last?.passed == true ? "passed" : "failed")")")
+                if !result.handOff {
+                    context.adopt(result.bench, report: result.requirements)
+                    onText(result.reply)
+                    return result.reply
+                }
+                context.onActivity?("Using the CAD tools")
+            }
             let session = cloudSession ?? makeCloudSession(recalling: history.suffix(6))
             cloudSession = session
             do {
@@ -442,6 +461,45 @@ struct AssistantDiagnostic: Codable, Equatable {
     private func makeCloudSession(recalling earlier: some Collection<(request: String, reply: String)>) -> LanguageModelSession {
         LanguageModelSession(model: PrivateCloudComputeLanguageModel(), tools: context.allTools,
                              instructions: AssistantPrompt.instructions + AssistantPrompt.recall(earlier, limit: 400))
+    }
+
+    /// One design proposal from Private Cloud Compute (DesignHarness): a fresh session per attempt,
+    /// its reply generated to the proposal's schema. Only called once the entitlement check passed
+    /// (`unavailableReason(.cloud)`), since the model stops an app without it.
+    static func proposeOnCloud(_ design: DesignPlannerRequest) async throws -> DesignPlannerReply {
+        let session = LanguageModelSession(model: PrivateCloudComputeLanguageModel(), instructions: design.instructions)
+        let response = try await session.respond(to: design.input, schema: try generationSchema(design.schema, name: design.schemaName),
+                                                 options: GenerationOptions(samplingMode: .greedy))
+        return DesignPlannerReply(text: response.content.jsonString, model: "Private Cloud Compute")
+    }
+
+    /// The strict JSON schema as Apple's generation schema: there an optional value is one left out
+    /// of `required`, where strict structured output requires it and allows null (`anyOf` with null).
+    static func generationSchema(_ data: Data, name: String) throws -> GenerationSchema {
+        func convert(_ node: [String: Any]) -> [String: Any] {
+            var result = node
+            if let properties = node["properties"] as? [String: [String: Any]] {
+                var optional = Set<String>()
+                result["properties"] = properties.mapValues(convert).reduce(into: [String: Any]()) { into, entry in
+                    if let choices = entry.value["anyOf"] as? [[String: Any]], choices.count == 2,
+                       let value = choices.first(where: { ($0["type"] as? String) != "null" }) {
+                        into[entry.key] = convert(value)
+                        optional.insert(entry.key)
+                    } else {
+                        into[entry.key] = entry.value
+                    }
+                }
+                result["required"] = (node["required"] as? [String] ?? []).filter { !optional.contains($0) }
+            }
+            if let items = node["items"] as? [String: Any] { result["items"] = convert(items) }
+            return result
+        }
+        guard let schema = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw AssistantFailure(message: "The design schema could not be read.")
+        }
+        var root = convert(schema)
+        root["title"] = name
+        return try JSONDecoder().decode(GenerationSchema.self, from: JSONSerialization.data(withJSONObject: root, options: .sortedKeys))
     }
 
     private func stream(_ prompt: String, in session: LanguageModelSession, onText: @escaping (String) -> Void) async throws -> String {

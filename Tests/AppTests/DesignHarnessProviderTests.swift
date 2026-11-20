@@ -82,6 +82,44 @@ import Foundation
         XCTAssertEqual(turn.requirements.results.map(\.status), [.passed])
     }
 
+    func testGeminiSendsTheSchemaAsItsResponseFormat() async throws {
+        try XCTSkipUnless(AIProvider.offersOpenAIAndGemini, "Gemini is hidden in this build.")
+        var requests: [AssistantJSON] = []
+        let client = GeminiAssistant { request in
+            requests.append(try self.payload(request))
+            return try self.http(.object(["status": .string("completed"), "model": .string("gemini-fixture"), "steps": .array([
+                .object(["type": .string("thought"), "signature": .string("x")]),
+                .object(["type": .string("model_output"), "content": .array([.object(["type": .string("text"), "text": .string(self.plate())])])])
+            ])]), url: GeminiAssistant.endpoint)
+        }
+        let engine = AssistantEngine(gemini: client, providerKey: { $0 == .gemini ? self.fakeKey : nil })
+        let turn = try await engine.respond(to: "Make an 80 × 50 × 5 mm plate with four Ø4.5 holes.", workspace: Workspace(), selection: nil,
+                                            choice: .gemini, onActivity: { _ in }, onText: { _ in })
+        XCTAssertEqual(requests.count, 1)
+        let body = requests[0]
+        XCTAssertNil(body["tools"])
+        XCTAssertEqual(body["store"], .bool(false))
+        XCTAssertEqual(body["response_format"]?["type"]?.string, "text")
+        XCTAssertEqual(body["response_format"]?["mime_type"]?.string, "application/json")
+        XCTAssertEqual(body["response_format"]?["schema"]?["additionalProperties"], .bool(false))
+        XCTAssertEqual(turn.backend, .gemini)
+        XCTAssertEqual(try SolidKernel.solid(for: turn.bench.workspace.bodies[0]).volume, 19_574.613, accuracy: 0.1)
+        XCTAssertEqual(turn.reply, "Corner radius 5 mm.")
+    }
+
+    /// Private Cloud Compute generates to Apple's schema: an optional value is one left out of
+    /// `required`. The conversion must be one Apple's decoder accepts.
+    func testTheProposalSchemaConvertsForPrivateCloudCompute() throws {
+        let schema = try AssistantEngine.generationSchema(DesignSchema.data, name: DesignSchema.name)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(schema)) as? [String: Any])
+        let text = String(decoding: try JSONSerialization.data(withJSONObject: json, options: .sortedKeys), as: UTF8.self)
+        XCTAssertFalse(text.contains("anyOf"), "Nullable values become optional ones")
+        XCTAssertTrue(text.contains("solidOps") && text.contains("rotateCopies") && text.contains("counterboreDepth"), text.prefix(300).description)
+        // A proposal that fits the schema reads back as one.
+        let proposal = try DesignProposal.decode(plate())
+        XCTAssertEqual(proposal.features.count, 5)
+    }
+
     func testClaudeUsesStructuredOutputAndHandsUnsupportedRequestsToTheTools() async throws {
         var requests: [AssistantJSON] = []
         let claude = ClaudeAssistant { request in

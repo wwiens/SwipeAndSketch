@@ -175,6 +175,91 @@ import Foundation
         throw AssistantFailure(message: "Gemini reached the request limit. Ask for fewer changes at a time.")
     }
 
+    /// One design proposal (DesignHarness): a single request with no tools, its reply held to the
+    /// proposal's JSON schema by `response_format`. Nothing is kept between requests.
+    func propose(_ design: DesignPlannerRequest, key: String, model: String, effort: String?) async throws -> DesignPlannerReply {
+        let schema = try JSONDecoder().decode(AssistantJSON.self, from: design.schema)
+        var configuration: [String: AssistantJSON] = ["max_output_tokens": .number(Double(Self.outputBudget))]
+        let sendsEffort = effort != nil && !noEffort.contains(model)
+        if sendsEffort, let effort { configuration["thinking_level"] = .string(effort) }
+        var fields: [String: AssistantJSON] = [
+            "model": .string(model), "system_instruction": .string(design.instructions),
+            "input": .array([.object(["type": .string("user_input"), "content": .array([.object(["type": .string("text"), "text": .string(design.input)])])])]),
+            "response_format": .object(["type": .string("text"), "mime_type": .string("application/json"), "schema": schema]),
+            "generation_config": .object(configuration), "store": .bool(false)
+        ]
+        var request = URLRequest(url: Self.endpoint)
+        request.setValue(key, forHTTPHeaderField: "x-goog-api-key")
+        func encode() throws {
+            try ProviderHTTP.json(&request, .object(fields))
+            request.timeoutInterval = Self.requestTimeout
+        }
+        try encode()
+        var continuations = 0
+        var response: AssistantJSON
+        while true {
+            let data: Data
+            do {
+                var (received, status) = try await ProviderHTTP.send(request, with: transport)
+                if status.statusCode == 400, sendsEffort, configuration["thinking_level"] != nil,
+                   String(decoding: received, as: UTF8.self).localizedCaseInsensitiveContains("thinking") {
+                    noEffort.insert(model)
+                    configuration["thinking_level"] = nil
+                    fields["generation_config"] = .object(configuration)
+                    try encode()
+                    (received, status) = try await ProviderHTTP.send(request, with: transport)
+                }
+                try Task.checkCancellation()
+                do { try Self.checkStatus(status.statusCode, data: received, model: model) }
+                catch var failure as AssistantFailure {
+                    // Google's own reason (a schema it cannot compile, say), for the failure's details.
+                    if let reason = (try? JSONDecoder().decode(AssistantJSON.self, from: received))?["error"]?["message"]?.string {
+                        failure.details.append("Gemini: " + reason.prefix(300))
+                    }
+                    throw failure
+                }
+                data = received
+            } catch is CancellationError { throw CancellationError() }
+            catch let error as URLError where error.code == .cancelled { throw CancellationError() }
+            catch let error as URLError where error.code == .timedOut {
+                throw AssistantFailure(message: "\(model) took too long to answer. Try again, choose a lower Effort or a faster model in Settings, or ask for less at a time.", kind: .service)
+            }
+            catch let error as AssistantFailure { throw error }
+            catch { throw AssistantFailure(message: "Gemini could not be reached. Check your internet connection and try again.", kind: .service) }
+            guard let decoded = try? JSONDecoder().decode(AssistantJSON.self, from: data) else {
+                throw AssistantFailure(message: "Gemini returned an incomplete response. Try again.", kind: .service, details: Self.shape(of: data))
+            }
+            if decoded["status"]?.string == "incomplete", let token = decoded["continuation_token"]?.string, continuations < Self.maximumContinuations {
+                try Task.checkCancellation()
+                continuations += 1
+                configuration["max_output_tokens"] = .number(Double(Self.outputBudget * (continuations + 1)))
+                fields["generation_config"] = .object(configuration)
+                fields["continuation_token"] = .string(token)
+                try encode()
+                continue
+            }
+            response = decoded
+            break
+        }
+        switch response["status"]?.string ?? "completed" {
+        case "completed": break
+        case "incomplete": throw AssistantFailure(message: "\(model) used up its response limit before finishing the design. Try again, choose a lower Effort in Settings, or ask for fewer changes at a time.")
+        case "failed":
+            let errors = response["errors"]?.array ?? []
+            let details = errors.map { "Gemini: " + [$0["code"]?.string, $0["message"]?.string].compactMap { $0 }.joined(separator: ": ") }
+            let text = errors.compactMap { $0["message"]?.string }.joined(separator: " ").lowercased()
+            if text.contains("safety") || text.contains("blocked") {
+                throw AssistantFailure(message: "Gemini declined this request.", kind: .refusal, details: details)
+            }
+            throw AssistantFailure(message: "Gemini could not complete this request. Try again, or ask for fewer changes.", kind: .service, details: details)
+        default: throw AssistantFailure(message: "Gemini stopped before completing this request. Try a smaller request.")
+        }
+        let text = (response["steps"]?.array ?? []).filter { $0["type"]?.string == "model_output" }.flatMap { $0["content"]?.array ?? [] }
+            .filter { $0["type"]?.string == "text" }.compactMap { $0["text"]?.string }.joined()
+        guard !text.isEmpty else { throw AssistantFailure(message: "Gemini returned no design. Try again.", details: Self.shape(of: (try? JSONEncoder().encode(response)) ?? Data())) }
+        return DesignPlannerReply(text: text, model: response["model"]?.string ?? model)
+    }
+
     /// The outline of a reply the app could not read, for the panel's Details: its size, top-level
     /// fields, status, and step types. Never any text, arguments, or values.
     static func shape(of data: Data) -> [String] {
