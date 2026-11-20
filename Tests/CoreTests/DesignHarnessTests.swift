@@ -264,6 +264,45 @@ final class DesignHarnessTests: XCTestCase {
         XCTAssertEqual(try SolidKernel.solid(for: left.workspace.bodies[1]).bounds.min.x, -130, accuracy: 1e-6)
     }
 
+    func testUnionSubtractAndIntersectCombineWholeSolids() throws {
+        let base = Feature(id: "base", body: "Base", kind: .block, operation: .add, axis: .pz, x: 0, y: 0, z: 0, width: 40, depth: 40, height: 10)
+        let tower = Feature(id: "tower", body: "Tower", kind: .block, operation: .add, axis: .pz, x: 0, y: 0, z: 10, width: 10, depth: 10, height: 20)
+        let cutter = Feature(id: "cutter", body: "Cutter", kind: .cylinder, operation: .add, axis: .pz, x: 15, y: 15, z: -1, height: 12, radius: 3)
+
+        // A new tower united into a new base, the tower solid used up.
+        let united = try applied(DesignProposal(features: [base, tower], solidOps: [.init(op: .union, bodies: ["Base", "Tower"])])).bench
+        XCTAssertEqual(united.workspace.bodies.map(\.name), ["Base"])
+        XCTAssertEqual(try volume(united.workspace.bodies[0]), 40 * 40 * 10 + 10 * 10 * 20, accuracy: 1e-6)
+        XCTAssertTrue(united.changes.last?.hasPrefix("United Tower into Base") ?? false, "\(united.changes)")
+
+        // A cutter made and subtracted in one proposal; then one kept, with 0.2 mm clearance.
+        let cut = try applied(DesignProposal(features: [base, cutter], solidOps: [.init(op: .subtract, bodies: ["Base", "Cutter"])])).bench.workspace
+        XCTAssertEqual(cut.bodies.count, 1)
+        XCTAssertEqual(try volume(cut.bodies[0]), 16_000 - Double.pi * 9 * 10, accuracy: 0.01)
+        let kept = try applied(DesignProposal(features: [base, cutter], solidOps: [.init(op: .subtract, bodies: ["Base", "Cutter"], spacing: 0.2, keepInput: true)])).bench.workspace
+        XCTAssertEqual(kept.bodies.count, 2)
+        XCTAssertEqual(try volume(kept.bodies[0]), 16_000 - Double.pi * 3.2 * 3.2 * 10, accuracy: 0.01)
+        // The target reads back with the subtraction as a locked step after its base.
+        let document = DesignExport.document(of: cut).document
+        XCTAssertEqual(document.features.map(\.kind), [.block, .locked])
+        XCTAssertEqual(document.features[1].note, "another solid subtracted")
+
+        // Intersect keeps only the overlap.
+        let overlap = Feature(id: "overlap", body: "Overlap", kind: .block, operation: .add, axis: .pz, x: 20, y: 20, z: 0, width: 40, depth: 40, height: 10)
+        let common = try applied(DesignProposal(features: [base, overlap], solidOps: [.init(op: .intersect, bodies: ["Base", "Overlap"])])).bench.workspace
+        XCTAssertEqual(common.bodies.count, 1)
+        XCTAssertEqual(try volume(common.bodies[0]), 20 * 20 * 10, accuracy: 1e-6)
+
+        // Mistakes say why.
+        func message(_ proposal: DesignProposal) -> String {
+            do { _ = try applied(proposal); return "applied" } catch { return (error as? AssistantWorkbench.Failure)?.message ?? "\(error)" }
+        }
+        XCTAssertTrue(message(DesignProposal(features: [base], solidOps: [.init(op: .union, bodies: ["Base"])])).contains("target solid first"))
+        let far = Feature(id: "far", body: "Far", kind: .block, operation: .add, axis: .pz, x: 200, y: 0, z: 0, width: 10, depth: 10, height: 10)
+        XCTAssertTrue(message(DesignProposal(features: [base, far], solidOps: [.init(op: .subtract, bodies: ["Base", "Far"])])).contains("do not overlap"))
+        XCTAssertTrue(message(DesignProposal(features: [base, far], solidOps: [.init(op: .union, bodies: ["Base", "Far"])])).contains("do not touch"))
+    }
+
     func testSchemaIsStrict() throws {
         let schema = try XCTUnwrap(JSONSerialization.jsonObject(with: DesignSchema.data) as? [String: Any])
         func check(_ object: [String: Any], _ path: String) {

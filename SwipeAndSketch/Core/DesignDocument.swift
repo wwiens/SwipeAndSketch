@@ -228,10 +228,11 @@ struct DesignProposal: Codable, Equatable, Sendable {
         var target: String?
         var expected: [Double]
     }
-    /// An operation on whole solids, after the features: move (and turn), mirror, or a linear or
-    /// circular pattern. One shape for all four keeps the schema within Claude's grammar limit.
+    /// An operation on whole solids, after the features: move (and turn), mirror, a linear or
+    /// circular pattern, or union, subtract, or intersect (the first of `bodies` is the target, the
+    /// rest the tools). One shape for all keeps the schema within Claude's grammar limit.
     struct SolidOp: Codable, Equatable, Sendable {
-        enum Kind: String, Codable, CaseIterable, Sendable { case move, mirror, linear, circular }
+        enum Kind: String, Codable, CaseIterable, Sendable { case move, mirror, linear, circular, union, subtract, intersect }
         var op: Kind
         var bodies: [String]
         /// move: the axis to turn about; mirror: the plane's normal; linear: the direction; circular: the axis.
@@ -245,9 +246,11 @@ struct DesignProposal: Codable, Equatable, Sendable {
         var angle: Double
         /// linear and circular: instances, the original included.
         var count: Int
-        /// linear: mm between neighbors, negative toward the axis's negative side.
+        /// linear: mm between neighbors, negative toward the axis's negative side; subtract: the
+        /// clearance in mm the tools are grown by (0: none).
         var spacing: Double
-        /// mirror: add the image beside the original instead of replacing it.
+        /// mirror: add the image beside the original instead of replacing it; union, subtract,
+        /// intersect: keep the tool solids.
         var keepInput: Bool
         /// circular: turn each copy with the pattern.
         var rotateCopies: Bool

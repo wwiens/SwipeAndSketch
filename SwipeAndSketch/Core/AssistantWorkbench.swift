@@ -754,6 +754,18 @@ struct AssistantWorkbench: Sendable {
                 let ids = try solids(op.bodies, for: "pattern")
                 try circularPattern(items: ids.map(bodyName), axis: op.axis, center: try point(op.point, "center") ?? .zero, count: op.count,
                                     angle: op.angle == 0 ? 360 : op.angle, rotateCopies: op.rotateCopies)
+            case .union, .subtract, .intersect:
+                let ids = try solids(op.bodies, for: op.op.rawValue)
+                guard ids.count >= 2, Set(ids).count == ids.count else {
+                    throw Failure("A \(op.op.rawValue) names its target solid first, then one or more other solids as tools.")
+                }
+                let names = ids.map(bodyName)
+                if op.op == .intersect {
+                    try intersect(target: names[0], tools: Array(names.dropFirst()), keepTools: op.keepInput)
+                } else {
+                    try combine(union: op.op == .union, target: names[0], tools: Array(names.dropFirst()), keepTools: op.keepInput,
+                                clearance: op.op == .subtract && op.spacing != 0 ? op.spacing : nil)
+                }
             }
             index += 1
         }
