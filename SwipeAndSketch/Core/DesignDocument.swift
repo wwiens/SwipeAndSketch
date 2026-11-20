@@ -25,6 +25,19 @@ struct DesignFeature: Codable, Equatable, Sendable {
         case shell
         /// A feature the document cannot describe exactly: kept or removed, never changed.
         case locked
+        /// Sketch shapes, in a sketch (`body` is the sketch): a rectangle centered on (x, y, z),
+        /// `width` × `depth` across `axis` (the sketch's normal); a circle of `radius`; a line
+        /// through two `points`, an arc through three (start, a point on it, end), a slot round the
+        /// segment between two `points`, `size` wide. Points are (u, v) across the axis, as for polygons.
+        case rectangle, circle, line, arc, slot
+        /// A sketch region (`region`) extruded `height` along `axis` (± the sketch's normal).
+        case extrude
+        /// A profile turned `size` degrees (0: a whole turn) about the line through (x, y, z) along
+        /// `axis`: a sketch region (`region`) whose plane holds that line, or `points` (u, v) with u
+        /// out from the axis along its first cross axis and v along the axis.
+        case revolve
+
+        var isSketchShape: Bool { [.rectangle, .circle, .line, .arc, .slot].contains(self) }
     }
     enum Operation: String, Codable, CaseIterable, Sendable { case add, cut }
     enum Axis: String, Codable, CaseIterable, Sendable {
@@ -77,15 +90,18 @@ struct DesignFeature: Codable, Equatable, Sendable {
     var size: Double?
     /// What a feature is, in words (locked features, and edges a fillet already has).
     var note: String?
+    /// extrude and revolve: a region of a sketch, "S1.R2" (as the document lists them) or the ID of
+    /// a closed sketch shape (the region it bounds).
+    var region: String?
 
     init(id: String, body: String, kind: Kind, operation: Operation? = nil, axis: Axis? = nil,
          x: Double? = nil, y: Double? = nil, z: Double? = nil, width: Double? = nil, depth: Double? = nil,
          height: Double? = nil, radius: Double? = nil, points: [Point]? = nil, throughAll: Bool? = nil,
-         hole: Hole? = nil, edges: String? = nil, faces: [String]? = nil, size: Double? = nil, note: String? = nil) {
+         hole: Hole? = nil, edges: String? = nil, faces: [String]? = nil, size: Double? = nil, note: String? = nil, region: String? = nil) {
         self.id = id; self.body = body; self.kind = kind; self.operation = operation; self.axis = axis
         self.x = x; self.y = y; self.z = z; self.width = width; self.depth = depth; self.height = height
         self.radius = radius; self.points = points; self.throughAll = throughAll; self.hole = hole
-        self.edges = edges; self.faces = faces; self.size = size; self.note = note
+        self.edges = edges; self.faces = faces; self.size = size; self.note = note; self.region = region
     }
 
     /// The feature as the app reads it: values its kind does not use are nil, and so are the
@@ -97,9 +113,25 @@ struct DesignFeature: Codable, Equatable, Sendable {
         if f.edges?.trimmingCharacters(in: .whitespaces).isEmpty == true { f.edges = nil }
         if f.faces?.isEmpty == true { f.faces = nil }
         if f.points?.isEmpty == true { f.points = nil }
+        if f.region?.trimmingCharacters(in: .whitespaces).isEmpty == true { f.region = nil }
         func placeOnly() { f.width = nil; f.depth = nil; f.radius = nil; f.points = nil; f.edges = nil; f.faces = nil; f.size = nil }
         func nothingPlaced() { f.operation = nil; f.axis = nil; f.x = nil; f.y = nil; f.z = nil; f.height = nil; f.throughAll = nil; f.hole = nil }
+        if kind != .extrude && kind != .revolve { f.region = nil }
         switch kind {
+        case .rectangle, .circle, .line, .arc, .slot:
+            f.operation = nil; f.height = nil; f.throughAll = nil; f.hole = nil; f.edges = nil; f.faces = nil
+            if kind != .rectangle { f.width = nil; f.depth = nil }
+            if kind != .circle { f.radius = nil }
+            if kind == .rectangle || kind == .circle { f.points = nil }
+            if kind != .slot { f.size = nil }
+        case .extrude:
+            f.x = nil; f.y = nil; f.z = nil; f.width = nil; f.depth = nil; f.radius = nil; f.points = nil
+            f.hole = nil; f.edges = nil; f.faces = nil; f.size = nil
+            if f.throughAll == true { f.height = nil }
+        case .revolve:
+            f.width = nil; f.depth = nil; f.radius = nil; f.height = nil; f.throughAll = nil; f.hole = nil; f.edges = nil; f.faces = nil
+            if f.size == 0 { f.size = nil }
+            if f.region != nil { f.points = nil }
         case .block, .cylinder, .polygon:
             f.hole = nil; f.edges = nil; f.faces = nil; f.size = nil
             if kind != .block { f.width = nil; f.depth = nil }
@@ -147,7 +179,7 @@ struct DesignFeature: Codable, Equatable, Sendable {
               same(width, other.width), same(depth, other.depth), same(radius, other.radius), same(size, other.size),
               through || same(height, other.height),
               edges?.trimmingCharacters(in: .whitespaces).nilIfEmpty == other.edges?.trimmingCharacters(in: .whitespaces).nilIfEmpty,
-              (faces ?? []) == (other.faces ?? []) else { return false }
+              (faces ?? []) == (other.faces ?? []), region?.nilIfEmpty == other.region?.nilIfEmpty else { return false }
         let a = points ?? [], b = other.points ?? []
         guard a.count == b.count, zip(a, b).allSatisfy({ same($0.u, $1.u) && same($0.v, $1.v) }) else { return false }
         switch (hole, other.hole) {
@@ -175,10 +207,27 @@ struct DesignDocument: Codable, Equatable, Sendable {
         var bounds: [Double]?
         var volume: Double?
     }
+    /// A sketch: its shapes are features whose `body` is the sketch's id.
+    struct Sketch: Codable, Equatable, Sendable {
+        struct Region: Codable, Equatable, Sendable {
+            /// "S1.R2": for extrude and revolve.
+            var id: String
+            var shape: String
+            /// World center, mm.
+            var center: [Double]
+        }
+        var id: String
+        var name: String
+        var hidden: Bool?
+        /// Where it lies, such as "z = 0 (normal +z)".
+        var plane: String
+        var regions: [Region]
+    }
     var bodies: [Body]
     var features: [DesignFeature]
+    var sketches: [Sketch] = []
 
-    var isEmpty: Bool { bodies.isEmpty }
+    var isEmpty: Bool { bodies.isEmpty && sketches.isEmpty }
 
     /// Compact JSON with keys in a stable order, for the model's input.
     func json() -> String {
@@ -197,12 +246,15 @@ struct DesignAliases: Equatable, Sendable {
         case finish(UUID)
         /// A step in the solid's ordered `cuts`.
         case step(UUID)
+        /// A shape of a sketch (`Reference.body` is then the sketch's id).
+        case shape(UUID)
     }
     struct Reference: Equatable, Sendable {
         var body: UUID
         var role: Role
     }
     var bodies: [String: UUID] = [:]
+    var sketches: [String: UUID] = [:]
     var features: [String: Reference] = [:]
     /// Each feature as exported, to tell a changed feature from a repeated one.
     var exported: [String: DesignFeature] = [:]
@@ -210,6 +262,7 @@ struct DesignAliases: Equatable, Sendable {
     var order: [String: [String]] = [:]
 
     func alias(of body: UUID) -> String? { bodies.first { $0.value == body }?.key }
+    func sketchAlias(of sketch: UUID) -> String? { sketches.first { $0.value == sketch }?.key }
 }
 
 /// The one proposal a model returns for a request.
@@ -386,7 +439,8 @@ enum DesignSchema {
             "edges": text,
             "faces": ["type": "array", "items": text],
             "size": number,
-            "note": text
+            "note": text,
+            "region": text
         ])
     }
 

@@ -16,6 +16,11 @@ enum DesignExport {
     static func document(of workspace: Workspace, detail: Set<UUID>? = nil) -> (document: DesignDocument, aliases: DesignAliases) {
         var bodies: [DesignDocument.Body] = [], features: [DesignFeature] = [], aliases = DesignAliases()
         let names = workspace.bodyNames
+        // Sketch regions, so a solid extruded or revolved from one can say which.
+        let regions = workspace.sketches.enumerated().flatMap { index, sketch in
+            workspace.profiles(in: sketch).filter(\.isSolidProfile).enumerated().map { (profile: $1, id: "S\(index + 1).R\($0 + 1)") }
+        }
+        let region: (SketchProfile) -> String? = { profile in regions.first { $0.profile == profile }?.id }
         for (index, body) in workspace.bodies.enumerated() {
             let alias = "B\(index + 1)"
             aliases.bodies[alias] = body.id
@@ -35,41 +40,153 @@ enum DesignExport {
                 order.append(feature.id)
             }
             func nextID() -> String { count += 1; return "\(alias).F\(count)" }
-            add(base(of: body, id: nextID(), body: alias), .base)
+            add(base(of: body, id: nextID(), body: alias, region: region), .base)
             for finish in body.finishes {
                 add(DesignFeature(id: nextID(), body: alias, kind: finish.kind == .fillet ? .fillet : .chamfer, size: round(finish.size),
                                   note: "\(finish.edges.count) edge\(finish.edges.count == 1 ? "" : "s") of the original extrusion"),
                     .finish(finish.id))
             }
-            for step in body.cuts { add(feature(step, of: body, id: nextID(), body: alias), .step(step.id)) }
+            for step in body.cuts { add(feature(step, of: body, id: nextID(), body: alias, region: region), .step(step.id)) }
             aliases.order[alias] = order
         }
-        return (DesignDocument(bodies: bodies, features: features), aliases)
+        // Sketches: their regions listed, their shapes as features.
+        var sketches: [DesignDocument.Sketch] = []
+        let sketchNames = workspace.sketchNames
+        for (index, sketch) in workspace.sketches.enumerated() {
+            let alias = "S\(index + 1)"
+            aliases.sketches[alias] = sketch.id
+            let plane = sketch.plane, facing = worldAxis(plane.normalAxis)
+            let where_ = facing.map { "\($0.rawValue.dropFirst()) = \(AssistantWorkbench.mm(round(plane.origin[$0.index]))) (normal \($0.rawValue))" } ?? "a slanted plane"
+            let listed = regions.filter { $0.id.hasPrefix(alias + ".R") }.map { entry in
+                DesignDocument.Sketch.Region(id: entry.id, shape: outlineWords(entry.profile), center: entry.profile.plane.point(entry.profile.center).map(round).array)
+            }
+            sketches.append(DesignDocument.Sketch(id: alias, name: sketchNames[sketch.id] ?? alias, hidden: sketch.hidden == true ? true : nil,
+                                                  plane: where_, regions: listed))
+            var count = 0, order: [String] = []
+            for shape in workspace.shapes(in: sketch.id) {
+                count += 1
+                let feature = shapeFeature(shape, on: plane, id: "\(alias).F\(count)", sketch: alias)
+                features.append(feature)
+                aliases.features[feature.id] = .init(body: sketch.id, role: .shape(shape.id))
+                aliases.exported[feature.id] = feature
+                order.append(feature.id)
+            }
+            aliases.order[alias] = order
+        }
+        return (DesignDocument(bodies: bodies, features: features, sketches: sketches), aliases)
+    }
+
+    /// A sketch shape as a feature of its sketch, or locked when the vocabulary cannot say it.
+    private static func shapeFeature(_ shape: SketchShape, on plane: SketchPlane, id: String, sketch alias: String) -> DesignFeature {
+        guard let facing = worldAxis(plane.normalAxis), !shape.isConstruction else {
+            return locked(id, alias, "\(shape.isConstruction ? "construction " : "")\(shape.kind.rawValue)" + (worldAxis(plane.normalAxis) == nil ? " on a slanted plane" : ""))
+        }
+        let (ia, ib) = facing.across, along = plane.origin[facing.index]
+        func flat(_ p: Point2) -> DesignFeature.Point { let w = plane.point(p); return .init(u: round(w[ia]), v: round(w[ib])) }
+        func at(_ p: Point2?) -> SIMD3<Double> {
+            var w = SIMD3<Double>(repeating: 0)
+            if let p { w = plane.point(p) }
+            w[facing.index] = along
+            return w.map(round)
+        }
+        var feature = DesignFeature(id: id, body: alias, kind: .locked, axis: facing)
+        func place(_ p: Point2?) { let w = at(p); feature.x = w.x; feature.y = w.y; feature.z = w.z }
+        switch shape.kind {
+        case .rectangle:
+            let a = plane.point(shape.start), b = plane.point(shape.end)
+            feature.kind = .rectangle
+            feature.width = round(abs(b[ia] - a[ia])); feature.depth = round(abs(b[ib] - a[ib]))
+            place(shape.center)
+        case .circle:
+            feature.kind = .circle
+            feature.radius = round(shape.start.distance(to: shape.end))
+            place(shape.start)
+        case .line:
+            feature.kind = .line
+            feature.points = [flat(shape.start), flat(shape.end)]
+            place(nil)
+        case .arc:
+            guard let c = shape.arcCenter else { return locked(id, alias, "arc") }
+            let r = c.distance(to: shape.start)
+            let a0 = atan2(shape.start.y - c.y, shape.start.x - c.x), a1 = atan2(shape.end.y - c.y, shape.end.x - c.x)
+            var sweep = a1 - a0
+            while sweep <= 0 { sweep += 2 * .pi }
+            let middle = c + Point2(x: cos(a0 + sweep / 2), y: sin(a0 + sweep / 2)) * r
+            feature.kind = .arc
+            feature.points = [flat(shape.start), flat(middle), flat(shape.end)]
+            place(nil)
+        case .slot:
+            guard let width = shape.width else { return locked(id, alias, "slot") }
+            feature.kind = .slot
+            feature.points = [flat(shape.start), flat(shape.end)]
+            feature.size = round(width)
+            place(nil)
+        case .ellipse, .curve, .point:
+            return locked(id, alias, shape.kind == .curve ? (shape.isSpline ? "spline" : "curve") : shape.kind.rawValue)
+        }
+        return feature
+    }
+
+    /// A revolved profile as a revolve feature: points about a world axis when the profile is a
+    /// plain polygon in the plane holding the axis and its first cross axis, else the sketch region
+    /// it was made from; nil when neither says it.
+    private static func revolved(_ profile: SketchProfile, _ spec: RevolveSpec, id: String, body alias: String, region: (SketchProfile) -> String?) -> DesignFeature? {
+        let axisLine = spec.axis(on: profile.plane)
+        guard let axis = worldAxis(axisLine.direction) else { return nil }
+        let (ia, ib) = axis.across, origin = axisLine.origin.map(round)
+        var feature = DesignFeature(id: id, body: alias, kind: .revolve, axis: axis, x: origin.x, y: origin.y, z: origin.z,
+                                    size: spec.isFull ? nil : round(spec.angle))
+        if profile.circle == nil, profile.arcs == nil, (profile.holes ?? []).isEmpty, profile.ellipse == nil,
+           (3...64).contains(profile.outline.count), abs(abs(profile.plane.normalAxis[ib]) - 1) < 1e-9 {
+            feature.points = profile.outline.map { p in
+                let w = profile.plane.point(p) - axisLine.origin
+                return DesignFeature.Point(u: round(w[ia]), v: round(simd_dot(w, axis.vector)))
+            }
+            return feature
+        }
+        guard let named = region(profile) else { return nil }
+        feature.region = named
+        return feature
+    }
+
+    /// A profile extruded `depth` (signed along its plane's normal) as the sketch region it came from.
+    private static func extruded(_ profile: SketchProfile, depth: Double, throughAll: Bool, id: String, body alias: String, region: (SketchProfile) -> String?) -> DesignFeature? {
+        guard let named = region(profile), let facing = worldAxis(profile.plane.normalAxis),
+              let axis = DesignFeature.Axis(index: facing.index, sign: throughAll ? facing.sign : facing.sign * (depth < 0 ? -1 : 1)) else { return nil }
+        return DesignFeature(id: id, body: alias, kind: .extrude, axis: axis, height: throughAll ? nil : round(abs(depth)),
+                             throughAll: throughAll ? true : nil, region: named)
     }
 
     /// Feature count of a full export, to decide whether it fits.
     static func featureCount(of workspace: Workspace) -> Int {
-        workspace.bodies.reduce(0) { $0 + 1 + $1.finishes.count + $1.cuts.count }
+        workspace.bodies.reduce(0) { $0 + 1 + $1.finishes.count + $1.cuts.count } + workspace.shapes.filter { $0.sketch != nil }.count
     }
 
     // MARK: Features
 
-    private static func base(of body: SolidBody, id: String, body alias: String) -> DesignFeature {
+    private static func base(of body: SolidBody, id: String, body alias: String, region: (SketchProfile) -> String?) -> DesignFeature {
         if body.imported != nil { return locked(id, alias, "imported shape") }
         if body.peg != nil { return locked(id, alias, "separate peg Ø\(AssistantWorkbench.mm((body.profile.circle?.radius ?? 0) * 2)) mm") }
-        if let revolve = body.revolve { return locked(id, alias, "profile revolved \(AssistantWorkbench.mm(revolve.angle))°") }
+        if let revolve = body.revolve {
+            guard var feature = revolved(body.profile, revolve, id: id, body: alias, region: region) else {
+                return locked(id, alias, "profile revolved \(AssistantWorkbench.mm(revolve.angle))°")
+            }
+            feature.operation = .add
+            return feature
+        }
         if body.symmetric == true || (body.taper ?? 0) != 0 {
             return locked(id, alias, "profile extruded \(AssistantWorkbench.mm(abs(body.depth))) mm" + (body.symmetric == true ? " both ways" : "") +
                           ((body.taper ?? 0) != 0 ? " with \(AssistantWorkbench.mm(body.taper ?? 0))° taper" : ""))
         }
-        guard var feature = shape(body.profile, depth: body.depth, throughAll: false, id: id, body: alias) else {
+        guard var feature = shape(body.profile, depth: body.depth, throughAll: false, id: id, body: alias)
+                ?? extruded(body.profile, depth: body.depth, throughAll: false, id: id, body: alias, region: region) else {
             return locked(id, alias, "\(outlineWords(body.profile)) extruded \(AssistantWorkbench.mm(abs(body.depth))) mm")
         }
         feature.operation = .add
         return feature
     }
 
-    private static func feature(_ step: ExtrusionCut, of body: SolidBody, id: String, body alias: String) -> DesignFeature {
+    private static func feature(_ step: ExtrusionCut, of body: SolidBody, id: String, body alias: String, region: (SketchProfile) -> String?) -> DesignFeature {
         if step.peg != nil {
             // A peg, its tip's bevel, and its sockets stay linked by the peg's id; rebuilding one
             // as a plain cylinder or chamfer would break that.
@@ -84,9 +201,14 @@ enum DesignExport {
         case .cut, .join:
             let words = "\(step.operation == .cut ? "cut" : "boss"): \(outlineWords(step.profile))" +
                 (step.throughAll ? " through all" : " \(AssistantWorkbench.mm(abs(step.depth))) mm")
+            if let revolve = step.revolve, step.facePoint == nil, var feature = revolved(step.profile, revolve, id: id, body: alias, region: region) {
+                feature.operation = step.operation == .cut ? .cut : .add
+                return feature
+            }
             guard step.facePoint == nil, step.revolve == nil, step.symmetric != true, (step.taper ?? 0) == 0,
                   !(step.throughAll && step.operation == .join),
-                  var feature = shape(step.profile, depth: step.depth, throughAll: step.throughAll, id: id, body: alias) else {
+                  var feature = shape(step.profile, depth: step.depth, throughAll: step.throughAll, id: id, body: alias)
+                    ?? extruded(step.profile, depth: step.depth, throughAll: step.throughAll, id: id, body: alias, region: region) else {
                 return locked(id, alias, words + (step.facePoint != nil ? " from a face" : step.revolve != nil ? " (revolved)" : ""))
             }
             feature.operation = step.operation == .cut ? .cut : .add
@@ -222,7 +344,7 @@ enum DesignExport {
         return DesignFeature.Axis(index: index, sign: n[index])
     }
 
-    private static func outlineWords(_ profile: SketchProfile) -> String {
+    static func outlineWords(_ profile: SketchProfile) -> String {
         if let circle = profile.circle { return "Ø\(AssistantWorkbench.mm(circle.radius * 2)) circle" }
         let xs = profile.outline.map(\.x), ys = profile.outline.map(\.y)
         let w = (xs.max() ?? 0) - (xs.min() ?? 0), h = (ys.max() ?? 0) - (ys.min() ?? 0)
@@ -242,4 +364,5 @@ enum DesignExport {
 
 private extension SIMD3 where Scalar == Double {
     func map(_ transform: (Double) -> Double) -> SIMD3<Double> { SIMD3(transform(x), transform(y), transform(z)) }
+    var array: [Double] { [x, y, z] }
 }

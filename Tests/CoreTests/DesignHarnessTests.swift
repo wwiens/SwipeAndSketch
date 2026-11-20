@@ -146,7 +146,7 @@ final class DesignHarnessTests: XCTestCase {
         var moved = document.features[1]; moved.body = "B2"
         XCTAssertTrue(message(DesignProposal(features: [moved])).contains("cannot move to another solid"))
         let cutFirst = Feature(id: "cutter", body: "Bracket", kind: .cylinder, operation: .cut, axis: .pz, x: 0, y: 0, z: 0, height: 5, radius: 2)
-        XCTAssertTrue(message(DesignProposal(features: [cutFirst])).contains("must add a block, cylinder, or polygon"))
+        XCTAssertTrue(message(DesignProposal(features: [cutFirst])).contains("must add a block, cylinder, polygon, extrude, or revolve"))
         let badCorner = Feature(id: "block", body: "Bracket", kind: .block, operation: .add, axis: .pz, x: 0, y: 0, z: 0, width: 10, depth: 10, height: 5, radius: 5)
         XCTAssertTrue(message(DesignProposal(features: [badCorner])).contains("Corner radius"))
         XCTAssertTrue(message(DesignProposal(features: [Feature(id: "tag", body: "B1", kind: .locked)])).contains("cannot be added"))
@@ -345,6 +345,105 @@ final class DesignHarnessTests: XCTestCase {
         }
     }
 
+    // MARK: Sketches and revolves
+
+    func testSketchesListTheirShapesAndRegions() throws {
+        var bench = AssistantWorkbench(workspace: Workspace())
+        try bench.addShapes([.init(kind: .rectangle, point: [0, 0, 0], width: 40, height: 20), .init(kind: .circle, point: [10, 0, 0], diameter: 6)], on: .world(.top))
+        let holed = try XCTUnwrap(bench.regions(of: bench.workspace.sketches[0]).firstIndex { !($0.holes ?? []).isEmpty }) + 1
+        try bench.extrude(sketch: "Sketch 01", regions: [holed], distance: 5, mode: .newBody, throughAll: false)
+        let (document, aliases) = DesignExport.document(of: bench.workspace)
+        XCTAssertEqual(document.sketches.map(\.id), ["S1"])
+        XCTAssertEqual(document.sketches[0].plane, "z = 0 (normal +z)")
+        XCTAssertEqual(document.sketches[0].regions.count, 2, "The rectangle less the circle, and the circle")
+        let shapes = document.features.filter { $0.body == "S1" }
+        XCTAssertEqual(shapes.map(\.kind), [.rectangle, .circle])
+        XCTAssertEqual([shapes[0].width, shapes[0].depth], [40, 20])
+        XCTAssertEqual(shapes[1].radius, 3)
+        XCTAssertEqual([shapes[1].x, shapes[1].y, shapes[1].z], [10, 0, 0])
+        XCTAssertEqual(aliases.sketches["S1"], bench.workspace.sketches[0].id)
+        // The solid made from the region with a hole reads back as that region extruded.
+        let base = try XCTUnwrap(document.features.first { $0.body == "B1" })
+        XCTAssertEqual(base.kind, .extrude)
+        XCTAssertEqual(base.region, "S1.R\(holed)")
+        XCTAssertEqual(base.height, 5)
+        // Repeating it all changes nothing.
+        var again = bench
+        try again.applyDesign(DesignProposal(features: document.features), aliases: aliases)
+        XCTAssertEqual(again.workspace, bench.workspace)
+    }
+
+    func testProposalsDrawSketchesAndExtrudeTheirRegions() throws {
+        let outline = Feature(id: "outline", body: "Outline", kind: .rectangle, axis: .pz, x: 0, y: 0, z: 0, width: 40, depth: 20)
+        let bore = Feature(id: "bore", body: "Outline", kind: .circle, axis: .pz, x: 10, y: 0, z: 0, radius: 4)
+        let plate = Feature(id: "plate", body: "Plate", kind: .extrude, operation: .add, axis: .pz, height: 5, region: "outline")
+        let bench = try applied(DesignProposal(features: [outline, bore, plate])).bench
+        XCTAssertEqual(bench.workspace.sketches.map(\.name), ["Outline"])
+        XCTAssertEqual(bench.workspace.shapes.count, 2)
+        XCTAssertEqual(try volume(bench.workspace.bodies[0]), 40 * 20 * 5 - Double.pi * 16 * 5, accuracy: 0.01, "The region the rectangle bounds, less the circle")
+        XCTAssertEqual(bench.changes, ["New sketch Outline: 40 × 20 mm rectangle; Ø8 mm circle", "New Plate: 40 × 20 outline with 1 opening extruded 5 mm"],
+                       "Regions are told by their shape, not the names the proposal used")
+        // Widen the rectangle (it keeps its id), and cut the circle's region down from a new top sketch.
+        let (document, aliases) = DesignExport.document(of: bench.workspace)
+        var wider = try XCTUnwrap(document.features.first { $0.kind == .rectangle })
+        wider.width = 50
+        let slot = Feature(id: "slot", body: "Top", kind: .slot, axis: .pz, x: 0, y: 0, z: 5, points: [.init(u: -10, v: 5), .init(u: 0, v: 5)], size: 4)
+        let groove = Feature(id: "groove", body: "B1", kind: .extrude, operation: .cut, axis: .nz, height: 2, region: "slot")
+        var edited = bench
+        try edited.applyDesign(DesignProposal(features: [wider, slot, groove]), aliases: aliases)
+        let rectangle = try XCTUnwrap(edited.workspace.shapes.first { $0.kind == .rectangle })
+        XCTAssertEqual(rectangle.id, bench.workspace.shapes.first { $0.kind == .rectangle }?.id)
+        XCTAssertEqual(rectangle.end.x - rectangle.start.x, 50, accuracy: 1e-9)
+        XCTAssertEqual(edited.workspace.sketches.count, 2)
+        let slotArea = 10 * 4 + Double.pi * 4
+        XCTAssertEqual(try volume(edited.workspace.bodies[0]), 40 * 20 * 5 - Double.pi * 16 * 5 - slotArea * 2, accuracy: 0.05,
+                       "The solid keeps its own profile; the slot is cut 2 mm down from its top")
+        // Mistakes say why.
+        func message(_ proposal: DesignProposal) -> String {
+            do { _ = try applied(proposal, to: bench.workspace); return "applied" } catch { return (error as? AssistantWorkbench.Failure)?.message ?? "\(error)" }
+        }
+        XCTAssertTrue(message(DesignProposal(features: [Feature(id: "r", body: "B1", kind: .rectangle, axis: .pz, width: 5, depth: 5)])).contains("is a sketch shape"))
+        XCTAssertTrue(message(DesignProposal(features: [Feature(id: "e", body: "B1", kind: .extrude, operation: .add, axis: .px, height: 2, region: "S1.R1")])).contains("extrude it along that axis"))
+        XCTAssertTrue(message(DesignProposal(features: [Feature(id: "e", body: "B1", kind: .extrude, operation: .add, axis: .pz, height: 2, region: "S1.R9")])).contains("regions R1…R2"))
+        XCTAssertTrue(message(DesignProposal(features: [Feature(id: "e", body: "B1", kind: .extrude, operation: .add, axis: .pz, height: 2, region: "nothing")])).contains("Unknown region"))
+        XCTAssertEqual(message(DesignProposal(removeIDs: ["S1"])), "applied", "A sketch's alias removes the sketch; solids made from it stay")
+    }
+
+    func testRevolvesTurnProfilePointsOrASketchRegion() throws {
+        // A lathe profile: a 10 mm radius, 20 mm tall cylinder turned about Z; then half of it.
+        let turned = Feature(id: "turned", body: "Knob", kind: .revolve, operation: .add, axis: .pz, x: 0, y: 0, z: 0,
+                             points: [.init(u: 0, v: 0), .init(u: 10, v: 0), .init(u: 10, v: 20), .init(u: 0, v: 20)])
+        let knob = try applied(DesignProposal(features: [turned])).bench.workspace
+        XCTAssertNotNil(knob.bodies[0].revolve)
+        XCTAssertEqual(try volume(knob.bodies[0]), Double.pi * 100 * 20, accuracy: 0.5)
+        var half = turned
+        half.size = 180
+        XCTAssertEqual(try volume(try applied(DesignProposal(features: [half])).bench.workspace.bodies[0]), Double.pi * 100 * 10, accuracy: 0.5)
+        // It reads back as the same revolve.
+        let read = try XCTUnwrap(DesignExport.document(of: knob).document.features.first)
+        XCTAssertEqual(read.kind, .revolve)
+        XCTAssertEqual(read.axis, .pz)
+        XCTAssertEqual(read.points?.count, 4)
+        XCTAssertNil(read.size, "A whole turn")
+        // A groove cut by revolving a small square about the same axis.
+        let groove = Feature(id: "groove", body: "B1", kind: .revolve, operation: .cut, axis: .pz, x: 0, y: 0, z: 0,
+                             points: [.init(u: 8, v: 8), .init(u: 12, v: 8), .init(u: 12, v: 12), .init(u: 8, v: 12)])
+        var grooved = AssistantWorkbench(workspace: knob)
+        try grooved.applyDesign(DesignProposal(features: [groove]), aliases: DesignExport.document(of: knob).aliases)
+        XCTAssertEqual(try volume(grooved.workspace.bodies[0]), Double.pi * 100 * 20 - Double.pi * (100 - 64) * 4, accuracy: 0.5)
+        // A ring: a Front-plane rectangle's region turned about Z.
+        let section = Feature(id: "section", body: "Section", kind: .rectangle, axis: .ny, x: 15, y: 0, z: 10, width: 10, depth: 20)
+        let ring = Feature(id: "ring", body: "Ring", kind: .revolve, operation: .add, axis: .pz, x: 0, y: 0, z: 0, region: "section")
+        let rings = try applied(DesignProposal(features: [section, ring])).bench.workspace
+        XCTAssertEqual(try volume(rings.bodies[0]), Double.pi * (400 - 100) * 20, accuracy: 1)
+        // An axis through the profile is refused.
+        var crossing = turned
+        crossing.points = [.init(u: -5, v: 0), .init(u: 10, v: 0), .init(u: 10, v: 20), .init(u: -5, v: 20)]
+        XCTAssertThrowsError(try applied(DesignProposal(features: [crossing]))) { error in
+            XCTAssertTrue((error as? AssistantWorkbench.Failure)?.message.contains("crosses the profile") ?? false, "\(error)")
+        }
+    }
+
     func testChangeLinesReadAsWordsNotIDs() throws {
         let workspace = try applied(plateProposal()).bench.workspace
         let (document, aliases) = DesignExport.document(of: workspace)
@@ -382,7 +481,7 @@ final class DesignHarnessTests: XCTestCase {
         let features = try XCTUnwrap(((schema["properties"] as? [String: Any])?["features"] as? [String: Any])?["items"] as? [String: Any])
         XCTAssertEqual(Set((features["properties"] as? [String: Any])?.keys.map { $0 } ?? []),
                        ["id", "body", "kind", "operation", "axis", "x", "y", "z", "width", "depth", "height", "radius", "points",
-                        "throughAll", "hole", "edges", "faces", "size", "note"])
+                        "throughAll", "hole", "edges", "faces", "size", "note", "region"])
     }
 
     // MARK: The loop
