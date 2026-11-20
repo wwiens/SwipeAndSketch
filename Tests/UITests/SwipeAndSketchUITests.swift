@@ -1636,10 +1636,6 @@ import XCTest
         defer {
             if app.buttons["settings.claude.remove"].exists { app.buttons["settings.claude.remove"].tap() }
             if app.navigationBars.buttons["Settings"].exists { app.navigationBars.buttons["Settings"].tap() }
-            if app.buttons["settings.assistant.model"].waitForExistence(timeout: 2) {
-                app.buttons["settings.assistant.model"].tap()
-                if app.buttons["Automatic (Apple)"].exists { app.buttons["Automatic (Apple)"].tap() }
-            }
         }
         app.secureTextFields["settings.claude.key"].tap()
         app.secureTextFields["settings.claude.key"].typeText("test-ui-credential-not-a-real-key")

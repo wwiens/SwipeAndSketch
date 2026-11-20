@@ -10,6 +10,18 @@ import FoundationModels
 /// Script the HTTP boundary; every geometry operation below uses the actual CAD tools/kernel.
 @MainActor final class ClaudeAssistantTests: XCTestCase {
     let fakeKey = "test-credential-never-send-to-network"
+    private var harness = true
+
+    // These tests script the tool loop; DesignHarnessProviderTests covers the design proposal.
+    override func setUp() async throws {
+        try await super.setUp()
+        harness = AssistantEngine.designHarnessEnabled
+        AssistantEngine.designHarnessEnabled = false
+    }
+    override func tearDown() async throws {
+        AssistantEngine.designHarnessEnabled = harness
+        try await super.tearDown()
+    }
 
     /// Starting models built through the assistant's own workbench.
     static func fixture(_ id: String) throws -> Workspace {
@@ -56,23 +68,7 @@ import FoundationModels
         XCTAssertEqual(context.bench.workspace, Workspace())
     }
 
-    func testPlannerFindsNamesSaidOnTheirOwn() {
-        XCTAssertTrue(AssistantPlanner.mentions("round the lid's edges", "Lid"))
-        XCTAssertFalse(AssistantPlanner.mentions("make it lidded", "Lid"))
-        XCTAssertTrue(AssistantPlanner.mentions("move bracket (2) up", "bracket (2)"))
-        XCTAssertFalse(AssistantPlanner.mentions("move body 10 up", "Body 1"))
-        XCTAssertTrue(AssistantPlanner.mentions("body 1", "Body 1"))
-    }
-
-    func testPlannerTemplateActionUsesSameValidationAndCapabilitySwitch() throws {
-        var bench = AssistantWorkbench(workspace: Workspace())
-        let v = SlipLidBoxValues(reference: "inside", width: 60, depth: 40, height: 20, wall: 2, radius: 6, clearance: 0.2, vents: false)
-        try AssistantPlanner.applySlipLidBox(v, to: &bench)
-        XCTAssertEqual(bench.workspace.bodies.count, 2)
-        var other = AssistantWorkbench(workspace: Workspace())
-        XCTAssertThrowsError(try AssistantPlanner.applySlipLidBox(.init(reference: "unspecified", width: 60, depth: 40, height: 20,
-                                                                       wall: nil, radius: nil, clearance: nil, vents: nil), to: &other))
-        XCTAssertFalse(other.hasChanges)
+    func testTheNativeTemplateToolFollowsItsCapabilitySwitch() throws {
         let old = AssistantEngine.nativeTemplatesEnabled
         defer { AssistantEngine.nativeTemplatesEnabled = old }
         AssistantEngine.nativeTemplatesEnabled = false
@@ -332,8 +328,7 @@ import FoundationModels
         XCTAssertEqual(calls, 1)
         XCTAssertEqual(diagnostics.last?.backend, .claude)
         XCTAssertFalse(String(describing: diagnostics).contains(fakeKey))
-        XCTAssertEqual(AssistantEngine.backends(for: .claude), [.claude])
-        XCTAssertFalse(AssistantEngine.backends(for: .automatic).contains(.claude))
+        XCTAssertEqual(AssistantModelChoice.claude.backend, .claude)
     }
 
     func testCancellationStopsBeforeAnyGeometryChange() async throws {

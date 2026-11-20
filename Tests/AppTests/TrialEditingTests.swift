@@ -119,7 +119,7 @@ import simd
         assistant.responder = { _, workspace, _, _, _, _ in
             var bench = AssistantWorkbench(workspace: workspace)
             try bench.setDimension(item: "Body 01", dimension: "depth", value: 10)
-            return AssistantEngine.Turn(reply: "Changed it", bench: bench, backend: .onDevice)
+            return AssistantEngine.Turn(reply: "Changed it", bench: bench, backend: .claude)
         }
         assistant.send("Make it 10 mm")
         while assistant.isWorking { await Task.yield() }
@@ -136,7 +136,7 @@ import simd
             access.setTestState(.trialEnded)
             var bench = AssistantWorkbench(workspace: workspace)
             try bench.setDimension(item: "Body 01", dimension: "depth", value: 10)
-            return AssistantEngine.Turn(reply: "Ready", bench: bench, backend: .onDevice)
+            return AssistantEngine.Turn(reply: "Ready", bench: bench, backend: .claude)
         }
         assistant.send("Make it 10 mm")
         while assistant.isWorking { await Task.yield() }

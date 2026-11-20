@@ -25,10 +25,18 @@ import simd
     /// The unmet checks after the last edit, and how many edits in a row left them exactly so.
     private var lastUnmet: [AssistantRequirementResult] = []
     private var unmetRepeats = 0
-    var requirementReport: AssistantRequirementReport { requirementPlan?.evaluate(in: bench.workspace) ?? .init() }
+    /// The design harness's checks, measured once on its result (it records no plan here).
+    private var designReport: AssistantRequirementReport?
+    var requirementReport: AssistantRequirementReport { designReport ?? requirementPlan?.evaluate(in: bench.workspace) ?? .init() }
 
     /// Takes over a workbench the planner changed.
     func adopt(_ bench: AssistantWorkbench) { self.bench = bench }
+
+    /// Takes over the design harness's result and its checks.
+    func adopt(_ bench: AssistantWorkbench, report: AssistantRequirementReport) {
+        self.bench = bench
+        designReport = report
+    }
 
     /// A model is about to send tool calls written after reading every earlier result: names in
     /// them mean what they mean now. Backends that do not report rounds check only retired names.
@@ -44,6 +52,7 @@ import simd
         self.request = request
         self.selection = selection
         requirementPlan = nil
+        designReport = nil
         lastUnmet = []
         unmetRepeats = 0
     }
@@ -877,25 +886,6 @@ struct MoveItemsTool: Tool {
     }
 }
 
-/// Moves only: the on-device model, given rotation fields too, tends to fill them in.
-struct MoveOnlyTool: Tool {
-    let context: AssistantContext
-    let name = "move_items"
-    let description = "Moves bodies and sketches by a distance in mm along world X, Y, Z, optionally as copies."
-    @Generable struct Arguments {
-        var items: [String]
-        @Guide(description: "mm along X (right is positive)") var dx: Double?
-        @Guide(description: "mm along Y (back is positive)") var dy: Double?
-        @Guide(description: "mm along Z (up is positive)") var dz: Double?
-        @Guide(description: "Leave the originals in place and move copies") var copy: Bool?
-    }
-    func call(arguments: Arguments) async throws -> String {
-        await context.run("Moving \(arguments.items.joined(separator: ", "))") { bench in
-            try bench.transform(items: arguments.items, move: point(arguments.dx, arguments.dy, arguments.dz), rotate: 0, axis: "z", pivot: nil, copy: arguments.copy ?? false)
-        }
-    }
-}
-
 struct SetDimensionTool: Tool {
     let context: AssistantContext
     let name = "set_dimension"
@@ -1177,10 +1167,5 @@ extension AssistantContext {
          SetColorTool(context: self), AddSVGTool(context: self)]
         let recipes: [any Tool] = AssistantEngine.nativeTemplatesEnabled ? [CADRecipeTool(context: self), MakeSlipLidBoxTool(context: self)] : []
         return (AssistantEngine.requirementChecksEnabled ? [RecordRequirementsTool(context: self)] : []) + recipes + tools
-    }
-    /// The everyday tools, which fit the on-device model's smaller context.
-    var compactTools: [any Tool] {
-        (AssistantEngine.nativeTemplatesEnabled ? [MakeSlipLidBoxTool(context: self)] as [any Tool] : []) + [InspectItemTool(context: self), SketchAndExtrudeTool(context: self), FilletEdgesTool(context: self), ChamferEdgesTool(context: self), ShellTool(context: self),
-         AddHoleTool(context: self), MoveOnlyTool(context: self), SetDimensionTool(context: self), DeleteItemsTool(context: self)]
     }
 }

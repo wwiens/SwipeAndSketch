@@ -694,6 +694,139 @@ struct AssistantWorkbench: Sendable {
 
     // MARK: Changing the model
 
+    /// Applies a design proposal made against the document `aliases` came from (see
+    /// DesignApply.swift), then its transforms, each kept like any other change. Returns the new
+    /// solids by the names the proposal gave them.
+    @discardableResult mutating func applyDesign(_ proposal: DesignProposal, aliases: DesignAliases) throws -> [String: UUID] {
+        let result = try DesignApply.apply(proposal, aliases: aliases, bench: self)
+        let before = changes.count
+        if result.workspace != workspace, let first = result.changes.first {
+            try keep(result.workspace, change: first, checking: result.touched, focus: result.touched.first.map { .body($0) })
+            changes += result.changes.dropFirst()
+        }
+        // A new solid a later operation used up (a cutter subtracted, a tool united) is told by
+        // that operation's line, not as a new solid.
+        defer {
+            let gone = result.newBodies.filter { entry in !workspace.bodies.contains { $0.id == entry.value } }
+            if !gone.isEmpty {
+                let made = Set(gone.keys.compactMap { ItemNames.cleaned($0) }.map { "New " + $0 + ":" })
+                changes = changes.enumerated().filter { index, line in index < before || !made.contains { line.hasPrefix($0) } }.map(\.element)
+            }
+        }
+        func solids(_ names: [String], for use: String) throws -> [UUID] {
+            guard !names.isEmpty else { throw Failure("Name the solids to \(use).") }
+            return try names.map { name in
+                guard let id = aliases.bodies[name] ?? result.newBodies[name], workspace.bodies.contains(where: { $0.id == id }) else {
+                    throw Failure("A \(use) names \(name), which is not a solid in the design.")
+                }
+                return id
+            }
+        }
+        func point(_ values: [Double], _ what: String) throws -> SIMD3<Double>? {
+            guard !values.isEmpty else { return nil }
+            guard values.count == 3, values.allSatisfy({ $0.isFinite && abs($0) <= 100_000 }) else { throw Failure("A \(what) is [x, y, z] in mm.") }
+            return SIMD3(values[0], values[1], values[2])
+        }
+        let axes: [String: Int] = ["x": 0, "y": 1, "z": 2]
+        var index = 0
+        let ops = proposal.solidOps
+        while index < ops.count {
+            let op = ops[index]
+            guard let axisIndex = axes[op.axis.lowercased()] else { throw Failure("Axes are x, y, or z.") }
+            switch op.op {
+            case .move:
+                let ids = try solids(op.bodies, for: "move")
+                let offset = try point(op.vector, "move") ?? .zero
+                try transform(items: ids.map(bodyName), move: offset, rotate: op.angle, axis: op.axis, pivot: try point(op.point, "pivot"), copy: false)
+            case .mirror:
+                let ids = try solids(op.bodies, for: "mirror")
+                var normal = SIMD3<Double>(repeating: 0)
+                normal[axisIndex] = 1
+                let through = try point(op.point, "mirror point") ?? .zero
+                guard let plane = SketchPlane.through(through, normal: normal),
+                      let made = Mirroring.mirror(workspace, bodies: ids, sketches: [], across: plane, keepOriginals: op.keepInput) else {
+                    throw Failure("Those solids cannot be mirrored there.")
+                }
+                let label = "the plane \(op.axis.uppercased()) = \(Self.mm(through[axisIndex]))"
+                try keep(made.workspace, change: "Mirrored \(ids.map(bodyName).joined(separator: ", ")) across \(label)\(op.keepInput ? ", keeping the originals" : "")",
+                         checking: made.bodies, focus: made.bodies.first.map { .body($0) })
+            case .linear:
+                // Up to three linear operations in a row on the same solids make one grid.
+                var rows: [(direction: String, count: Int, spacing: Double)] = []
+                while index < ops.count, ops[index].op == .linear, ops[index].bodies == op.bodies, rows.count < 3 {
+                    let row = ops[index]
+                    rows.append(((row.spacing < 0 ? "-" : "+") + row.axis.lowercased(), row.count, abs(row.spacing)))
+                    index += 1
+                }
+                try linearPattern(items: try solids(op.bodies, for: "pattern").map(bodyName), rows: rows)
+                continue
+            case .circular:
+                let ids = try solids(op.bodies, for: "pattern")
+                try circularPattern(items: ids.map(bodyName), axis: op.axis, center: try point(op.point, "center") ?? .zero, count: op.count,
+                                    angle: op.angle == 0 ? 360 : op.angle, rotateCopies: op.rotateCopies)
+            case .thread, .text, .peg:
+                let ids = try solids(op.bodies, for: op.op.rawValue)
+                guard ids.count == 1, let body = workspace.bodies.first(where: { $0.id == ids[0] }) else {
+                    throw Failure("A \(op.op.rawValue) names one solid.")
+                }
+                let name = bodyName(body.id), at = try point(op.point, "point on the face")
+                let clearance = op.spacing > 0 ? op.spacing : Fit.preferredClearance
+                switch op.op {
+                case .thread:
+                    let face: String
+                    if let at { face = "\(try nearestFace(to: at, of: body, round: true))" }
+                    else {
+                        let solid = try buildable(body)
+                        face = (0..<solid.faceCount).contains { ssk_face_cylinder_side(solid.handle, Int32($0)) == 1 } ? "boss" : "hole"
+                    }
+                    let size = op.text.trimmingCharacters(in: .whitespaces)
+                    try thread(body: name, face: face, size: size.isEmpty ? nil : size, diameter: nil, pitch: nil, clearance: clearance,
+                               leftHanded: false, length: op.size > 0 ? op.size : nil)
+                case .text:
+                    guard let at else { throw Failure("Text needs its center: a point on the flat face it goes on.") }
+                    let words = op.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !words.isEmpty else { throw Failure("Give the text to write.") }
+                    try text(body: name, face: "\(try nearestFace(to: at, of: body, round: false))", text: words, height: op.size,
+                             depth: op.height, at: at, angle: op.angle)
+                default:
+                    guard let at else { throw Failure("A peg needs its center: a point on the flat face it stands on.") }
+                    try peg(body: name, face: "\(try nearestFace(to: at, of: body, round: false))", at: [at], diameter: op.size,
+                            height: op.height, clearance: clearance)
+                }
+            case .union, .subtract, .intersect:
+                let ids = try solids(op.bodies, for: op.op.rawValue)
+                guard ids.count >= 2, Set(ids).count == ids.count else {
+                    throw Failure("A \(op.op.rawValue) names its target solid first, then one or more other solids as tools.")
+                }
+                let names = ids.map(bodyName)
+                if op.op == .intersect {
+                    try intersect(target: names[0], tools: Array(names.dropFirst()), keepTools: op.keepInput)
+                } else {
+                    try combine(union: op.op == .union, target: names[0], tools: Array(names.dropFirst()), keepTools: op.keepInput,
+                                clearance: op.op == .subtract && op.spacing != 0 ? op.spacing : nil)
+                }
+            }
+            index += 1
+        }
+        return result.newBodies
+    }
+
+    /// The flat face (or, with `round`, the cylindrical face) of `body` nearest a world point: a
+    /// design proposal places threads, text, and pegs by a point rather than by face number.
+    func nearestFace(to point: SIMD3<Double>, of body: SolidBody, round: Bool) throws -> Int {
+        let solid = try buildable(body)
+        var best: (face: Int, distance: Double)?
+        for face in 0..<solid.faceCount where round ? solid.faceCylinder(face) != nil : solid.facePlane(face) != nil {
+            guard let closest = solid.point(onFace: face, near: point) else { continue }
+            let distance = simd_distance(closest, point)
+            if best == nil || distance < best!.distance - 1e-9 { best = (face, distance) }
+        }
+        guard let best, best.distance <= 1 else {
+            throw Failure("No \(round ? "round" : "flat") face of \(bodyName(body.id)) is within 1 mm of \(Self.point(point)); give a point on the face.")
+        }
+        return best.face
+    }
+
     /// Keeps `next` if it is valid and every solid in `bodies` builds; records `change`.
     private mutating func keep(_ next: Workspace, change: String, checking bodies: [UUID] = [], focus: AssistantItem? = nil) throws {
         var next = next

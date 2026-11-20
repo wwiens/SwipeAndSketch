@@ -13,8 +13,13 @@ import Foundation
         try await super.setUp()
         saved = Dictionary(uniqueKeysWithValues: Self.preferenceKeys.compactMap { key in UserDefaults.standard.object(forKey: key).map { (key, $0) } })
         for key in Self.preferenceKeys { UserDefaults.standard.removeObject(forKey: key) }
+        // These tests script the tool loop; DesignHarnessProviderTests covers the design proposal.
+        harness = AssistantEngine.designHarnessEnabled
+        AssistantEngine.designHarnessEnabled = false
     }
+    private var harness = true
     override func tearDown() async throws {
+        AssistantEngine.designHarnessEnabled = harness
         for key in Self.preferenceKeys { UserDefaults.standard.set(saved[key], forKey: key) }
         try await super.tearDown()
     }
@@ -33,16 +38,16 @@ import Foundation
     // MARK: OpenAI
 
     /// OpenAI and Gemini stay hidden until `AIProvider.offersOpenAIAndGemini` is turned on
-    /// (November 13, 2026); a stored choice of either falls back to Automatic.
+    /// (November 13, 2026); a stored choice of either falls back to Claude.
     func testOpenAIAndGeminiAreHiddenUntilOffered() throws {
         try XCTSkipIf(AIProvider.offersOpenAIAndGemini, "OpenAI and Gemini are offered.")
         XCTAssertEqual(AIProvider.offered, [.claude])
         XCTAssertEqual(AIProvider.offeredNames, "Claude")
-        XCTAssertEqual(AssistantModelChoice.offered, [.automatic, .cloud, .onDevice, .claude])
-        XCTAssertEqual(AssistantModelChoice.stored("openai"), .automatic)
-        XCTAssertEqual(AssistantModelChoice.stored("gemini"), .automatic)
+        XCTAssertEqual(AssistantModelChoice.offered, [.claude])
+        XCTAssertEqual(AssistantModelChoice.stored("openai"), .claude)
+        XCTAssertEqual(AssistantModelChoice.stored("gemini"), .claude)
         XCTAssertEqual(AssistantModelChoice.stored("claude"), .claude)
-        XCTAssertEqual(AssistantModelChoice.stored(nil), .automatic)
+        XCTAssertEqual(AssistantModelChoice.stored(nil), .claude)
     }
 
     /// OpenAI and Gemini are offered beside Claude again (November 17, 2026).
@@ -50,9 +55,16 @@ import Foundation
         try XCTSkipUnless(AIProvider.offersOpenAIAndGemini, "OpenAI and Gemini are hidden.")
         XCTAssertEqual(AIProvider.offered, [.claude, .openAI, .gemini])
         XCTAssertEqual(AIProvider.offeredNames, "Claude, OpenAI, or Gemini")
-        XCTAssertEqual(AssistantModelChoice.offered, [.automatic, .cloud, .onDevice, .claude, .openAI, .gemini])
+        XCTAssertEqual(AssistantModelChoice.offered, [.claude, .openAI, .gemini])
         XCTAssertEqual(AssistantModelChoice.stored("openai"), .openAI)
         XCTAssertEqual(AssistantModelChoice.stored("gemini"), .gemini)
+    }
+
+    /// Apple's models were removed (November 19, 2026): a stored Automatic, Private Cloud Compute,
+    /// or on-device choice becomes Claude, the default.
+    func testRemovedAppleChoicesBecomeClaude() {
+        for removed in ["automatic", "cloud", "onDevice"] { XCTAssertEqual(AssistantModelChoice.stored(removed), .claude, removed) }
+        XCTAssertEqual(AssistantModelChoice.stored(nil), .claude)
     }
 
     func testOpenAIRunsToolsStatelesslyAndReturnsReasoning() async throws {
@@ -281,9 +293,8 @@ import Foundation
     // MARK: Engine, model lists, and settings
 
     func testProvidersNeedTheirOwnKeyAndNeverFallBack() async throws {
-        XCTAssertEqual(AssistantEngine.backends(for: .openAI), [.openAI])
-        XCTAssertEqual(AssistantEngine.backends(for: .gemini), [.gemini])
-        XCTAssertFalse(AssistantEngine.backends(for: .automatic).contains(.gemini))
+        XCTAssertEqual(AssistantModelChoice.openAI.backend, .openAI)
+        XCTAssertEqual(AssistantModelChoice.gemini.backend, .gemini)
         var calls = 0
         let engine = AssistantEngine(openAI: OpenAIAssistant { _ in calls += 1; return try self.http(.null) }, providerKey: { _ in nil })
         do { _ = try await run(engine, choice: .openAI); XCTFail("Missing key must fail") }
