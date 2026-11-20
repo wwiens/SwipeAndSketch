@@ -232,7 +232,7 @@ struct DesignProposal: Codable, Equatable, Sendable {
     /// circular pattern, or union, subtract, or intersect (the first of `bodies` is the target, the
     /// rest the tools). One shape for all keeps the schema within Claude's grammar limit.
     struct SolidOp: Codable, Equatable, Sendable {
-        enum Kind: String, Codable, CaseIterable, Sendable { case move, mirror, linear, circular, union, subtract, intersect }
+        enum Kind: String, Codable, CaseIterable, Sendable { case move, mirror, linear, circular, union, subtract, intersect, thread, text, peg }
         var op: Kind
         var bodies: [String]
         /// move: the axis to turn about; mirror: the plane's normal; linear: the direction; circular: the axis.
@@ -240,25 +240,53 @@ struct DesignProposal: Codable, Equatable, Sendable {
         /// move: [dx, dy, dz] mm.
         var vector: [Double]
         /// move: the turning pivot; mirror: a point on the plane; circular: the center. [] is the
-        /// solid's center for a move and the origin otherwise.
+        /// solid's center for a move and the origin otherwise. thread: a point on the round face
+        /// (a hole's wall or a boss's side); text and peg: the center, on a flat face.
         var point: [Double]
         /// move: degrees to turn; circular: the degrees the pattern spans (0 or 360: a whole turn).
         var angle: Double
         /// linear and circular: instances, the original included.
         var count: Int
         /// linear: mm between neighbors, negative toward the axis's negative side; subtract: the
-        /// clearance in mm the tools are grown by (0: none).
+        /// clearance in mm the tools are grown by (0: none); thread and peg: the fit clearance (0:
+        /// the user's Fit Clearance setting).
         var spacing: Double
         /// mirror: add the image beside the original instead of replacing it; union, subtract,
         /// intersect: keep the tool solids.
         var keepInput: Bool
         /// circular: turn each copy with the pattern.
         var rotateCopies: Bool
+        /// thread: the size ("M6", "M8x1.25"; "" fits the face); text: the words.
+        var text: String
+        /// thread: the length to thread (0: the whole face); text: the capital height; peg: the diameter.
+        var size: Double
+        /// text: the depth, positive raised and negative sunk; peg: the height.
+        var height: Double
 
         init(op: Kind, bodies: [String], axis: String = "z", vector: [Double] = [], point: [Double] = [], angle: Double = 0,
-             count: Int = 0, spacing: Double = 0, keepInput: Bool = false, rotateCopies: Bool = false) {
+             count: Int = 0, spacing: Double = 0, keepInput: Bool = false, rotateCopies: Bool = false,
+             text: String = "", size: Double = 0, height: Double = 0) {
             self.op = op; self.bodies = bodies; self.axis = axis; self.vector = vector; self.point = point; self.angle = angle
             self.count = count; self.spacing = spacing; self.keepInput = keepInput; self.rotateCopies = rotateCopies
+            self.text = text; self.size = size; self.height = height
+        }
+
+        init(from decoder: any Decoder) throws {
+            // Strict output sends every key; a reply without it may leave the unused ones out.
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            op = try c.decode(Kind.self, forKey: .op)
+            bodies = try c.decodeIfPresent([String].self, forKey: .bodies) ?? []
+            axis = try c.decodeIfPresent(String.self, forKey: .axis) ?? "z"
+            vector = try c.decodeIfPresent([Double].self, forKey: .vector) ?? []
+            point = try c.decodeIfPresent([Double].self, forKey: .point) ?? []
+            angle = try c.decodeIfPresent(Double.self, forKey: .angle) ?? 0
+            count = try c.decodeIfPresent(Int.self, forKey: .count) ?? 0
+            spacing = try c.decodeIfPresent(Double.self, forKey: .spacing) ?? 0
+            keepInput = try c.decodeIfPresent(Bool.self, forKey: .keepInput) ?? false
+            rotateCopies = try c.decodeIfPresent(Bool.self, forKey: .rotateCopies) ?? false
+            text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
+            size = try c.decodeIfPresent(Double.self, forKey: .size) ?? 0
+            height = try c.decodeIfPresent(Double.self, forKey: .height) ?? 0
         }
     }
     var intent: Intent
@@ -390,7 +418,8 @@ enum DesignSchema {
             "axis": ["type": "string", "enum": ["x", "y", "z"]],
             "vector": numbers, "point": numbers, "angle": number,
             "count": ["type": "integer"], "spacing": number,
-            "keepInput": ["type": "boolean"], "rotateCopies": ["type": "boolean"]
+            "keepInput": ["type": "boolean"], "rotateCopies": ["type": "boolean"],
+            "text": ["type": "string"], "size": number, "height": number
         ])
     }
 

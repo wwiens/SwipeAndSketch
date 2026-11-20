@@ -303,6 +303,48 @@ final class DesignHarnessTests: XCTestCase {
         XCTAssertTrue(message(DesignProposal(features: [base, far], solidOps: [.init(op: .union, bodies: ["Base", "Far"])])).contains("do not touch"))
     }
 
+    func testThreadsTextAndPegsArePlacedByAPointOnTheirFace() throws {
+        let box = Feature(id: "box", body: "Box", kind: .block, operation: .add, axis: .pz, x: 0, y: 0, z: 0, width: 40, depth: 40, height: 10)
+        let boss = Feature(id: "boss", body: "Box", kind: .cylinder, operation: .add, axis: .pz, x: 0, y: 0, z: 10, height: 15, radius: 5)
+
+        // A thread on the boss made in the same proposal, found by a point on its side.
+        let threaded = try applied(DesignProposal(features: [box, boss], solidOps: [.init(op: .thread, bodies: ["Box"], point: [5, 0, 18], text: "M10")])).bench
+        let body = threaded.workspace.bodies[0]
+        XCTAssertEqual(body.cuts.last?.operation, .thread)
+        XCTAssertEqual(body.cuts.last?.thread?.size, "M10")
+        XCTAssertFalse(body.cuts.last?.thread?.isInternal ?? true, "A boss takes a bolt thread")
+        XCTAssertTrue(try SolidKernel.solid(for: body).isValidSolid)
+        // With no point, the first boss.
+        let picked = try applied(DesignProposal(features: [box, boss], solidOps: [.init(op: .thread, bodies: ["Box"], text: "M10")])).bench.workspace
+        XCTAssertEqual(picked.bodies[0].cuts.last?.operation, .thread)
+        // It reads back locked, with what it is.
+        XCTAssertTrue(DesignExport.document(of: threaded.workspace).document.features.last?.note?.hasPrefix("external thread M10 × ") ?? false)
+
+        // Raised and sunk text centered at a point on the top.
+        let plain = try volume(try applied(DesignProposal(features: [box])).bench.workspace.bodies[0])
+        let raised = try applied(DesignProposal(features: [box], solidOps: [.init(op: .text, bodies: ["Box"], point: [0, -10, 10], text: "AB", size: 8, height: 0.6)])).bench
+        XCTAssertEqual(raised.workspace.bodies[0].cuts.last?.text?.text, "AB")
+        XCTAssertGreaterThan(try volume(raised.workspace.bodies[0]), plain)
+        let sunk = try applied(DesignProposal(features: [box], solidOps: [.init(op: .text, bodies: ["Box"], point: [0, -10, 10], text: "AB", size: 8, height: -0.6)])).bench
+        XCTAssertLessThan(try volume(sunk.workspace.bodies[0]), plain)
+
+        // A peg on the base pushes into the lid sitting on it, which gets a socket.
+        let lid = Feature(id: "lid", body: "Lid", kind: .block, operation: .add, axis: .pz, x: 0, y: 0, z: 10, width: 40, depth: 40, height: 5)
+        let pegged = try applied(DesignProposal(features: [box, lid], solidOps: [.init(op: .peg, bodies: ["Box"], point: [12, 12, 10], size: 4, height: 3)])).bench
+        let base = pegged.workspace.bodies[0], top = pegged.workspace.bodies[1]
+        XCTAssertNotNil(base.cuts.last?.peg)
+        XCTAssertEqual(top.cuts.count, 1, "The lid's socket")
+        XCTAssertEqual(top.cuts[0].peg, base.cuts.last?.peg)
+        let document = DesignExport.document(of: pegged.workspace).document
+        XCTAssertEqual(document.features.map(\.kind), [.block, .locked, .locked, .block, .locked], "A peg, its bevel, and its socket stay locked")
+        XCTAssertEqual(document.features.compactMap(\.note), ["peg Ø4 × 3 mm", "bevel on a peg's tip", "socket Ø4.4 for a peg"])
+
+        // A point off every face says so.
+        XCTAssertThrowsError(try applied(DesignProposal(features: [box], solidOps: [.init(op: .text, bodies: ["Box"], point: [0, 0, 30], text: "A", size: 5, height: 1)]))) { error in
+            XCTAssertTrue((error as? AssistantWorkbench.Failure)?.message.contains("No flat face of Box is within 1 mm") ?? false, "\(error)")
+        }
+    }
+
     func testChangeLinesReadAsWordsNotIDs() throws {
         let workspace = try applied(plateProposal()).bench.workspace
         let (document, aliases) = DesignExport.document(of: workspace)

@@ -56,6 +56,7 @@ enum DesignExport {
 
     private static func base(of body: SolidBody, id: String, body alias: String) -> DesignFeature {
         if body.imported != nil { return locked(id, alias, "imported shape") }
+        if body.peg != nil { return locked(id, alias, "separate peg Ø\(AssistantWorkbench.mm((body.profile.circle?.radius ?? 0) * 2)) mm") }
         if let revolve = body.revolve { return locked(id, alias, "profile revolved \(AssistantWorkbench.mm(revolve.angle))°") }
         if body.symmetric == true || (body.taper ?? 0) != 0 {
             return locked(id, alias, "profile extruded \(AssistantWorkbench.mm(abs(body.depth))) mm" + (body.symmetric == true ? " both ways" : "") +
@@ -69,6 +70,16 @@ enum DesignExport {
     }
 
     private static func feature(_ step: ExtrusionCut, of body: SolidBody, id: String, body alias: String) -> DesignFeature {
+        if step.peg != nil {
+            // A peg, its tip's bevel, and its sockets stay linked by the peg's id; rebuilding one
+            // as a plain cylinder or chamfer would break that.
+            let diameter = step.profile.circle.map { " Ø\(AssistantWorkbench.mm($0.radius * 2))" } ?? ""
+            switch step.operation {
+            case .join: return locked(id, alias, "peg\(diameter) × \(AssistantWorkbench.mm(abs(step.depth))) mm")
+            case .cut: return locked(id, alias, "socket\(diameter) for a peg")
+            default: return locked(id, alias, "bevel on a peg's tip")
+            }
+        }
         switch step.operation {
         case .cut, .join:
             let words = "\(step.operation == .cut ? "cut" : "boss"): \(outlineWords(step.profile))" +

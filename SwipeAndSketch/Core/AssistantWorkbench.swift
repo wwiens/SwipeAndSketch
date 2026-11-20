@@ -764,6 +764,35 @@ struct AssistantWorkbench: Sendable {
                 let ids = try solids(op.bodies, for: "pattern")
                 try circularPattern(items: ids.map(bodyName), axis: op.axis, center: try point(op.point, "center") ?? .zero, count: op.count,
                                     angle: op.angle == 0 ? 360 : op.angle, rotateCopies: op.rotateCopies)
+            case .thread, .text, .peg:
+                let ids = try solids(op.bodies, for: op.op.rawValue)
+                guard ids.count == 1, let body = workspace.bodies.first(where: { $0.id == ids[0] }) else {
+                    throw Failure("A \(op.op.rawValue) names one solid.")
+                }
+                let name = bodyName(body.id), at = try point(op.point, "point on the face")
+                let clearance = op.spacing > 0 ? op.spacing : Fit.preferredClearance
+                switch op.op {
+                case .thread:
+                    let face: String
+                    if let at { face = "\(try nearestFace(to: at, of: body, round: true))" }
+                    else {
+                        let solid = try buildable(body)
+                        face = (0..<solid.faceCount).contains { ssk_face_cylinder_side(solid.handle, Int32($0)) == 1 } ? "boss" : "hole"
+                    }
+                    let size = op.text.trimmingCharacters(in: .whitespaces)
+                    try thread(body: name, face: face, size: size.isEmpty ? nil : size, diameter: nil, pitch: nil, clearance: clearance,
+                               leftHanded: false, length: op.size > 0 ? op.size : nil)
+                case .text:
+                    guard let at else { throw Failure("Text needs its center: a point on the flat face it goes on.") }
+                    let words = op.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !words.isEmpty else { throw Failure("Give the text to write.") }
+                    try text(body: name, face: "\(try nearestFace(to: at, of: body, round: false))", text: words, height: op.size,
+                             depth: op.height, at: at, angle: op.angle)
+                default:
+                    guard let at else { throw Failure("A peg needs its center: a point on the flat face it stands on.") }
+                    try peg(body: name, face: "\(try nearestFace(to: at, of: body, round: false))", at: [at], diameter: op.size,
+                            height: op.height, clearance: clearance)
+                }
             case .union, .subtract, .intersect:
                 let ids = try solids(op.bodies, for: op.op.rawValue)
                 guard ids.count >= 2, Set(ids).count == ids.count else {
@@ -780,6 +809,22 @@ struct AssistantWorkbench: Sendable {
             index += 1
         }
         return result.newBodies
+    }
+
+    /// The flat face (or, with `round`, the cylindrical face) of `body` nearest a world point: a
+    /// design proposal places threads, text, and pegs by a point rather than by face number.
+    func nearestFace(to point: SIMD3<Double>, of body: SolidBody, round: Bool) throws -> Int {
+        let solid = try buildable(body)
+        var best: (face: Int, distance: Double)?
+        for face in 0..<solid.faceCount where round ? solid.faceCylinder(face) != nil : solid.facePlane(face) != nil {
+            guard let closest = solid.point(onFace: face, near: point) else { continue }
+            let distance = simd_distance(closest, point)
+            if best == nil || distance < best!.distance - 1e-9 { best = (face, distance) }
+        }
+        guard let best, best.distance <= 1 else {
+            throw Failure("No \(round ? "round" : "flat") face of \(bodyName(body.id)) is within 1 mm of \(Self.point(point)); give a point on the face.")
+        }
+        return best.face
     }
 
     /// Keeps `next` if it is valid and every solid in `bodies` builds; records `change`.
