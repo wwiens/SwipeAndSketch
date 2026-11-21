@@ -26,7 +26,11 @@ struct SVGPaint: @unchecked Sendable {
     /// Images: the picture and where its unit square lands, with the clips that apply to it.
     var image: CGImage?
     var imageTransform: CGAffineTransform = .identity
+    /// The clips that apply to it (images are clipped when traced; fills and strokes already are).
     var clips: [CGPath] = []
+    /// Fills and strokes under clips: the area before clipping, so colors under one clip can
+    /// cover each other before it cuts them all along one edge.
+    var unclipped: CGPath?
     var bounds: CGRect { kind == .image ? CGRect(x: 0, y: 0, width: 1, height: 1).applying(imageTransform) : area.boundingBoxOfPath }
 }
 
@@ -258,9 +262,10 @@ struct SVGRenderer {
         guard let paint = color(style["fill"] ?? "black", style: style), paint.alpha * style.fillOpacity * context.opacity > 0.01 else { return }
         var area = path.copy(using: [context.transform]) ?? path
         area = area.normalized(using: style.fillRule)
+        let unclipped = context.clips.isEmpty ? nil : area
         for clip in context.clips { area = area.intersection(clip) }
         guard area.hasSegments else { return }
-        paints.append(SVGPaint(kind: .fill, source: source, area: area, color: paint.color, layer: context.layer))
+        paints.append(SVGPaint(kind: .fill, source: source, area: area, color: paint.color, layer: context.layer, clips: context.clips, unclipped: unclipped))
     }
 
     private mutating func stroke(_ path: CGPath, style: SVGStyle, context: Context, source: SVGPaint.Source) {
@@ -293,13 +298,14 @@ struct SVGRenderer {
         }
         outline = outline.normalized(using: .winding)
         var centerline = line.copy(using: [context.transform]) ?? line
+        let unclipped = context.clips.isEmpty ? nil : outline
         for clip in context.clips {
             outline = outline.intersection(clip)
             centerline = centerline.lineIntersection(clip)
         }
         guard outline.hasSegments || centerline.hasSegments else { return }
         paints.append(SVGPaint(kind: .stroke, source: source, area: outline, centerline: centerline, strokeWidth: naturalWidth,
-                               color: paint.color, layer: context.layer))
+                               color: paint.color, layer: context.layer, clips: context.clips, unclipped: unclipped))
     }
 
     /// A paint's color: a color, `currentColor`, a gradient's first stop, or for anything else
