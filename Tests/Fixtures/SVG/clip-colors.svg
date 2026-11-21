@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="80mm" height="80mm">
+  <defs><clipPath id="badge"><circle cx="40" cy="40" r="39"/></clipPath></defs>
+  <g clip-path="url(#badge)">
+    <rect width="80" height="80" fill="#3d6fe0"/>
+    <circle cx="55" cy="24" r="9" fill="#f7c933"/>
+    <polygon points="0,62 25,22 50,62" fill="#8650cf"/>
+    <polygon points="28,62 52,30 80,62" fill="#8650cf"/>
+    <path d="M0 57 Q20 49 40 56 T80 54 V80 H0 Z" fill="#3fa654"/>
+  </g>
+</svg>

@@ -205,6 +205,11 @@ enum SVGImport {
         var color: Int
         var layer: Int?
         var bounds: CGRect
+        /// An area under clips: the area before them, the clips (placed), and which clips they
+        /// are, so areas under the same clips cover each other before it cuts them.
+        var unclipped: CGPath?
+        var clips: [CGPath] = []
+        var clipKey: [ObjectIdentifier] = []
     }
 
     /// The drawing sized, placed, grouped into sketches, and fitted, for `options`. When it would
@@ -250,11 +255,25 @@ enum SVGImport {
         func colorIndex(_ color: SVGColor) -> Int { colors.firstIndex { $0.distance(to: color) < colorTolerance } ?? 0 }
         var items: [Item] = []
         var traced = 0
+        var placedClips: [ObjectIdentifier: CGPath] = [:]
+        func clipped(_ item: Item, _ paint: SVGPaint) -> Item {
+            guard let unclipped = paint.unclipped else { return item }
+            var item = item
+            item.unclipped = unclipped.copy(using: [place]) ?? unclipped
+            item.clipKey = paint.clips.map(ObjectIdentifier.init)
+            item.clips = paint.clips.map { clip in
+                if let placed = placedClips[ObjectIdentifier(clip)] { return placed }
+                let placed = clip.copy(using: [place]) ?? clip
+                placedClips[ObjectIdentifier(clip)] = placed
+                return placed
+            }
+            return item
+        }
         for paint in drawing.painting.paints {
             switch paint.kind {
             case .fill:
                 let area = paint.area.copy(using: [place]) ?? paint.area
-                items.append(Item(geometry: .area(area), color: colorIndex(paint.color), layer: paint.layer, bounds: area.boundingBoxOfPath))
+                items.append(clipped(Item(geometry: .area(area), color: colorIndex(paint.color), layer: paint.layer, bounds: area.boundingBoxOfPath), paint))
             case .stroke:
                 let asLine = options.strokes == .centerline || options.strokes == .auto && paint.strokeWidth * scale < hairline
                 if asLine, let line = paint.centerline {
@@ -262,7 +281,7 @@ enum SVGImport {
                     items.append(Item(geometry: .line(placed), color: colorIndex(paint.color), layer: paint.layer, bounds: placed.boundingBoxOfPath))
                 } else {
                     let area = paint.area.copy(using: [place]) ?? paint.area
-                    items.append(Item(geometry: .area(area), color: colorIndex(paint.color), layer: paint.layer, bounds: area.boundingBoxOfPath))
+                    items.append(clipped(Item(geometry: .area(area), color: colorIndex(paint.color), layer: paint.layer, bounds: area.boundingBoxOfPath), paint))
                 }
             case .image:
                 guard options.traceImages, let image = paint.image else { continue }
@@ -301,23 +320,36 @@ enum SVGImport {
         }
 
         // Each color's visible area: what it paints less what other colors paint over it. For
-        // solids, closed center lines (cut outlines) enclose what they outline too.
+        // solids, closed center lines (cut outlines) enclose what they outline too. Under clips,
+        // what covers a color is taken away before its clips cut it (unclipped when its own clips
+        // are among them, as for colors in one clipped group), so the colors meet the clip's edge
+        // along one edge: clipped one by one, the two copies of a curved edge differ a little,
+        // and taking one from the other left slivers along it (November 19, 2026).
         func flatten(closedLines: Bool) -> [[CGPath]] {
             var visible: [[CGPath]] = Array(repeating: [], count: colors.count)
-            var above: [(area: CGPath, bounds: CGRect, color: Int)] = []
+            var above: [(area: CGPath, unclipped: CGPath?, clipKey: [ObjectIdentifier], bounds: CGRect, color: Int)] = []
             for item in items.reversed() {
                 var area: CGPath
+                var unclipped: CGPath?
                 switch item.geometry {
-                case .area(let path): area = path
+                case .area(let path): area = path; unclipped = item.unclipped
                 case .line(let path):
                     guard closedLines, let closed = closedArea(path, gap: gap) else { continue }
                     area = closed
                 }
                 let own = area
                 let covering = above.filter { $0.color != item.color && $0.bounds.intersects(item.bounds) }
-                if !covering.isEmpty { area = area.subtracting(combined(covering.map(\.area))) }
+                if let whole = unclipped, !covering.isEmpty {
+                    // Inside these clips, a cover whose clips are all among them covers all of itself.
+                    let clips = Set(item.clipKey)
+                    let cover = covering.map { Set($0.clipKey).isSubset(of: clips) ? $0.unclipped ?? $0.area : $0.area }
+                    area = whole.subtracting(combined(cover))
+                    for clip in item.clips { area = area.intersection(clip) }
+                } else if !covering.isEmpty {
+                    area = area.subtracting(combined(covering.map(\.area)))
+                }
                 if area.hasSegments { visible[item.color].append(area) }
-                above.append((own, item.bounds, item.color))
+                above.append((own, unclipped, item.clipKey, item.bounds, item.color))
             }
             return visible
         }
@@ -378,6 +410,11 @@ enum SVGImport {
                     // A point surely inside the region (a V's or a G's middle is not).
                     let inside = profile.insidePoint
                     guard area.contains(CGPoint(x: inside.x, y: inside.y), using: .winding) else { continue }
+                    // A sliver (on average narrower than half the joining gap) is a leftover, not a part.
+                    let perimeter = ([profile.outline] + (profile.holes ?? []).map(\.outline)).reduce(0.0) { total, loop in
+                        total + zip(loop, loop.dropFirst() + loop.prefix(1)).reduce(0.0) { $0 + hypot($1.1.x - $1.0.x, $1.1.y - $1.0.y) }
+                    }
+                    guard 4 * profile.area >= gap * perimeter else { continue }
                     guard profile.isSolidProfile, ProjectCodec.polygonWork(of: profile) != nil else { skipped += 1; continue }
                     solids.append(Layout.SolidPart(name: colorName(color), profile: profile, color: bodyColor(colors[color])))
                 }

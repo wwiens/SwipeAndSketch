@@ -154,6 +154,48 @@ final class SVGImportTests: XCTestCase {
         XCTAssertEqual(regions[0].area, .pi * 1_600 / 2, accuracy: 3)
     }
 
+    /// Colors clipped to one shape share its edge: each color's part of the rim comes from one
+    /// clip, so painting one over another leaves no slivers along it and loses no region
+    /// (November 19, 2026: a badge clipped to a circle lost its sky to 21 slivers).
+    func testColorsClippedToOneShapeMeetCleanlyAtItsEdge() throws {
+        let placed = try layout("clip-colors") { $0.solidHeight = 2 }
+        let disk = Double.pi * 39 * 39
+        func solids(_ color: BodyColor) -> [SVGImport.Layout.SolidPart] { placed.solids.filter { $0.color == color } }
+        XCTAssertEqual(solids(.blue).count, 1, "The sky, in one piece: \(solids(.blue).map(\.profile.area))")
+        XCTAssertEqual(solids(.yellow).count, 1)
+        XCTAssertEqual(solids(.purple).count, 1)
+        XCTAssertEqual(solids(.green).count, 1, "The ground: \(solids(.green).map(\.profile.area))")
+        XCTAssertTrue(placed.solids.allSatisfy { $0.profile.area > 1 }, "No slivers")
+        XCTAssertEqual(placed.solids.reduce(0) { $0 + $1.profile.area }, disk, accuracy: disk * 0.002, "Together they cover the badge")
+        XCTAssertFalse(placed.warnings.messages.contains { $0.hasPrefix("Regions too detailed") })
+        // The sketches too: the sky's sketch is its outline and the holes the others take.
+        let sky = profiles(placed, sketch: try XCTUnwrap(placed.sketches.firstIndex { $0.name == "Blue" }))
+        XCTAssertTrue(sky.allSatisfy { $0.area > 1 }, "No sliver regions in the sketch: \(sky.map(\.area).sorted().prefix(5))")
+
+        // Lettering over the ground, crossing the rim.
+        let lettered = try SVGImport.read(data: Data(String(decoding: try Data(contentsOf: fixture("clip-colors.svg")), as: UTF8.self)
+            .replacingOccurrences(of: "</g>", with: ##"<text x="40" y="73" text-anchor="middle" font-family="Helvetica" font-weight="bold" font-size="10" fill="#f7c933">GO MAKE</text></g>"##).utf8), name: "lettered")
+        var options = SVGImport.defaultOptions(for: lettered)
+        options.solidHeight = 2
+        let letters = try SVGImport.layout(lettered, options: options, placement: top)
+        XCTAssertTrue(letters.solids.allSatisfy { $0.profile.area > 0.5 }, "No slivers: \(letters.solids.map(\.profile.area).sorted().prefix(5))")
+        XCTAssertEqual(letters.solids.reduce(0) { $0 + $1.profile.area }, disk, accuracy: disk * 0.002)
+        XCTAssertEqual(letters.solids.filter { $0.color == .blue }.count, 1)
+        XCTAssertGreaterThan(letters.solids.filter { $0.color == .green }.map(\.profile.area).max() ?? 0, 800, "The ground is there")
+
+        // A clip inside the clipped group: the ground clipped again to the lower half still
+        // meets the sky cleanly at the rim.
+        let nested = try SVGImport.read(data: Data(String(decoding: try Data(contentsOf: fixture("clip-colors.svg")), as: UTF8.self)
+            .replacingOccurrences(of: "<defs>", with: ##"<defs><clipPath id="lower"><rect x="0" y="40" width="80" height="40"/></clipPath>"##)
+            .replacingOccurrences(of: "<path d=", with: ##"<path clip-path="url(#lower)" d="##).utf8), name: "nested")
+        options = SVGImport.defaultOptions(for: nested)
+        options.solidHeight = 2
+        let both = try SVGImport.layout(nested, options: options, placement: top)
+        XCTAssertTrue(both.solids.allSatisfy { $0.profile.area > 1 }, "No slivers: \(both.solids.map(\.profile.area).sorted().prefix(5))")
+        XCTAssertEqual(both.solids.filter { $0.color == .blue }.count, 1)
+        XCTAssertEqual(both.solids.reduce(0) { $0 + $1.profile.area }, disk, accuracy: disk * 0.002)
+    }
+
     func testHiddenThingsAreLeftOut() throws {
         let placed = try layout("hidden")
         XCTAssertEqual(profiles(placed).count, 1, "Only the first square is visible")
