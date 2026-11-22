@@ -2764,9 +2764,13 @@ struct DimensionEdit: Identifiable {
             let sources = Set(draft.items.map(\.source))
             switch item.selection {
             case .sketch(let id): return sources.contains(.sketch(id)) || draft.target?.sketchID == id
-            case .shape(let id): return sources.contains(.shape(id))
+            case .shape(let id):
+                return sources.contains(.shape(id)) || sources.contains { if case .chain(let ids) = $0 { ids.contains(id) } else { false } }
             case .body(let id): return sources.contains(.body(id))
             case .plane(let id): return draft.target?.source == .plane(id)
+            case .group(let id):
+                let members = projectionSources(inGroup: id)
+                return !members.isEmpty && members.allSatisfy(sources.contains)
             default: return false
             }
         }
@@ -3212,8 +3216,8 @@ struct DimensionEdit: Identifiable {
         if let projectionError { return projectionError }
         if draft.step == .items || draft.fixedTarget {
             if draft.items.isEmpty {
-                return draft.fixedTarget ? "Tap the edges, faces, solids, or other sketches to project into this sketch. Double-tap a solid for all of it." :
-                    "Tap the sketches, edges, faces, or solids to project. Double-tap a solid for all of it."
+                return draft.fixedTarget ? "Tap the edges, faces, solids, or other sketches to project into this sketch. Double-tap a line for its outline, or a solid for all of it." :
+                    "Tap the sketches, edges, faces, or solids to project. Double-tap a line for its outline, or a solid for all of it."
             }
             if draft.fixedTarget || draft.target != nil {
                 return projectionPreview.isEmpty ? "Nothing new to project: seen from the surface, these lie edge-on or are already there." :
@@ -4537,12 +4541,13 @@ struct DimensionEdit: Identifiable {
 
     // MARK: Project
 
-    /// Project (sketch projections). Whatever is selected becomes the first item, and the surface is
-    /// picked next. Inside a sketch, the projection goes into that sketch.
+    /// Project (sketch projections). Whatever is selected becomes the first item (a group: what is
+    /// shown in it, such as an imported SVG drawing), and the surface is picked next. Inside a
+    /// sketch, the projection goes into that sketch.
     func beginProjection() {
         guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked else { return }
-        let picked = selection.flatMap(projectionItem(for:))
+        let picked = selection.map(projectionItems(for:)) ?? []
         let plane = selectedConstructionPlane
         cancelTransient()
         selection = nil
@@ -4560,18 +4565,46 @@ struct DimensionEdit: Identifiable {
             draft.target = ProjectionTarget(source: .plane(plane.id), plane: plane.plane,
                                             outline: plane.outline.map { plane.plane.point($0) })
         }
-        if let picked {
-            draft.items = [picked]
+        if !picked.isEmpty {
+            draft.items = picked
             if !draft.fixedTarget && draft.target == nil { draft.step = .surface }
         }
         projectionDraft = draft
         updateProjectionPreview()
     }
 
-    /// The item a selection stands for: a shape, region, sketch, edge, face, or solid.
+    /// The items a selection stands for: one shape, region, outline, sketch, edge, face, or solid,
+    /// or a group's shown sketches and solids, each an item of its own.
+    private func projectionItems(for selection: ModelSelection) -> [ProjectionItem] {
+        guard case .group(let id) = selection else { return projectionItem(for: selection).map { [$0] } ?? [] }
+        return projectionItems(projectionSources(inGroup: id))
+    }
+
+    /// What a group brings to Project, without building it (solids are measured only when picked):
+    /// the sketches with shapes and the solids shown in it or any group inside it.
+    private func projectionSources(inGroup id: UUID) -> [ProjectionItem.Source] {
+        let contents = workspace.contents(of: id)
+        return contents.sketches.filter { !workspace.isHidden(sketch: $0) && !workspace.shapes(in: $0).isEmpty }.map { .sketch($0) } +
+            contents.bodies.filter { !workspace.isHidden(body: $0) }.map { .body($0) }
+    }
+
+    private func projectionItems(_ sources: [ProjectionItem.Source]) -> [ProjectionItem] {
+        sources.compactMap { source in
+            switch source {
+            case .sketch(let id): return .shapes(workspace.shapes(in: id), source: source)
+            case .body(let id): return workspace.bodies.first { $0.id == id }.flatMap(ProjectionItem.body)
+            default: return nil
+            }
+        }
+    }
+
+    /// The item a selection stands for: a shape, region, outline, sketch, edge, face, or solid.
     private func projectionItem(for selection: ModelSelection) -> ProjectionItem? {
         switch selection {
         case .shape(let id): return workspace.shapes.first { $0.id == id }.map { .shapes([$0], source: .shape(id)) }
+        case .chain(let ids):
+            let picked = Set(ids)
+            return .shapes(workspace.shapes.filter { picked.contains($0.id) }, source: .chain(ids))
         case .profile(let id):
             guard let profile = workspace.sketches.lazy.flatMap({ self.workspace.profiles(in: $0) }).first(where: { $0.id == id }) else { return nil }
             return .shapes(workspace.shapes.filter { profile.sourceIDs.contains($0.id) }, source: .profile(id))
@@ -4581,7 +4614,7 @@ struct DimensionEdit: Identifiable {
         case .edge(let bodyID, let edge):
             guard let body = workspace.bodies.first(where: { $0.id == bodyID }) else { return nil }
             return .edge(edge.index, of: body)
-        case .plane, .group, .chain: return nil
+        case .plane, .group: return nil
         }
     }
 
@@ -4602,13 +4635,22 @@ struct DimensionEdit: Identifiable {
         updateProjectionPreview()
     }
 
-    /// A double-tap: the whole sketch or solid instead of the shape, face, or edge just tapped.
+    /// A double-tap: the whole outline, sketch, or solid instead of the shape, face, or edge just
+    /// tapped (a third tap on a sketch line: the whole sketch instead of its outline).
     func pickWholeForProjection(_ item: ProjectionItem) {
         guard var draft = projectionDraft else { return }
+        func removeShapes(in shapes: Set<UUID>) {
+            draft.items.removeAll {
+                switch $0.source {
+                case .shape(let shape): shapes.contains(shape)
+                case .chain(let chain): chain.allSatisfy(shapes.contains)
+                default: false
+                }
+            }
+        }
         switch item.source {
-        case .sketch(let id):
-            let shapes = Set(workspace.shapes(in: id).map(\.id))
-            draft.items.removeAll { if case .shape(let shape) = $0.source { shapes.contains(shape) } else { false } }
+        case .chain(let ids): removeShapes(in: Set(ids))
+        case .sketch(let id): removeShapes(in: Set(workspace.shapes(in: id).map(\.id)))
         case .body(let id):
             draft.items.removeAll {
                 switch $0.source { case .face(let body, _), .edge(let body, _): body == id; default: false }
@@ -4642,6 +4684,18 @@ struct DimensionEdit: Identifiable {
                 setProjectionTarget(ProjectionTarget(source: .plane(id), plane: plane.plane, outline: plane.outline.map { plane.plane.point($0) }))
             default: break
             }
+            return
+        }
+        if case .group(let id) = row {
+            // A group row picks what is shown in it, or unpicks it when all of that is picked.
+            let sources = projectionSources(inGroup: id)
+            guard !sources.isEmpty, var draft = projectionDraft, !isEditingBlocked else { return }
+            let picked = Set(draft.items.map(\.source))
+            if Set(sources).isSubset(of: picked) { draft.items.removeAll { sources.contains($0.source) } }
+            else { draft.items += projectionItems(sources.filter { !picked.contains($0) }) }
+            projectionDraft = draft
+            UISelectionFeedbackGenerator().selectionChanged()
+            updateProjectionPreview()
             return
         }
         if let item = projectionItem(for: row) { toggleProjectionItem(item) }

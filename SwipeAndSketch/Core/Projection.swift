@@ -15,11 +15,12 @@ enum SpaceCurve: Equatable, Sendable {
 }
 
 /// Something picked to project (Project's Geometry): a sketch shape, a whole sketch, a
-/// sketch region, a solid edge, a solid face (its edges), or a whole solid (every edge). Its
+/// sketch region, an outline (shapes joined end to end, such as one path of an imported SVG
+/// drawing), a solid edge, a solid face (its edges), or a whole solid (every edge). Its
 /// geometry is captured in world millimeters when it is picked, so it stays valid while the
 /// projection is set up; nothing links the projection back to it afterwards.
 struct ProjectionItem: Equatable, Sendable {
-    enum Source: Hashable, Sendable { case shape(UUID), sketch(UUID), profile(String), edge(UUID, Int), face(UUID, Int), body(UUID) }
+    enum Source: Hashable, Sendable { case shape(UUID), sketch(UUID), profile(String), chain([UUID]), edge(UUID, Int), face(UUID, Int), body(UUID) }
     var source: Source
     var curves: [SpaceCurve]
     /// Outlines of curved faces (a cylinder's sides), which depend on the projection direction.
@@ -106,19 +107,23 @@ struct ProjectionTarget: Equatable, Sendable {
 /// angle, outlines of curved faces) become polylines. The result is a copy: it does not follow
 /// later changes to what was projected.
 enum Projection {
-    /// More shapes than this from one projection is refused rather than flooding a sketch.
-    static let maximumShapes = 2_000
+    /// More shapes than this from one projection is refused rather than flooding a sketch. As
+    /// many as an SVG import can bring in, so a whole imported drawing projects.
+    static let maximumShapes = 5_000
 
     /// The shapes `items` cast onto `plane`. Duplicates (such as a solid's top and bottom outlines
     /// seen from above) are kept once, and so is anything that matches a shape in `existing`.
     /// Nil when there would be too many shapes.
     static func shapes(projecting items: [ProjectionItem], onto plane: SketchPlane, existing: [SketchShape] = []) -> [SketchShape]? {
         var result: [SketchShape] = []
-        let existing = existing.filter { $0.plane == plane && $0.isValid }
+        // Shapes kept so far (existing ones too), filed by where they sit, so each new shape is
+        // compared only with its neighbors: a drawing of thousands of shapes stays quick.
+        var nearby = DuplicateIndex()
+        existing.filter { $0.plane == plane && $0.isValid }.forEach { nearby.insert($0) }
         func add(_ shape: SketchShape) {
-            guard shape.isValid, !result.contains(where: { isDuplicate($0, shape) }),
-                  !existing.contains(where: { isDuplicate($0, shape) }) else { return }
+            guard shape.isValid, !nearby.containsDuplicate(of: shape) else { return }
             result.append(shape)
+            nearby.insert(shape)
         }
         for item in items {
             for curve in item.curves {
@@ -291,6 +296,55 @@ enum Projection {
             if a.isClosed { return p.allSatisfy { point in q.contains { same($0, point) } } }
             return zip(p, q).allSatisfy(same) || zip(p, q.reversed()).allSatisfy(same)
         default: return false
+        }
+    }
+
+    /// Shapes filed by grid cells around their middles, for finding duplicates among thousands.
+    /// Duplicates sit within 0.00001 mm of each other, so they share a cell or lie in neighboring
+    /// ones; a rectangle is filed under the middle of each side too, where a line along it sits.
+    struct DuplicateIndex {
+        private struct Cell: Hashable { var x, y: Int64 }
+        private static let size = 0.01
+        private var cells: [Cell: [SketchShape]] = [:]
+
+        private static func anchors(of shape: SketchShape) -> [Point2] {
+            switch shape.kind {
+            case .line: return [Point2(x: (shape.start.x + shape.end.x) / 2, y: (shape.start.y + shape.end.y) / 2)]
+            case .circle: return [shape.start]
+            default:
+                let outline = shape.outline
+                guard let first = outline.first else { return [shape.start] }
+                let low = outline.reduce(first) { Point2(x: min($0.x, $1.x), y: min($0.y, $1.y)) }
+                let high = outline.reduce(first) { Point2(x: max($0.x, $1.x), y: max($0.y, $1.y)) }
+                var anchors = [Point2(x: (low.x + high.x) / 2, y: (low.y + high.y) / 2)]
+                if shape.kind == .rectangle, outline.count == 4 {
+                    anchors += outline.indices.map { i in
+                        let a = outline[i], b = outline[(i + 1) % 4]
+                        return Point2(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
+                    }
+                }
+                return anchors
+            }
+        }
+
+        private static func cell(_ point: Point2) -> Cell {
+            Cell(x: Int64((point.x / size).rounded(.down)), y: Int64((point.y / size).rounded(.down)))
+        }
+
+        mutating func insert(_ shape: SketchShape) {
+            for cell in Set(Self.anchors(of: shape).map(Self.cell)) { cells[cell, default: []].append(shape) }
+        }
+
+        func containsDuplicate(of shape: SketchShape) -> Bool {
+            for anchor in Self.anchors(of: shape) {
+                let center = Self.cell(anchor)
+                for dx in -1...1 as ClosedRange<Int64> {
+                    for dy in -1...1 as ClosedRange<Int64> {
+                        if cells[Cell(x: center.x + dx, y: center.y + dy)]?.contains(where: { isDuplicate($0, shape) }) == true { return true }
+                    }
+                }
+            }
+            return false
         }
     }
 

@@ -162,4 +162,33 @@ final class ProjectionTests: XCTestCase {
         XCTAssertTrue(chains.contains { $0 == [a, b, c] || $0 == [c, b, a] })
         XCTAssertEqual(Projection.polyline([a, b, c], closed: false, plane: .top).map(\.kind), [.line], "Collinear points are one line")
     }
+
+    /// A whole imported drawing projects: thousands of shapes, each kept once, quickly, with
+    /// duplicates found across grid cells and a line along a rectangle's side still left out.
+    func testThousandsOfShapesProjectWithDuplicatesKeptOnce() throws {
+        var shapes: [SketchShape] = []
+        // Middles a hair below a 0.01 mm grid line, so the nudged copy below lands across it.
+        for row in 0..<40 {
+            for column in 0..<40 {
+                let x = Double(column) * 2 + 0.0099999, y = Double(row) * 2 + 0.0099999
+                shapes.append(SketchShape(kind: .line, plane: .top, start: .init(x: x, y: y), end: .init(x: x + 1, y: y)))
+                shapes.append(SketchShape.arc(center: .init(x: x, y: y + 1), from: .init(x: x + 0.5, y: y + 1), to: .init(x: x, y: y + 1.5), plane: .top))
+            }
+        }
+        // The same line again, reversed and a few micrometers off, across a cell border.
+        let first = shapes[0]
+        let nudge = Point2(x: 0.000004, y: 0.000004)
+        let again = SketchShape(kind: .line, plane: .top, start: first.end + nudge, end: first.start + nudge)
+        let rectangle = SketchShape(kind: .rectangle, plane: .top, start: .init(x: -10, y: -10), end: .init(x: -5, y: -6))
+        let side = SketchShape(kind: .line, plane: .top, start: .init(x: -5, y: -6), end: .init(x: -10, y: -6))
+        let item = ProjectionItem.shapes(shapes + [again, rectangle, side], source: .sketch(UUID()))
+        let started = Date()
+        let projected = try XCTUnwrap(Projection.shapes(projecting: [item], onto: above), "Within the limit an SVG import can bring in")
+        XCTAssertLessThan(Date().timeIntervalSince(started), 5)
+        XCTAssertEqual(projected.count, 40 * 40 * 2 + 1, "Each line and arc once, the rectangle once, no repeated line or side")
+        XCTAssertEqual(count(projected, .rectangle), 1)
+        // Those already in the target sketch are left out too.
+        let existing = projected.prefix(100).map { var shape = $0; shape.id = UUID(); return shape }
+        XCTAssertEqual(Projection.shapes(projecting: [item], onto: above, existing: Array(existing))?.count, projected.count - 100)
+    }
 }
