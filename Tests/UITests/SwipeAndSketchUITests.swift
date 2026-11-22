@@ -601,6 +601,33 @@ import XCTest
         XCTAssertFalse(format.waitForExistence(timeout: 2))
     }
 
+    /// The Text bar's Raised | Sunk | Embedded switch and the inlay's color fit beside the text field,
+    /// whichever way the iPad is held.
+    func testEmbeddedTextBarFitsAndPicksTheInlayColor() {
+        continueAfterFailure = false
+        let app = app(arguments: ["--ui-testing-solid", "--ui-testing-text-embedded"])
+        func attach(_ name: String) {
+            let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); shot.name = name; shot.lifetime = .keepAlways; add(shot)
+        }
+        let style = app.segmentedControls["text.style"]
+        XCTAssertTrue(style.waitForExistence(timeout: 20))
+        XCTAssertTrue(style.buttons["Embedded"].isSelected)
+        for orientation in [UIDeviceOrientation.portrait, .landscapeLeft] {
+            XCUIDevice.shared.orientation = orientation
+            let inlay = app.buttons["text.inlayColor"]
+            XCTAssertTrue(inlay.waitForExistence(timeout: 5))
+            XCTAssertTrue(inlay.isHittable && app.buttons["text.rotate"].isHittable && app.textFields["text.content"].isHittable, "\(orientation.rawValue)")
+            XCTAssertTrue(app.frame.contains(app.buttons["text.rotate"].frame), "The bar stays on screen")
+            attach("Embedded text bar, \(orientation == .portrait ? "portrait" : "landscape")")
+        }
+        app.buttons["text.inlayColor"].tap()
+        app.buttons["text.inlay.red"].tap()
+        XCTAssertEqual(app.buttons["text.inlayColor"].label, "Inlay color, Red")
+        style.buttons["Sunk"].tap()
+        XCTAssertFalse(app.buttons["text.inlayColor"].waitForExistence(timeout: 2), "Only embedded text has an inlay")
+        XCUIDevice.shared.orientation = .portrait
+    }
+
     func testExportEstimatesFilamentAndListsParts() {
         continueAfterFailure = false
         let app = app(arguments: ["--ui-testing-solid"])

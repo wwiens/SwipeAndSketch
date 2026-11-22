@@ -45,6 +45,10 @@ struct ExtrusionCut: Codable, Equatable, Identifiable, Sendable {
     var thread: ThreadSpec?
     /// Text: letters raised from (positive `depth`) or sunk into (negative) the face on `profile.plane` (Text.swift).
     var text: TextSpec?
+    /// Text only (embedded text, November 22, 2026): keep just the letters of this solid instead of
+    /// sinking them into it, so it becomes the inlay that fills the matching sunk text of another
+    /// solid (Text.swift). Omitted otherwise; files with an inlay are written as schema version 3.
+    var inlay: Bool?
     /// Draft (October 24, 2026): faces leaned for a mold (ShapeOperations.swift).
     var draft: DraftSpec?
     /// Rib (October 24, 2026): a stiffening web from a sketch line to the solid (ShapeOperations.swift).
@@ -98,6 +102,7 @@ struct ExtrusionCut: Codable, Equatable, Identifiable, Sendable {
         let depthIsValid = depth.isFinite && abs(depth) >= 0.01 && abs(depth) <= 10_000
         if let clearance, subtracted == nil || !Fit.clearanceRange.contains(clearance) { return false }
         guard known ?? profile.isSolidProfile, [merged != nil, subtracted != nil, intersected != nil, scale != nil, removedFaces != nil, movedFaces != nil, shell != nil, hole != nil, join == true, split != nil, finish != nil, thread != nil, text != nil, draft != nil, rib != nil].filter({ $0 }).count <= 1 else { return false }
+        if inlay != nil, text == nil { return false }
         if symmetric != nil || taper != nil {
             guard [.cut, .join].contains(operation), symmetric != false, facePoint == nil, revolve == nil, !throughAll,
                   Self.taperRange.contains(taper ?? 0) else { return false }
@@ -127,7 +132,7 @@ struct ExtrusionCut: Codable, Equatable, Identifiable, Sendable {
             return split?.keep == .inside ? throughAll : !throughAll && depthIsValid
         case .finish: return finish?.isValid ?? false
         case .thread: return thread?.isValid ?? false
-        case .text: return (text?.isValid ?? false) && depthIsValid && !throughAll
+        case .text: return (text?.isValid ?? false) && depthIsValid && !throughAll && (inlay == nil || inlay == true && depth < 0)
         }
     }
 }

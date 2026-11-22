@@ -14,7 +14,11 @@ struct Project: Codable, Equatable, Sendable {
     /// the circle's 128 points and a step's profile when it is its solid's own (`LeanOutline`,
     /// `StepProfile`). Version 1 wrote both out; it still reads, and is written as 2 when saved.
     static let currentSchemaVersion = 2
-    static let readableSchemaVersions = 1...2
+    /// 3 since November 22, 2026, only for files with embedded text: an inlay's `inlay` step, which
+    /// an earlier reader would ignore and so build the inlay wrong (and lose on saving). Files without
+    /// one stay version 2, which earlier versions of the app still open.
+    static let inlaySchemaVersion = 3
+    static let readableSchemaVersions = 1...3
     var id: UUID
     var createdAtMilliseconds: Int64
     var modifiedAtMilliseconds: Int64
@@ -150,9 +154,10 @@ enum ProjectCodec {
     static func encode(_ project: Project, knownValid: Workspace? = nil) throws -> Data {
         let performance = Performance.begin("Encode project")
         defer { Performance.end(performance) }
-        // Always written in the current (lean) form, so a version 1 file is saved as version 2.
+        // Always written in the current (lean) form, so a version 1 file is saved as version 2 (3
+        // when it has embedded text).
         var project = project
-        project.schemaVersion = Project.currentSchemaVersion
+        project.schemaVersion = project.workspace.hasTextInlays ? Project.inlaySchemaVersion : Project.currentSchemaVersion
         try validate(project, changedFrom: knownValid)
         let encoder = JSONEncoder()
         // Compact since November 8, 2026: indentation made an 8-solid case 34 MB instead of 9.5 MB,

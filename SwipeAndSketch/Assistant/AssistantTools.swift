@@ -833,7 +833,7 @@ struct AddMatingPartTool: Tool {
 struct AddTextTool: Tool {
     let context: AssistantContext
     let name = "add_text"
-    let description = "Adds raised (embossed) or sunk (debossed) lettering to a body's flat face, centered on the face unless placed."
+    let description = "Adds raised (embossed) or sunk (debossed) lettering to a body's flat face, centered on the face unless placed. With inlayColor (and a negative depth) the text is embedded: the sunk letters are filled flush by an inlay body of that color, printed in a second filament."
     @Generable struct Arguments {
         var body: String
         @Guide(description: "top, bottom, front, back, left, right, a face number, or selected") var face: String
@@ -844,12 +844,13 @@ struct AddTextTool: Tool {
         var y: Double?
         var z: Double?
         @Guide(description: "Degrees to turn the text, usually 0") var angle: Double?
+        @Guide(description: "Embedded text: the inlay body's color (white, black, red, …); omit for plain raised or sunk text") var inlayColor: String?
     }
     func call(arguments: Arguments) async throws -> String {
         await context.run("Lettering \(arguments.body)") { bench in
             let center = arguments.x == nil && arguments.y == nil && arguments.z == nil ? nil : point(arguments.x, arguments.y, arguments.z)
             return try bench.text(body: arguments.body, face: arguments.face, text: arguments.text, height: arguments.height, depth: arguments.depth,
-                                  at: center, angle: arguments.angle ?? 0)
+                                  at: center, angle: arguments.angle ?? 0, inlay: arguments.inlayColor)
         }
     }
 }

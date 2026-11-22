@@ -413,7 +413,7 @@ final class ImportTests: XCTestCase {
         XCTAssertEqual(try ProjectImport.read(url, name: "bracket").workspace, try ProjectCodec.decode(Data(contentsOf: url)).workspace)
 
         let later = directory.appendingPathComponent("later.swipesketch")
-        let text = try String(contentsOf: url, encoding: .utf8).replacingOccurrences(of: "\"schemaVersion\":2", with: "\"schemaVersion\":3")
+        let text = try String(contentsOf: url, encoding: .utf8).replacingOccurrences(of: "\"schemaVersion\":2", with: "\"schemaVersion\":4")
         try text.write(to: later, atomically: true, encoding: .utf8)
         XCTAssertThrowsError(try ProjectImport.read(later, name: "later")) { XCTAssertEqual($0 as? ProjectError, .unsupportedVersion) }
 

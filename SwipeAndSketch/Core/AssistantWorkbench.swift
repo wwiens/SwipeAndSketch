@@ -338,7 +338,7 @@ struct AssistantWorkbench: Sendable {
                 let f = cut.scale?.factors ?? .one
                 label = cut.scale?.isUniform == true ? "scaled \(Self.mm(f.x * 100))%" : "stretched \(Self.mm(f.x * 100)) × \(Self.mm(f.y * 100)) × \(Self.mm(f.z * 100))%"
             case .finish: label = "\(cut.finish?.kind.rawValue ?? "fillet") \(Self.mm(cut.finish?.size ?? 0)) mm on \(cut.finish?.edges.count ?? 0) edges"
-            case .text: label = "\(cut.depth > 0 ? "embossed" : "debossed") text \"\(cut.text?.text ?? "")\""
+            case .text: label = cut.inlay == true ? "inlay filling text \"\(cut.text?.text ?? "")\"" : "\(cut.depth > 0 ? "embossed" : "debossed") text \"\(cut.text?.text ?? "")\""
             case .thread: label = "\(cut.thread?.isInternal == true ? "internal" : "external")\(cut.thread?.isRaised == true ? " raised" : "") thread \(cut.thread?.title ?? "")"
             }
             counts[label, default: 0] += 1
@@ -1328,14 +1328,22 @@ struct AssistantWorkbench: Sendable {
     }
 
     /// Raised (positive `depth`) or sunk (negative) text on a flat face, centered at `at` (default the
-    /// face center), capitals `height` tall, turned `angle` degrees.
+    /// face center), capitals `height` tall, turned `angle` degrees. `inlay`: embedded, the sunk
+    /// letters filled by an inlay solid of that color, for a second filament.
     @discardableResult mutating func text(body bodyName: String, face spec: String, text: String, height: Double, depth: Double,
-                                          at point: SIMD3<Double>? = nil, angle: Double = 0, font: String? = nil) throws -> String {
+                                          at point: SIMD3<Double>? = nil, angle: Double = 0, font: String? = nil, inlay: String? = nil) throws -> String {
         let body = try body(named: bodyName), solid = try buildable(body), index = try face(spec, of: body)
         guard let facePlane = solid.facePlane(index), let plane = SketchPlane.through(facePlane.origin, normal: facePlane.normal),
               let faceCenter = solid.faceCenter(index) else { throw Failure("Text goes on a flat face.") }
         guard TextSpec.heightRange.contains(height) else { throw Failure("Text height must be 0.5–500 mm.") }
         guard depth.isFinite, abs(depth) >= 0.05, abs(depth) <= 100 else { throw Failure("Text depth must be 0.05–100 mm (negative to sink it).") }
+        let inlayColor = try inlay.map { raw -> BodyColor in
+            guard let color = BodyColor(rawValue: raw.lowercased().trimmingCharacters(in: .whitespaces)) else {
+                throw Failure("Inlay colors are \(BodyColor.allCases.map(\.rawValue).joined(separator: ", ")).")
+            }
+            guard depth < 0 else { throw Failure("An inlay fills sunk text; give a negative depth.") }
+            return color
+        }
         let fontName = font.flatMap { name in TextFonts.available.first { $0.name.lowercased() == name.lowercased() || $0.title.lowercased() == name.lowercased() }?.name } ?? TextFonts.defaultFont
         guard let textSpec = TextSpec.make(text, font: fontName, height: height, center: plane.coordinates(of: point ?? faceCenter), angle: angle),
               let operation = ExtrusionCut.text(textSpec, on: plane, depth: depth) else { throw Failure("That text cannot be drawn; use letters, digits, or symbols.") }
@@ -1343,9 +1351,17 @@ struct AssistantWorkbench: Sendable {
         guard let bodyIndex = next.bodies.firstIndex(where: { $0.id == body.id }) else { throw Failure("That body no longer exists.") }
         next.bodies[bodyIndex].cuts.append(operation)
         let name = self.bodyName(body.id)
-        let change = "\(depth > 0 ? "Raised" : "Sank") \"\(text)\" \(Self.mm(abs(depth))) mm on \(name) face \(index), \(Self.mm(height)) mm tall"
+        var change = "\(depth > 0 ? "Raised" : "Sank") \"\(text)\" \(Self.mm(abs(depth))) mm on \(name) face \(index), \(Self.mm(height)) mm tall"
+        var checking = [body.id]
+        if let inlayColor {
+            guard var filling = SolidBody.textInlay(for: operation, color: inlayColor, name: "\(name) Inlay") else { throw Failure("That text cannot be inlaid.") }
+            filling.group = body.group
+            next.bodies.append(filling)
+            checking.append(filling.id)
+            change += ", filled by a \(inlayColor.rawValue) inlay solid, \(next.bodyNames[filling.id] ?? "its inlay")"
+        }
         do {
-            try keep(next, change: change, checking: [body.id], focus: .body(body.id))
+            try keep(next, change: change, checking: checking, focus: .body(body.id))
         } catch {
             throw Failure("\"\(text)\" at \(Self.mm(height)) mm does not fit on \(name) face \(index); make it smaller or shorter.")
         }
@@ -1876,7 +1892,7 @@ struct AssistantWorkbench: Sendable {
             next.bodies[bodyIndex] = body.placing(operation, replacing: index)
             change = "Changed a hole of \(name) to Ø\(Self.mm(spec.diameter))\(spec.kind == .simple ? "" : " " + spec.kind.title.lowercased()) \(newDepth.map { "\(Self.mm($0)) mm deep" } ?? "through")"
         case "text":
-            let texts = body.cuts.indices.filter { body.cuts[$0].text != nil }
+            let texts = body.cuts.indices.filter { body.cuts[$0].text != nil && body.cuts[$0].inlay == nil }
             let index = texts[try numbered(which, of: texts.count, "text", in: name)]
             let cut = body.cuts[index]
             guard let old = cut.text else { throw Failure("That text cannot be changed.") }
@@ -1886,7 +1902,25 @@ struct AssistantWorkbench: Sendable {
             guard let spec = TextSpec.make(words, font: old.font, height: size, center: old.center, angle: old.angle),
                   let operation = ExtrusionCut.text(spec, on: cut.profile.plane, depth: newDepth) else { throw Failure("That text cannot be drawn; use letters, digits, or symbols.") }
             next.bodies[bodyIndex] = body.placing(operation, replacing: index)
-            change = "Changed text on \(name) to \"\(words)\", \(Self.mm(size)) mm tall, \(newDepth > 0 ? "raised" : "sunk") \(Self.mm(abs(newDepth))) mm"
+            var placed = operation
+            placed.id = cut.id
+            // An embedded text's inlay follows it (and goes when it is raised).
+            var inlaid = ""
+            for id in workspace.inlays(of: cut) {
+                guard let inlayIndex = next.bodies.firstIndex(where: { $0.id == id }) else { continue }
+                let old = next.bodies[inlayIndex]
+                if var filling = SolidBody.textInlay(for: placed, color: old.color, name: old.name) {
+                    filling.id = old.id
+                    filling.group = old.group
+                    next.bodies[inlayIndex] = filling
+                    checking.append(id)
+                    inlaid = ", with its inlay"
+                } else {
+                    next.bodies.remove(at: inlayIndex)
+                    inlaid = ", and removed its inlay"
+                }
+            }
+            change = "Changed text on \(name) to \"\(words)\", \(Self.mm(size)) mm tall, \(newDepth > 0 ? "raised" : "sunk") \(Self.mm(abs(newDepth))) mm" + inlaid
         case "thread":
             let threads = body.cuts.indices.filter { body.cuts[$0].thread != nil }
             let index = threads[try numbered(which, of: threads.count, "thread", in: name)]
