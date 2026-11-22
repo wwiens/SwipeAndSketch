@@ -238,9 +238,10 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
     private var pendingSketchTap: (sketchID: UUID, time: CFTimeInterval, point: CGPoint)?
     private var lastSketchMode: SketchMode?
     private var lastHighlightsPlane = false
-    /// Project's previous item tap (a sketch or a solid), for double-tap-to-pick-all-of-it. Kept
-    /// apart from taps made with no tool, so a tap made before Project never pairs with one inside it.
-    private var lastProjectionTap: (sketchID: UUID?, bodyID: UUID?, time: CFTimeInterval, point: CGPoint)?
+    /// Project's previous item tap (a sketch or a solid), for double-tap-to-pick-all-of-it; `outline`
+    /// when that tap was a sketch line's second, which picked its outline. Kept apart from taps made
+    /// with no tool, so a tap made before Project never pairs with one inside it.
+    private var lastProjectionTap: (sketchID: UUID?, bodyID: UUID?, time: CFTimeInterval, point: CGPoint, outline: Bool)?
     /// The live snap while a stroke or drag is in progress, for drawing dashed alignment guides.
     private(set) var liveSnap: (result: SnapResult, plane: SketchPlane)?
     /// Center of a rectangle being drawn from its center.
@@ -3558,7 +3559,9 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
     // MARK: Project
 
     /// Project: a tap picks (or unpicks) an item, or the surface, depending on the step. A quick
-    /// second tap on the same sketch or solid picks all of it.
+    /// second tap on a sketch line picks its outline, the shapes joined to it end to end (one path
+    /// of an imported SVG drawing), and a third the whole sketch; on a solid, a second tap picks all
+    /// of it.
     private func projectionTap(at point: CGPoint) {
         guard let draft = session.projectionDraft else { return }
         if draft.step == .surface && !draft.fixedTarget {
@@ -3570,10 +3573,18 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         lastProjectionTap = nil
         let surface = solidFace(at: point)
         if let line = nearestSketch(at: point, over: surface) {
-            if let id = line.sketch, last?.sketchID == id {
-                session.pickWholeForProjection(.shapes(session.workspace.shapes(in: id), source: .sketch(id)))
+            if let id = line.sketch, let last, last.sketchID == id {
+                let sketch = session.workspace.shapes(in: id)
+                let chain = SketchEditing.chain(from: line.id, in: session.workspace)
+                if !last.outline, chain.count < sketch.count {
+                    lastProjectionTap = (id, nil, now, point, true)
+                    let picked = Set(chain)
+                    session.pickWholeForProjection(.shapes(sketch.filter { picked.contains($0.id) }, source: .chain(chain)))
+                } else {
+                    session.pickWholeForProjection(.shapes(sketch, source: .sketch(id)))
+                }
             } else {
-                lastProjectionTap = (line.sketch, nil, now, point)
+                lastProjectionTap = (line.sketch, nil, now, point, false)
                 session.toggleProjectionItem(.shapes([line], source: .shape(line.id)))
             }
             return
@@ -3587,7 +3598,7 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         }
         if let (bodyID, edge) = solidEdge(at: point, tolerance: 8) {
             if wholeBody(bodyID) { return }
-            lastProjectionTap = (nil, bodyID, now, point)
+            lastProjectionTap = (nil, bodyID, now, point, false)
             if let body = session.workspace.bodies.first(where: { $0.id == bodyID }), let item = ProjectionItem.edge(edge, of: body) {
                 session.toggleProjectionItem(item)
             }
@@ -3608,7 +3619,7 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         }
         if let surface {
             if wholeBody(surface.bodyID) { return }
-            lastProjectionTap = (nil, surface.bodyID, now, point)
+            lastProjectionTap = (nil, surface.bodyID, now, point, false)
             if let body = session.workspace.bodies.first(where: { $0.id == surface.bodyID }), let item = ProjectionItem.face(surface.face, of: body) {
                 session.toggleProjectionItem(item)
             }

@@ -651,8 +651,8 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .project:
             HelpOverview(
                 summary: "Project copies existing geometry flat onto a plane, as a new sketch or into the sketch you are drawing.",
-                steps: ["Tap the sketches, edges, faces, or solids to copy.", "Outside a sketch, tap Target Plane, then the face, plane, or sketch to draw onto. Inside a sketch, its plane is already the destination; there is no Target Plane step.", "Inspect the projected outlines, then tap Done."],
-                tips: ["The copy does not update if the original changes later."])
+                steps: ["Tap the sketches, edges, faces, or solids to copy. Double-tap a sketch line for its whole outline, such as one path of an imported SVG drawing, or tap it three times for the whole sketch.", "Outside a sketch, tap Target Plane, then the face, plane, or sketch to draw onto. Inside a sketch, its plane is already the destination; there is no Target Plane step.", "Inspect the projected outlines, then tap Done."],
+                tips: ["Select an outline, a sketch, or a group (such as an imported SVG drawing) before tapping Project to start with it; a group brings what it shows. Its Model Tree row picks it while projecting, too.", "The copy does not update if the original changes later."])
         case .measure:
             HelpOverview(
                 summary: "Check sizes, distances, and angles without changing anything.",

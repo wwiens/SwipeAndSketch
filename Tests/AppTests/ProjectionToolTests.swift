@@ -239,4 +239,95 @@ import simd
         // The bottom outline is the rectangle the box was drawn from: nothing new.
         XCTAssertTrue(session.projectionPreview.isEmpty)
     }
+
+    // MARK: Imported SVG drawings
+
+    /// An SVG drawing of two separate outlines, a triangle and a circle, imported onto Top as one
+    /// sketch in its own group (which the import selects).
+    func importedDrawing() throws -> (ModelingSession, sketch: UUID, group: UUID) {
+        let session = ModelingSession(inMemory: true)
+        let markup = "<svg xmlns='http://www.w3.org/2000/svg' width='60mm' height='40mm' viewBox='0 0 60 40'>" +
+            "<path d='M5 35 L35 35 L20 5 Z'/><circle cx='48' cy='20' r='8'/></svg>"
+        session.importSVG(data: Data(markup.utf8), name: "Badge")
+        let deadline = Date().addingTimeInterval(20)
+        while session.isProjectBusy && Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.02)) }
+        let request = try XCTUnwrap(session.svgImport)
+        var options = SVGImport.defaultOptions(for: request.drawing)
+        options.grouping = .single
+        session.confirmSVGImport(try SVGImport.layout(request.drawing, options: options, placement: request.target.placement))
+        let sketch = try XCTUnwrap(session.workspace.sketches.first)
+        guard case .group(let group) = session.selection else { throw XCTSkip("The import selects its group") }
+        return (session, sketch.id, group)
+    }
+
+    let above = SketchPlane.through(.init(0, 0, 30), normal: .init(0, 0, 1))!
+
+    /// The imported triangle's lines: one outline of the drawing.
+    func triangle(_ session: ModelingSession, _ sketch: UUID) throws -> [SketchShape] {
+        let lines = session.workspace.shapes(in: sketch).filter { $0.kind == .line }
+        XCTAssertEqual(lines.count, 3, "The triangle comes in as three joined lines")
+        XCTAssertEqual(session.workspace.shapes(in: sketch).filter { $0.kind != .line }.count, 1, "and the circle as one shape")
+        return lines
+    }
+
+    func testSelectedImportedDrawingIsWhatProjects() throws {
+        let (session, sketch, group) = try importedDrawing()
+        session.chooseTool(.project)
+        XCTAssertEqual(session.projectionDraft?.items.map(\.source), [.sketch(sketch)], "The group brings its shown sketch")
+        XCTAssertEqual(session.projectionDraft?.step, .surface)
+        let row = try XCTUnwrap(session.itemGroups.flatMap(\.items).first { $0.selection == .group(group) })
+        XCTAssertTrue(session.isHighlighted(row))
+        session.setProjectionTarget(ProjectionTarget(source: .world(above), plane: above, outline: []))
+        XCTAssertEqual(session.projectionPreview.count, 4)
+        // The group's row unpicks it, and picks it again.
+        session.chooseProjectionStep(.items)
+        session.selectItem(.group(group))
+        XCTAssertEqual(session.projectionDraft?.items.count, 0)
+        XCTAssertFalse(session.isHighlighted(row))
+        session.selectItem(.group(group))
+        XCTAssertEqual(session.projectionDraft?.items.map(\.source), [.sketch(sketch)])
+        session.confirmProjection()
+        let copy = try XCTUnwrap(session.workspace.sketches.last)
+        XCTAssertEqual(copy.plane, above)
+        XCTAssertEqual(session.workspace.shapes(in: copy.id).count, 4)
+    }
+
+    func testSelectedOutlineOfAnImportedDrawingIsWhatProjects() throws {
+        let (session, sketch, _) = try importedDrawing()
+        let lines = try triangle(session, sketch)
+        session.selectChain(of: lines[0].id)
+        guard case .chain(let chain) = session.selection else { return XCTFail("Double-tapping a line selects its outline") }
+        XCTAssertEqual(Set(chain), Set(lines.map(\.id)))
+        session.chooseTool(.project)
+        XCTAssertEqual(session.projectionDraft?.items.map(\.source), [.chain(chain)])
+        let row = try XCTUnwrap(session.itemGroups.flatMap(\.items).first { $0.selection == .shape(lines[1].id) })
+        XCTAssertTrue(session.isHighlighted(row), "Its shapes' rows are highlighted")
+        session.setProjectionTarget(ProjectionTarget(source: .world(above), plane: above, outline: []))
+        XCTAssertEqual(session.projectionPreview.count, 3, "Only the triangle")
+        XCTAssertTrue(session.projectionPreview.allSatisfy { $0.kind == .line })
+        session.confirmProjection()
+        let copy = try XCTUnwrap(session.workspace.sketches.last)
+        let profile = try XCTUnwrap(session.workspace.profiles(in: copy).first)
+        XCTAssertEqual(profile.area, 30 * 30 / 2, accuracy: 1e-6, "The copy closes the same triangle")
+    }
+
+    func testTapsOnAnImportedLinePickItsShapeThenOutlineThenSketch() throws {
+        let (session, sketch, _) = try importedDrawing()
+        let lines = try triangle(session, sketch)
+        session.select(nil)
+        let controller = canvas(session)
+        session.chooseTool(.project)
+        controller.refresh()
+        let line = lines[0]
+        let middle = SIMD3<Float>(line.plane.point(Point2(x: (line.start.x + line.end.x) / 2, y: (line.start.y + line.end.y) / 2)))
+        tap(controller, middle)
+        XCTAssertEqual(session.projectionDraft?.items.map(\.source), [.shape(line.id)])
+        tap(controller, middle)
+        let source = try XCTUnwrap(session.projectionDraft?.items.map(\.source).first)
+        guard case .chain(let chain) = source else { return XCTFail("A second tap picks the outline, got \(source)") }
+        XCTAssertEqual(Set(chain), Set(lines.map(\.id)))
+        XCTAssertEqual(session.projectionDraft?.items.count, 1, "In place of the line")
+        tap(controller, middle)
+        XCTAssertEqual(session.projectionDraft?.items.map(\.source), [.sketch(sketch)], "A third tap: the whole sketch")
+    }
 }
