@@ -36,58 +36,173 @@ struct ShellSpec: Codable, Equatable, Sendable {
 /// and its depth (or through-all) how far it goes, measured into the solid along −normal.
 struct HoleSpec: Codable, Equatable, Sendable {
     enum Kind: String, Codable, CaseIterable, Sendable {
-        case simple, counterbore, countersink, insert
+        case simple, counterbore, countersink, insert, nutTrap, magnet
         var title: String {
-            switch self { case .simple: "Simple"; case .counterbore: "Counterbore"; case .countersink: "Countersink"; case .insert: "Insert" }
+            switch self {
+            case .simple: "Simple"; case .counterbore: "Counterbore"; case .countersink: "Countersink"; case .insert: "Insert"
+            case .nutTrap: "Nut Trap"; case .magnet: "Magnet"
+            }
+        }
+        /// Sized by a screw (metric or inch); a magnet pocket is sized by its magnet.
+        var isScrew: Bool { self != .magnet }
+        /// Starts as a blind hole (an insert or a magnet), not through.
+        var startsBlind: Bool { self == .insert || self == .magnet }
+
+        /// A kind named loosely, as the assistant or a person might: any case, with or without
+        /// spaces, dashes, or underscores ("nut trap", "NUT_TRAP", "heat-set insert", "nut").
+        init?(loose text: String) {
+            let key = text.lowercased().filter { $0.isLetter }
+            let aliases: [String: Kind] = ["nut": .nutTrap, "hexnut": .nutTrap, "heatsetinsert": .insert, "heatset": .insert,
+                                           "magnetpocket": .magnet, "cbore": .counterbore, "csink": .countersink]
+            guard let kind = Self.allCases.first(where: { $0.rawValue.lowercased() == key }) ?? aliases[key] else { return nil }
+            self = kind
         }
     }
     var kind: Kind
-    /// Preset label such as "M3"; the dimensions below are what is built and may be edited.
+    /// Preset label such as "M3", "1/4", or "6×2" (a magnet); the dimensions below are what is
+    /// built and may be edited.
     var size: String
     var diameter: Double
     var counterboreDiameter: Double = 0
     var counterboreDepth: Double = 0
     var countersinkDiameter: Double = 0
     var countersinkAngle: Double = 90
+    /// Nut traps (November 21, 2026): the hex pocket at the face, across its flats (the nut's width
+    /// plus the fit clearance on each side), how deep it goes, and its turn in degrees (0 puts two
+    /// flats along the face's x axis). Omitted from files for other kinds.
+    var nutAcrossFlats: Double?
+    var nutDepth: Double?
+    var nutAngle: Double?
 
     var isValid: Bool {
         let values = [diameter, counterboreDiameter, counterboreDepth, countersinkDiameter, countersinkAngle]
         guard values.allSatisfy({ $0.isFinite && $0 >= 0 }), diameter >= 0.1, diameter <= 200 else { return false }
         switch kind {
-        case .simple, .insert: return true
+        case .simple, .insert, .magnet: return true
         case .counterbore: return counterboreDiameter > diameter && counterboreDepth > 0
         case .countersink: return countersinkDiameter > diameter && countersinkAngle > 1 && countersinkAngle < 179
+        case .nutTrap:
+            guard let flats = nutAcrossFlats, let depth = nutDepth, flats.isFinite, depth.isFinite, (nutAngle ?? 0).isFinite else { return false }
+            return flats > diameter && flats <= 200 && depth > 0 && depth <= 200
+        }
+    }
+
+    /// A nut trap's hex pocket corners around `center` on the face, counter-clockwise.
+    func nutCorners(around center: Point2) -> [Point2] {
+        guard kind == .nutTrap, let flats = nutAcrossFlats else { return [] }
+        let radius = flats / 3.0.squareRoot(), start = (nutAngle ?? 0) * .pi / 180
+        return (0..<6).map { k in
+            let angle = start + Double(k) * .pi / 3
+            return center + Point2(x: radius * cos(angle), y: radius * sin(angle))
+        }
+    }
+
+    /// Widest across the face: what the hole takes up where it starts.
+    var outerDiameter: Double {
+        switch kind {
+        case .counterbore: counterboreDiameter
+        case .countersink: countersinkDiameter
+        case .nutTrap: (nutAcrossFlats ?? 0) * 2 / 3.0.squareRoot()
+        default: diameter
         }
     }
 }
 
-/// Starting dimensions for metric hobby hardware (all editable). Clearance follows ISO 273
-/// "normal" fit; counterbores fit DIN 912 / ISO 4762 socket heads; countersinks fit ISO 10642
-/// 90° flat heads; insert holes suit common brass heat-set inserts (check your insert's datasheet).
+/// Starting dimensions for hobby hardware (all editable).
+/// - Metric: clearance follows ISO 273 "normal" fit; counterbores fit ISO 4762 socket heads; countersinks
+///   fit ISO 10642 90° flat heads; nut traps fit ISO 4032 hex nuts.
+/// - Inch (November 21, 2026): clearance near the ASME B18.2.8 normal fit; counterbores fit ASME B18.3 socket
+///   heads; countersinks fit 82° flat heads; nut traps fit finished hex nuts.
+/// - Insert holes suit common brass heat-set inserts (check your insert's datasheet).
+/// - Magnet pockets (November 21, 2026) fit round disc magnets, diameter × thickness.
+/// Nut traps and magnet pockets widen by the fit clearance on each side (the app's Fit preference).
 enum HolePresets {
-    static let sizes = ["M2", "M2.5", "M3", "M4", "M5"]
-    private static let clearance: [String: Double] = ["M2": 2.4, "M2.5": 2.9, "M3": 3.4, "M4": 4.5, "M5": 5.5]
-    private static let counterbore: [String: (Double, Double)] = ["M2": (4.4, 2.4), "M2.5": (5.1, 2.9), "M3": (6.1, 3.4), "M4": (7.6, 4.4), "M5": (9.1, 5.4)]
-    private static let countersink: [String: Double] = ["M2": 4.4, "M2.5": 5.4, "M3": 6.4, "M4": 8.4, "M5": 10.4]
-    private static let insert: [String: (diameter: Double, depth: Double)] = ["M2": (3.2, 5.0), "M2.5": (3.6, 6.7), "M3": (4.0, 6.7), "M4": (5.6, 9.1), "M5": (6.4, 10.5)]
+    static let metricSizes = ["M2", "M2.5", "M3", "M4", "M5", "M6", "M8"]
+    static let inchSizes = ["#4", "#6", "#8", "#10", "1/4"]
+    /// Screw sizes, for every kind but magnets.
+    static let sizes = metricSizes + inchSizes
+    static let magnetSizes = ["6×2", "6×3", "8×3", "10×2", "10×3", "12×3"]
 
-    static func spec(_ kind: HoleSpec.Kind, size: String) -> HoleSpec {
-        let size = sizes.contains(size) ? size : "M3"
+    private static let clearance: [String: Double] = [
+        "M2": 2.4, "M2.5": 2.9, "M3": 3.4, "M4": 4.5, "M5": 5.5, "M6": 6.6, "M8": 9.0,
+        "#4": 3.5, "#6": 4.0, "#8": 4.6, "#10": 5.2, "1/4": 6.7]
+    private static let counterbore: [String: (Double, Double)] = [
+        "M2": (4.4, 2.4), "M2.5": (5.1, 2.9), "M3": (6.1, 3.4), "M4": (7.6, 4.4), "M5": (9.1, 5.4), "M6": (10.6, 6.4), "M8": (13.6, 8.4),
+        "#4": (5.3, 3.3), "#6": (6.4, 3.9), "#8": (7.5, 4.6), "#10": (8.5, 5.2), "1/4": (10.1, 6.8)]
+    private static let countersink: [String: Double] = [
+        "M2": 4.4, "M2.5": 5.4, "M3": 6.4, "M4": 8.4, "M5": 10.4, "M6": 12.4, "M8": 16.4,
+        "#4": 6.4, "#6": 7.6, "#8": 8.9, "#10": 10.2, "1/4": 13.2]
+    private static let insert: [String: (diameter: Double, depth: Double)] = [
+        "M2": (3.2, 5.0), "M2.5": (3.6, 6.7), "M3": (4.0, 6.7), "M4": (5.6, 9.1), "M5": (6.4, 10.5), "M6": (8.0, 13.7), "M8": (9.7, 13.7),
+        "#4": (4.0, 6.0), "#6": (4.8, 7.0), "#8": (5.6, 8.0), "#10": (6.4, 9.5), "1/4": (8.0, 13.7)]
+    /// Hex nut thickness (ISO 4032 maximum; finished inch nuts).
+    private static let nutThickness: [String: Double] = [
+        "M2": 1.6, "M2.5": 2.0, "M3": 2.4, "M4": 3.2, "M5": 4.7, "M6": 5.2, "M8": 6.8,
+        "#4": 2.38, "#6": 2.78, "#8": 3.18, "#10": 3.18, "1/4": 5.56]
+    /// Disc magnets, diameter and thickness.
+    private static let magnets: [String: (diameter: Double, thickness: Double)] = [
+        "6×2": (6, 2), "6×3": (6, 3), "8×3": (8, 3), "10×2": (10, 2), "10×3": (10, 3), "12×3": (12, 3)]
+
+    /// The sizes offered for a kind.
+    static func sizes(for kind: HoleSpec.Kind) -> [String] { kind.isScrew ? sizes : magnetSizes }
+
+    /// Where a kind starts: M3 (or #6 when the project shows inches), or a 6 × 2 mm magnet.
+    static func defaultSize(for kind: HoleSpec.Kind, inch: Bool = false) -> String {
+        kind.isScrew ? (inch ? "#6" : "M3") : "6×2"
+    }
+
+    static func isInch(_ size: String) -> Bool { inchSizes.contains(size) }
+
+    /// A size as written loosely ("m3", "M 3", "1/4-20", "#10-32", "6x2", "6 × 2 mm") as it is
+    /// listed for the kind, or nil when the kind has no such size.
+    static func size(_ text: String, for kind: HoleSpec.Kind) -> String? {
+        var key = text.uppercased().replacingOccurrences(of: " ", with: "")
+        if kind.isScrew {
+            // An inch size may carry its threads per inch: "1/4-20", "#10-32".
+            if let dash = key.firstIndex(of: "-"), !key.hasPrefix("M") { key = String(key[..<dash]) }
+            if key.hasSuffix("\"") { key.removeLast() }
+            if ["4", "6", "8", "10"].contains(key) { key = "#" + key }
+            return sizes.first { $0.uppercased() == key }
+        }
+        key = key.replacingOccurrences(of: "MM", with: "").replacingOccurrences(of: "X", with: "×").replacingOccurrences(of: "*", with: "×")
+        return magnetSizes.first { $0 == key }
+    }
+
+    /// The preset for `kind` and `size` (a size the kind does not offer starts from its default).
+    /// `clearance` widens nut traps and magnet pockets on each side.
+    static func spec(_ kind: HoleSpec.Kind, size: String, clearance: Double = Fit.defaultClearance) -> HoleSpec {
+        let size = sizes(for: kind).contains(size) ? size : defaultSize(for: kind)
+        let gap = Fit.clearanceRange.contains(clearance) ? clearance : Fit.defaultClearance
         switch kind {
-        case .simple: return HoleSpec(kind: kind, size: size, diameter: clearance[size]!)
+        case .simple: return HoleSpec(kind: kind, size: size, diameter: Self.clearance[size]!)
         case .counterbore:
             let (d, depth) = counterbore[size]!
-            return HoleSpec(kind: kind, size: size, diameter: clearance[size]!, counterboreDiameter: d, counterboreDepth: depth)
+            return HoleSpec(kind: kind, size: size, diameter: Self.clearance[size]!, counterboreDiameter: d, counterboreDepth: depth)
         case .countersink:
-            return HoleSpec(kind: kind, size: size, diameter: clearance[size]!, countersinkDiameter: countersink[size]!, countersinkAngle: 90)
+            return HoleSpec(kind: kind, size: size, diameter: Self.clearance[size]!, countersinkDiameter: countersink[size]!,
+                            countersinkAngle: isInch(size) ? 82 : 90)
         case .insert: return HoleSpec(kind: kind, size: size, diameter: insert[size]!.diameter)
+        case .nutTrap:
+            var spec = HoleSpec(kind: kind, size: size, diameter: Self.clearance[size]!)
+            spec.nutAcrossFlats = rounded(ThreadMate.acrossFlats[size]! + 2 * gap)
+            spec.nutDepth = rounded(nutThickness[size]! + 0.4)
+            spec.nutAngle = 0
+            return spec
+        case .magnet: return HoleSpec(kind: kind, size: size, diameter: rounded(magnets[size]!.diameter + 2 * gap))
         }
     }
 
-    /// Inserts are blind holes a little deeper than the insert; the others default to through.
+    /// Inserts and magnets are blind holes a little deeper than what goes in; the others default to through.
     static func defaultDepth(_ kind: HoleSpec.Kind, size: String) -> Double? {
-        kind == .insert ? insert[sizes.contains(size) ? size : "M3"]!.depth : nil
+        let size = sizes(for: kind).contains(size) ? size : defaultSize(for: kind)
+        switch kind {
+        case .insert: return insert[size]!.depth
+        case .magnet: return rounded(magnets[size]!.thickness + 0.2)
+        default: return nil
+        }
     }
+
+    private static func rounded(_ value: Double) -> Double { (value * 100).rounded() / 100 }
 }
 
 extension ExtrusionCut {
@@ -246,7 +361,19 @@ extension SolidKernel {
                                       countersink ? spec.countersinkDiameter : 0, countersink ? spec.countersinkAngle : 0) else {
             throw Failure(message: ssk_last_error().map { String(cString: $0) } ?? "Hole failed")
         }
-        let result = try boolean(solid, KernelSolid(adopting: tool), .subtract)
+        var result = try boolean(solid, KernelSolid(adopting: tool), .subtract)
+        if spec.kind == .nutTrap, let nutDepth = spec.nutDepth {
+            // The hex pocket: a prism from a little above the face down to the nut's depth.
+            let lead = 0.5, plane = operation.profile.plane
+            var kernelPlane = plane.kernelPlane
+            let up = plane.frame.normal * lead
+            kernelPlane.origin = SSKVec3(x: kernelPlane.origin.x + up.x, y: kernelPlane.origin.y + up.y, z: kernelPlane.origin.z + up.z)
+            let xy = spec.nutCorners(around: circle.center).flatMap { [$0.x, $0.y] }
+            guard xy.count == 12, let pocket = ssk_extrude_polygon(kernelPlane, xy, 6, -(nutDepth + lead)) else {
+                throw Failure(message: ssk_last_error().map { String(cString: $0) } ?? "Nut trap failed")
+            }
+            result = try boolean(result, KernelSolid(adopting: pocket), .subtract)
+        }
         guard result.volume < solid.volume - 1e-9 else { throw Failure(message: "The hole does not reach this solid") }
         return result
     }

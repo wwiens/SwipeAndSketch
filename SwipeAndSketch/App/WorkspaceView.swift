@@ -577,15 +577,14 @@ struct WorkspaceView: View {
     /// again puts it down. Group tiles (`ToolGroup`) pop up their tools above them.
     private var dock: some View {
         HStack(alignment: .top, spacing: 4) {
-            ForEach(ToolbarEntry.roots(sketching: sketching, onFace: session.sketchMode?.face != nil, mode: workspaceMode)) { entry in
+            ForEach(ToolbarEntry.roots(sketching: sketching, mode: workspaceMode)) { entry in
                 switch entry {
                 case .group(let group): groupTile(group)
                 default:
                     dockTile(entry.title, icon: entry.icon, selected: toolbarEntrySelected(entry), id: entry.id,
                              subtitle: entry == .tool(.rectangle) ? drawingMode(.rectangle) : nil) { performToolbarEntry(entry) }
                 }
-                if entry == .finishSketch || entry == .group(.faceFeatures) || entry == .group(.planes) || entry == .group(.combine) ||
-                    (sketching && entry == .group(.curves) && session.sketchMode?.face == nil) {
+                if entry == .finishSketch || entry == .group(.faceFeatures) || entry == .group(.planes) || entry == .group(.combine) {
                     dockDivider
                 }
             }
@@ -678,13 +677,23 @@ struct WorkspaceView: View {
                         subtitle: active.flatMap { drawingMode($0) }.map { "\($0) ▴" } ?? "▴") {
             withAnimation(.easeOut(duration: 0.15)) { openGroup = openGroup == group ? nil : group }
         }
+        // Features off a face: still there (so its tools can be found), dimmed, and its pop-up says why.
+        .opacity(group == .faceFeatures && session.faceFeaturesNeedFace ? 0.45 : 1)
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("workspace")) } action: { groupFrames[group] = $0 }
     }
 
     /// A group's tools, popped up above its tile in a card with a pointer down to it: each tool's
     /// colored tile and name, the one in use in Swipe Violet.
     private func groupMenu(_ group: ToolGroup) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let needsFace = group == .faceFeatures && session.faceFeaturesNeedFace
+        return VStack(alignment: .leading, spacing: 4) {
+            if needsFace {
+                Text(ModelingSession.faceFeaturesNotice)
+                    .font(.system(size: 13, weight: .medium)).foregroundStyle(ink.opacity(0.7))
+                    .frame(width: 200, alignment: .leading).fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 6).padding(.top, 4)
+                    .accessibilityIdentifier("group.needsFace")
+            }
             ForEach(workspaceMode.tools(in: group), id: \.rawValue) { tool in
                 let active = session.tool == tool
                 Button {
@@ -708,6 +717,7 @@ struct WorkspaceView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain).accessibilityLabel(group.title(for: tool)).accessibilityValue(drawingMode(tool) ?? "")
+                .opacity(needsFace ? 0.45 : 1)
                 .accessibilityIdentifier("tool.\(tool.rawValue)")
                 .accessibilityAddTraits(active ? .isSelected : [])
             }
@@ -854,8 +864,22 @@ struct WorkspaceView: View {
             .disabled(!session.canExtrudeSelectedFace)
         stripButton("Sketch", icon: .sketch, id: "selection.sketch") { session.beginFaceSketch() }
             .disabled(!session.canSketchOnSelectedFace)
-        stripButton("Text", icon: .text, id: "selection.text") { session.chooseTool(.text) }
+        featuresMenu
             .disabled(!session.canSketchOnSelectedFace)
+    }
+
+    /// Hole, Peg & Socket, and Text on the selected face, like the face sketch's Features group
+    /// (November 21, 2026; the strip offered only Text before, so a hole needed a face sketch first).
+    private var featuresMenu: some View {
+        Menu {
+            ForEach(workspaceMode.tools(in: .faceFeatures), id: \.rawValue) { tool in
+                menuButton(ToolGroup.faceFeatures.title(for: tool), icon: tool.icon) { session.chooseTool(tool) }
+                    .accessibilityIdentifier("selection.\(tool.rawValue)")
+            }
+        } label: {
+            StripLabel(title: "Features", icon: .hole, showsMenu: true)
+        }
+        .accessibilityLabel("Features").accessibilityIdentifier("selection.features")
     }
 
     @ViewBuilder private var flatFaceMoreActions: some View {
@@ -1743,14 +1767,12 @@ struct WorkspaceView: View {
         } else if let hole = session.holeDraft {
             VStack(spacing: 8) {
                 HStack(spacing: 7) {
-                    Picker("Hole type", selection: Binding(get: { hole.spec.kind }, set: { session.chooseHole(kind: $0) })) {
-                        ForEach(HoleSpec.Kind.allCases, id: \.self) { Text($0.title).tag($0) }
+                    holeKindMenu(hole)
+                    holeSizeMenu(hole)
+                    if hole.spec.kind == .nutTrap {
+                        Button { session.rotateNutTrap() } label: { Text("Rotate 30°").font(.system(size: 15, weight: .medium)) }
+                            .accessibilityIdentifier("hole.rotateNut")
                     }
-                    .pickerStyle(.segmented).frame(width: 360).accessibilityIdentifier("hole.kind")
-                    Picker("Size", selection: Binding(get: { hole.spec.size }, set: { session.chooseHole(size: $0) })) {
-                        ForEach(HolePresets.sizes, id: \.self) { Text($0).tag($0) }
-                    }
-                    .pickerStyle(.segmented).frame(width: 250).accessibilityIdentifier("hole.size")
                     Toggle("Through", isOn: Binding(get: { hole.depth == nil }, set: { session.setHoleThrough($0) }))
                         .toggleStyle(.button).font(.system(size: 15, weight: .medium)).accessibilityIdentifier("hole.through")
                 }
@@ -1764,6 +1786,41 @@ struct WorkspaceView: View {
         } else {
             AnyView(operationControlsD)
         }
+    }
+
+    /// The Hole tool's Type menu, grouped by what goes in the hole (November 21, 2026; replaced a
+    /// segmented control when Nut Trap and Magnet joined).
+    private func holeKindMenu(_ hole: HoleDraft) -> some View {
+        let groups: [(String, [HoleSpec.Kind])] = [("Screws", [.simple, .counterbore, .countersink]), ("Inserts & Nuts", [.insert, .nutTrap]),
+                                                   ("Press-fit", [.magnet])]
+        return Menu {
+            ForEach(groups, id: \.0) { group in
+                Section(group.0) {
+                    ForEach(group.1, id: \.self) { kind in
+                        Button(kind == hole.spec.kind ? "\(kind.title) (in use)" : kind.title) { session.chooseHole(kind: kind) }
+                    }
+                }
+            }
+        } label: {
+            Text("Type: \(hole.spec.kind.title)").font(.system(size: 15, weight: .medium)).padding(.horizontal, 8)
+        }
+        .accessibilityIdentifier("hole.kind")
+    }
+
+    /// The Hole tool's Size menu: metric and inch screws (the project's units first), or magnets.
+    private func holeSizeMenu(_ hole: HoleDraft) -> some View {
+        Menu {
+            ForEach(session.holeSizeGroups, id: \.title) { group in
+                Section(group.title) {
+                    ForEach(group.sizes, id: \.self) { size in
+                        Button(size == hole.spec.size ? "\(size) (in use)" : size) { session.chooseHole(size: size) }
+                    }
+                }
+            }
+        } label: {
+            Text("Size: \(hole.spec.size)").font(.system(size: 15, weight: .medium)).padding(.horizontal, 8)
+        }
+        .accessibilityIdentifier("hole.size")
     }
 
     /// An operation's own controls, in place of the dock (part 4 of 4: split so no one SwiftUI type nests too deep).

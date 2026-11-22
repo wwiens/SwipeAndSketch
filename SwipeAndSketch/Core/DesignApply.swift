@@ -574,10 +574,12 @@ enum DesignApply {
         let entry = SIMD3(f.x ?? 0, f.y ?? 0, f.z ?? 0)
         guard [entry.x, entry.y, entry.z].allSatisfy({ $0.isFinite && abs($0) <= 10_000 }) else { throw Failure("Positions must be within ±10000 mm.") }
         var spec: HoleSpec
-        if let size = wanted.size?.uppercased().replacingOccurrences(of: " ", with: ""), HolePresets.sizes.contains(size) {
-            spec = HolePresets.spec(wanted.type, size: size)
+        if let size = wanted.size.flatMap({ HolePresets.size($0, for: wanted.type) }) {
+            spec = HolePresets.spec(wanted.type, size: size, clearance: Fit.preferredClearance)
         } else {
-            guard let diameter = wanted.diameter else { throw Failure("Give a hole diameter, or a size from \(HolePresets.sizes.joined(separator: ", ")).") }
+            let sizes = HolePresets.sizes(for: wanted.type).joined(separator: ", ")
+            guard wanted.type != .nutTrap else { throw Failure("Give a nut trap a screw size from \(sizes).") }
+            guard let diameter = wanted.diameter else { throw Failure("Give a hole diameter, or a size from \(sizes).") }
             spec = HoleSpec(kind: wanted.type, size: "Ø\(AssistantWorkbench.mm(diameter))", diameter: diameter)
         }
         if let diameter = wanted.diameter { spec.diameter = diameter }
@@ -585,7 +587,7 @@ enum DesignApply {
         if let value = wanted.counterboreDepth { spec.counterboreDepth = value }
         if let value = wanted.countersinkDiameter { spec.countersinkDiameter = value }
         if let value = wanted.countersinkAngle { spec.countersinkAngle = value }
-        guard spec.isValid else { throw Failure("Invalid hole: diameter 0.1–200 mm; a counterbore wider than the hole with a depth; a countersink wider than the hole.") }
+        guard spec.isValid else { throw Failure("Invalid hole: diameter 0.1–200 mm; a counterbore wider than the hole with a depth; a countersink wider than the hole; a nut trap's hex wider than the hole.") }
         var depth: Double?
         if f.throughAll != true {
             depth = f.height ?? HolePresets.defaultDepth(spec.kind, size: spec.size)

@@ -697,6 +697,96 @@ import simd
         XCTAssertEqual(try volume(session), 48_000 - .pi * 2.1 * 2.1 * 8, accuracy: 1e-3)
     }
 
+    /// Nut traps and magnets (November 21, 2026): each family keeps its size, the fit clearance
+    /// seeds the pocket, and Rotate 30° turns the hex.
+    func testNutTrapAndMagnetPocketFromTheHoleTool() throws {
+        let (session, controller) = try holeScene()
+        session.fitClearance = 0.2
+        tap(controller, SIMD3(0.3, -0.2, 20))
+        session.chooseHole(size: "M5")
+        session.chooseHole(kind: .magnet)
+        XCTAssertEqual(session.holeDraft?.spec.size, "6×2", "Magnets start at their own default")
+        XCTAssertEqual(session.holeDraft?.depth, 2.2, "Blind, a little deeper than the magnet")
+        XCTAssertEqual(session.holeSizeGroups.map(\.sizes), [HolePresets.magnetSizes])
+        session.chooseHole(size: "10×3")
+        session.chooseHole(kind: .nutTrap)
+        XCTAssertEqual(session.holeDraft?.spec.size, "M5", "Back to the last screw size")
+        XCTAssertNil(session.holeDraft?.depth, "Nut traps go through")
+        XCTAssertEqual(session.holeDraft?.spec.nutAcrossFlats, 8.4)
+        session.rotateNutTrap()
+        XCTAssertEqual(session.holeDraft?.spec.nutAngle, 30)
+        session.rotateNutTrap()
+        XCTAssertEqual(session.holeDraft?.spec.nutAngle, 0)
+        session.rotateNutTrap()
+        XCTAssertTrue(session.applyDimension(9, target: .holeDiameter))
+        XCTAssertEqual(session.holeDraft?.spec.nutAcrossFlats, 9.4, "The hex stays wider than the hole")
+        XCTAssertTrue(session.applyDimension(5.5, target: .holeDiameter))
+        attach(controller, "M5 nut trap turned 30° on the face center")
+        session.confirmHole()
+        let spec = try XCTUnwrap(session.workspace.bodies.first?.cuts.last?.hole)
+        XCTAssertEqual(spec.kind, .nutTrap)
+        XCTAssertEqual(spec.nutAngle, 30)
+        let flats = 9.4, depth = 4.7 + 0.4
+        let removed = 3.0.squareRoot() / 2 * flats * flats * depth + .pi * 2.75 * 2.75 * (20 - depth)
+        XCTAssertEqual(try volume(session), 48_000 - removed, accuracy: 1e-3)
+    }
+
+    func testHoleSizesFollowTheProjectUnits() throws {
+        let (session, controller) = try holeScene()
+        let unit = session.lengthUnit
+        defer { session.lengthUnit = unit }
+        session.lengthUnit = .inches
+        tap(controller, SIMD3(0.3, -0.2, 20))
+        XCTAssertEqual(session.holeDraft?.spec.size, "#6", "A first hole in an inch project")
+        XCTAssertEqual(session.holeSizeGroups.map(\.title), ["Inch", "Metric"])
+        session.chooseHole(size: "1/4")
+        session.chooseHole(kind: .countersink)
+        XCTAssertEqual(session.holeDraft?.spec.countersinkAngle, 82)
+    }
+
+    /// Features is in every sketch (November 21, 2026): off a solid's face its tools explain that
+    /// they need one instead of doing nothing.
+    func testFeaturesOffAFaceExplainInsteadOfStarting() throws {
+        let (session, controller) = boxScene()
+        session.beginSketch()
+        XCTAssertTrue(session.faceFeaturesNeedFace, "No plane picked yet")
+        session.pickPlane(.front)
+        XCTAssertTrue(session.faceFeaturesNeedFace, "A world-plane sketch")
+        let tool = session.tool
+        for feature in [ModelingTool.hole, .peg, .text] {
+            session.chooseTool(feature)
+            XCTAssertEqual(session.tool, tool, "\(feature) does not start off a face")
+            XCTAssertEqual(session.hint, ModelingSession.faceFeaturesNotice)
+        }
+        session.chooseTool(.circle)
+        XCTAssertFalse(session.isShowingFaceFeaturesNotice, "Another tool clears it")
+        session.chooseTool(.hole)
+        session.exitSketch()
+        XCTAssertFalse(session.isShowingFaceFeaturesNotice, "Leaving the sketch clears it")
+        XCTAssertFalse(session.faceFeaturesNeedFace)
+        // On a face, Features works as before.
+        tap(controller, SIMD3(5, 3, 20))
+        session.beginFaceSketch()
+        XCTAssertFalse(session.faceFeaturesNeedFace)
+        session.chooseTool(.hole)
+        XCTAssertEqual(session.tool, .hole)
+    }
+
+    /// The face strip's Features ▾ menu: Hole straight from a selected face, no sketch first.
+    func testHoleAndPegFromASelectedFace() throws {
+        for feature in [ModelingTool.hole, .peg] {
+            let (session, controller) = boxScene()
+            tap(controller, SIMD3(5, 3, 20))
+            XCTAssertNotNil(session.selectedFace)
+            session.chooseTool(feature)
+            XCTAssertNotNil(session.sketchMode?.face, "\(feature) sketches on the selected face")
+            XCTAssertEqual(session.tool, feature)
+            controller.refresh()
+            tap(controller, SIMD3(0.3, -0.2, 20))
+            XCTAssertTrue(feature == .hole ? session.holeDraft != nil : session.pegDraft != nil, "\(feature) placed with a tap")
+        }
+    }
+
     func testHoleOffTheSolidCannotBeConfirmed() throws {
         let (session, controller) = try holeScene()
         tap(controller, SIMD3(45, 30, 20))

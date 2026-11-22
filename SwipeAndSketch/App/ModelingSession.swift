@@ -1279,9 +1279,20 @@ struct DimensionEdit: Identifiable {
     private(set) var isReadOnly = false
     private(set) var editPreview: Workspace?
     private(set) var finishDraft: FinishDraft?
-    private(set) var sketchMode: SketchMode?
+    private(set) var sketchMode: SketchMode? {
+        didSet { if (sketchMode == nil) != (oldValue == nil) || sketchMode?.face != oldValue?.face { isShowingFaceFeaturesNotice = false } }
+    }
     /// After Sketch is tapped with nothing selected: three translucent world planes wait for a tap.
-    private(set) var isPickingPlane = false
+    private(set) var isPickingPlane = false {
+        didSet { if isPickingPlane != oldValue { isShowingFaceFeaturesNotice = false } }
+    }
+    /// A Features tool (Hole, Peg & Socket, Text) was chosen in a sketch that is not on a solid's
+    /// face: the hint says how to get one, until the sketch or tool changes.
+    private(set) var isShowingFaceFeaturesNotice = false
+    /// Sketching, but not on a solid's face: Features is shown dimmed (November 21, 2026; it was
+    /// left out of the dock before, so holes, pegs, and text could not be found from such a sketch).
+    var faceFeaturesNeedFace: Bool { isPickingPlane || (sketchMode != nil && sketchMode?.face == nil) }
+    static let faceFeaturesNotice = "Holes, pegs, and text go on a solid's face. Finish this sketch, then tap a flat face and choose Features, or sketch on the face."
     /// The Pencil is down on the canvas (a stroke or drag in progress); the dock ignores touches then.
     var isPencilDown = false {
         didSet { if oldValue && !isPencilDown { finishExpiredPencilOperation() } }
@@ -1482,7 +1493,11 @@ struct DimensionEdit: Identifiable {
     private(set) var revolveJoinTarget: UUID?
     private(set) var revolveError: String?
     @ObservationIgnored private var lastShellThickness = 2.0
-    @ObservationIgnored private var lastHole: (kind: HoleSpec.Kind, size: String) = (.simple, "M3")
+    /// The hole type and size used last, and the last screw and magnet sizes (switching between a
+    /// screw kind and a magnet keeps each family's size).
+    @ObservationIgnored private var lastHole: (kind: HoleSpec.Kind, size: String)?
+    @ObservationIgnored private var lastScrewSize: String?
+    @ObservationIgnored private var lastMagnetSize: String?
     @ObservationIgnored private var guideCache: (plane: SketchPlane, face: FaceSelection?, bodies: [SolidBody], shapes: [SketchShape], guides: [SketchGuide])?
     /// The workspace with the draft finish applied, when the kernel can build it.
     private(set) var finishPreview: Workspace?
@@ -2896,6 +2911,7 @@ struct DimensionEdit: Identifiable {
     }
     var hint: String {
         if isAssistantWorking { return "The assistant is working on your request." }
+        if isShowingFaceFeaturesNotice && faceFeaturesNeedFace { return Self.faceFeaturesNotice }
         if isReviewingAssistant { return "Review the assistant's changes. Keep adds them as one step you can undo; Discard leaves the model as it was." }
         if section != nil {
             return "Section view: drag the double-arrow or tap the offset to move the cut. Flip shows the other side; Done goes back to the whole model."
@@ -3322,6 +3338,12 @@ struct DimensionEdit: Identifiable {
 
     func chooseTool(_ value: ModelingTool) {
         guard value == .select || value == .measure || requireNewEditingAccess() else { return }
+        // Features off a face: nothing to drill, stand on, or letter; say how to get a face instead.
+        if value.isFaceFeature && faceFeaturesNeedFace {
+            isShowingFaceFeaturesNotice = true
+            return
+        }
+        isShowingFaceFeaturesNotice = false
         // Before a plane is picked, a drawing tool waits for the first stroke; putting the tool down leaves.
         if isPickingPlane, value.shapeKind != nil || value.isSketchEditTool { tool = value; return }
         if value == .measure { beginMeasure(); return }
@@ -6792,28 +6814,50 @@ struct DimensionEdit: Identifiable {
         guard holeDraft != nil || requireNewEditingAccess() else { return }
         guard tool == .hole, let face = sketchMode?.face, let plane = face.plane, !isEditingBlocked else { return }
         dimensionEdit = nil
+        let start = lastHole ?? (kind: HoleSpec.Kind.simple, size: HolePresets.defaultSize(for: .simple, inch: lengthUnit == .inches))
         var draft = holeDraft ?? HoleDraft(bodyID: face.bodyID, plane: plane, center: center,
-                                           spec: HolePresets.spec(lastHole.kind, size: lastHole.size),
-                                           depth: HolePresets.defaultDepth(lastHole.kind, size: lastHole.size))
+                                           spec: HolePresets.spec(start.kind, size: start.size, clearance: fitClearance),
+                                           depth: HolePresets.defaultDepth(start.kind, size: start.size))
         draft.center = center
         updateHole(draft)
     }
 
-    /// Switches hole type or size, resetting the dimensions to that preset.
+    /// The sizes the Hole tool's Size menu offers for the hole being placed, metric and inch (or the magnets).
+    var holeSizeGroups: [(title: String, sizes: [String])] {
+        guard let kind = holeDraft?.spec.kind else { return [] }
+        guard kind.isScrew else { return [("Magnet (diameter × thickness, mm)", HolePresets.magnetSizes)] }
+        let groups = [("Metric", HolePresets.metricSizes), ("Inch", HolePresets.inchSizes)]
+        return lengthUnit == .inches ? groups.reversed() : groups
+    }
+
+    /// Switches hole type or size, resetting the dimensions to that preset. A type from the other
+    /// family (screw or magnet) takes that family's last size.
     func chooseHole(kind: HoleSpec.Kind? = nil, size: String? = nil) {
         guard var draft = holeDraft else { return }
-        let kind = kind ?? draft.spec.kind, size = size ?? draft.spec.size
-        let wasInsert = draft.spec.kind == .insert
-        draft.spec = HolePresets.spec(kind, size: size)
-        if kind == .insert { draft.depth = HolePresets.defaultDepth(kind, size: size) }
-        else if wasInsert { draft.depth = nil }
-        lastHole = (kind, size)
+        let old = draft.spec.kind, kind = kind ?? old
+        if old.isScrew { lastScrewSize = draft.spec.size } else { lastMagnetSize = draft.spec.size }
+        let familySize = kind.isScrew ? lastScrewSize : lastMagnetSize
+        let wanted = size ?? (kind.isScrew == old.isScrew ? draft.spec.size : familySize ?? "")
+        let chosen = HolePresets.sizes(for: kind).contains(wanted) ? wanted : HolePresets.defaultSize(for: kind, inch: lengthUnit == .inches)
+        draft.spec = HolePresets.spec(kind, size: chosen, clearance: fitClearance)
+        if kind.startsBlind { draft.depth = HolePresets.defaultDepth(kind, size: chosen) }
+        else if old.startsBlind { draft.depth = nil }
+        lastHole = (kind, chosen)
         updateHole(draft)
     }
 
     func setHoleThrough(_ through: Bool) {
         guard var draft = holeDraft else { return }
-        draft.depth = through ? nil : (draft.depth ?? HolePresets.defaultDepth(.insert, size: draft.spec.size) ?? 10)
+        draft.depth = through ? nil : (draft.depth ?? HolePresets.defaultDepth(draft.spec.kind, size: draft.spec.size) ??
+            HolePresets.defaultDepth(.insert, size: draft.spec.size) ?? 10)
+        updateHole(draft)
+    }
+
+    /// Turns a nut trap's hex pocket by 30°, between two flats along the face's x axis and two across it.
+    func rotateNutTrap() {
+        guard var draft = holeDraft, draft.spec.kind == .nutTrap else { return }
+        let angle = (draft.spec.nutAngle ?? 0) + 30
+        draft.spec.nutAngle = angle >= 60 - 1e-9 ? angle - 60 : angle
         updateHole(draft)
     }
 
@@ -8281,9 +8325,10 @@ struct DimensionEdit: Identifiable {
             var draft = previous
             if target == .holeDiameter {
                 draft.spec.diameter = value
-                // Keep counterbore and countersink at least as wide as the hole.
+                // Keep counterbore, countersink, and nut pocket at least as wide as the hole.
                 draft.spec.counterboreDiameter = max(draft.spec.counterboreDiameter, value + 0.2)
                 draft.spec.countersinkDiameter = max(draft.spec.countersinkDiameter, value + 0.2)
+                if let flats = draft.spec.nutAcrossFlats { draft.spec.nutAcrossFlats = max(flats, value + 0.4) }
             } else { draft.depth = value }
             updateHole(draft)
             guard draftError == nil else { dimensionError = draftError; updateHole(previous); return false }

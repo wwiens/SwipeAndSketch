@@ -546,8 +546,8 @@ struct EditFeatureTool: Tool {
         var body: String
         @Guide(.anyOf(["hole", "thread", "text", "peg"])) var feature: String
         @Guide(description: "Which one: 1 for the first of that kind made, 2 for the next, or last") var which: String
-        @Guide(description: "Hole: simple, counterbore, countersink, or insert") var type: String?
-        @Guide(description: "Hole: M2–M5; thread: M2–M36 (M8x1 for a fine pitch) or inch such as 1/4") var size: String?
+        @Guide(description: "Hole: simple, counterbore, countersink, insert, nutTrap, or magnet") var type: String?
+        @Guide(description: "Hole: M2–M8 or inch #4–1/4, or a magnet such as 6x2; thread: M2–M36 (M8x1 for a fine pitch) or inch such as 1/4") var size: String?
         @Guide(description: "Hole: a plain round hole of this diameter; thread: custom major diameter; peg: diameter (mm)") var diameter: Double?
         @Guide(description: "Hole: blind depth in mm; text: mm the letters stand out, negative to sink them") var depth: Double?
         @Guide(description: "Hole: true to make it go through") var through: Bool?
@@ -739,7 +739,7 @@ struct ShellTool: Tool {
 struct AddHoleTool: Tool {
     let context: AssistantContext
     let name = "add_hole"
-    let description = "Drills holes into a body's flat face, no sketch needed: a round hole of any diameter, or a metric screw hole (M2–M5: simple clearance, counterbore, countersink, or heat-set insert). Goes through unless a depth is given."
+    let description = "Drills holes into a body's flat face, no sketch needed: a round hole of any diameter; a screw hole, M2–M8 or inch #4–1/4 (simple clearance, counterbore, countersink, heat-set insert, or a nut trap: a hex pocket at the face that holds the nut); or a magnet pocket for a disc magnet. Screw holes and nut traps go through, inserts and magnets stop at their depth, unless a depth is given."
     @Generable struct Arguments {
         var body: String
         @Guide(description: "top, bottom, front, back, left, right, a face number, or selected") var face: String
@@ -749,15 +749,16 @@ struct AddHoleTool: Tool {
         @Guide(description: "Instead of a position: one hole near each of the face's four corners, this many mm in from both edges")
         var cornerInset: Double?
         @Guide(description: "For a plain round hole of a given size, its diameter in mm (then size and type are ignored)") var diameter: Double?
-        @Guide(.anyOf(["simple", "counterbore", "countersink", "insert"])) var type: String?
-        @Guide(.anyOf(["M2", "M2.5", "M3", "M4", "M5"])) var size: String?
-        @Guide(description: "Only for blind holes: depth in mm. Omit for holes that go through (the usual).") var depth: Double?
+        @Guide(.anyOf(["simple", "counterbore", "countersink", "insert", "nutTrap", "magnet"])) var type: String?
+        @Guide(description: "Screw: M2, M2.5, M3, M4, M5, M6, M8, #4, #6, #8, #10, or 1/4; magnet: 6x2, 6x3, 8x3, 10x2, 10x3, or 12x3 (diameter x thickness, mm)") var size: String?
+        @Guide(description: "Only to change the usual depth: blind depth in mm. Omit for the usual (through, or an insert's or magnet's own depth).") var depth: Double?
     }
     func call(arguments: Arguments) async throws -> String {
         await context.run("Drilling \(arguments.body)") { bench in
             let center = arguments.x == nil && arguments.y == nil && arguments.z == nil || arguments.cornerInset != nil ? [] : [point(arguments.x, arguments.y, arguments.z)]
             return try bench.hole(body: arguments.body, face: arguments.face, at: center, cornerInset: arguments.cornerInset,
-                                  kind: HoleSpec.Kind(rawValue: arguments.type?.lowercased() ?? "") ?? .simple, size: arguments.size ?? "M3",
+                                  kind: arguments.type.flatMap { HoleSpec.Kind(loose: $0) } ?? .simple,
+                                  size: arguments.size ?? HolePresets.defaultSize(for: arguments.type.flatMap { HoleSpec.Kind(loose: $0) } ?? .simple),
                                   diameter: arguments.diameter, depth: arguments.depth)
         }
     }

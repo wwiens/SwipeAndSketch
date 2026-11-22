@@ -56,11 +56,12 @@ enum ToolbarEntry: Identifiable, Equatable {
         }
     }
     static let primitiveTools: [ModelingTool] = [.box, .cylinder, .sphere, .torus]
-    static func roots(sketching: Bool, onFace: Bool, mode: WorkspaceMode = .allTools) -> [Self] {
+    static func roots(sketching: Bool, mode: WorkspaceMode = .allTools) -> [Self] {
         if sketching {
-            return [.finishSketch, .tool(.line), .tool(.rectangle), .group(.curves)]
-                + (onFace ? [.group(.faceFeatures)] : [])
-                + [.group(.modify), .tool(.dimension)] + (mode == .allTools ? [.tool(.project)] : [])
+            // Features is there off a face too (dimmed, its tools explain they need a face), so
+            // holes, pegs, and text can be found from any sketch (November 21, 2026).
+            return [.finishSketch, .tool(.line), .tool(.rectangle), .group(.curves), .group(.faceFeatures),
+                    .group(.modify), .tool(.dimension)] + (mode == .allTools ? [.tool(.project)] : [])
         }
         if mode == .essentials {
             return [.sketch, .group(.create), .group(.edges), .group(.combine), .group(.transform)]
@@ -258,7 +259,7 @@ struct RadialToolbar: View {
     @State private var primitives = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var roots: [ToolbarEntry] { ToolbarEntry.roots(sketching: sketching, onFace: session.sketchMode?.face != nil, mode: mode) }
+    private var roots: [ToolbarEntry] { ToolbarEntry.roots(sketching: sketching, mode: mode) }
     private var twoRings: Bool { RadialToolbarLayout.fits(levels: 2, in: bounds) }
     private var threeRings: Bool { RadialToolbarLayout.fits(levels: 3, in: bounds) }
     private var levels: Int { expanded == nil || !twoRings ? 1 : primitives && threeRings ? 3 : 2 }
@@ -276,9 +277,6 @@ struct RadialToolbar: View {
         .allowsHitTesting(!session.isPencilDown)
         .onChange(of: sketching) { expanded = nil; primitives = false }
         .onChange(of: mode) { expanded = nil; primitives = false }
-        .onChange(of: session.sketchMode?.face != nil) { _, onFace in
-            if !onFace && expanded == .faceFeatures { expanded = nil; primitives = false }
-        }
     }
 
     private var wheel: some View {

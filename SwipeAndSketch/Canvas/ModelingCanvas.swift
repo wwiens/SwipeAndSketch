@@ -4642,7 +4642,8 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
         if let draft = session.holeDraft {
             // Diameter to the right of the hole, depth below it (through holes have no depth).
             let center = project(draft.plane.world(draft.center))
-            let radius = CGFloat(draft.spec.diameter / 2 / unitsPerPoint)
+            // Past a nut trap's hex, so the label does not sit on it.
+            let radius = CGFloat((draft.spec.kind == .nutTrap ? draft.spec.outerDiameter : draft.spec.diameter) / 2 / unitsPerPoint)
             var labels = [CanvasDimension(target: .holeDiameter, value: draft.spec.diameter,
                                           center: CGPoint(x: center.x + radius + 48, y: center.y))]
             if let depth = draft.depth {
@@ -5011,14 +5012,24 @@ private struct SharedGeometry: @unchecked Sendable { let geometry: SCNGeometry; 
             o.stroke(cross, blue)
         }
         if let draft = session.holeDraft {
-            // The hole's outline (and counterbore or countersink outline) on the face.
+            // The hole's outline (and counterbore or countersink outline, or a nut trap's hex) on the face.
             let center = project(draft.plane.world(draft.center))
-            let outer = draft.spec.kind == .counterbore ? draft.spec.counterboreDiameter : draft.spec.kind == .countersink ? draft.spec.countersinkDiameter : 0
+            let color = session.draftError == nil ? blue : UIColor.systemRed
+            let outer = draft.spec.kind == .counterbore || draft.spec.kind == .countersink ? draft.spec.outerDiameter : 0
             for diameter in [draft.spec.diameter, outer] where diameter > 0 {
                 let r = CGFloat(diameter / 2 / unitsPerPoint)
                 let ring = UIBezierPath(ovalIn: CGRect(x: center.x - r, y: center.y - r, width: 2 * r, height: 2 * r))
                 ring.lineWidth = 1.6
-                o.stroke(ring, session.draftError == nil ? blue : .systemRed)
+                o.stroke(ring, color)
+            }
+            let corners = draft.spec.nutCorners(around: draft.center).map { project(draft.plane.world($0)) }
+            if let first = corners.first {
+                let hex = UIBezierPath()
+                hex.move(to: first)
+                corners.dropFirst().forEach { hex.addLine(to: $0) }
+                hex.close()
+                hex.lineWidth = 1.6
+                o.stroke(hex, color)
             }
             cross(at: center)
         }

@@ -120,6 +120,20 @@ final class AssistantWorkbenchTests: XCTestCase {
         XCTAssertLessThan(try volume(bench), beforeHole)
         XCTAssertEqual(bench.changes.count, 5)
 
+        // Nut traps go through; magnets stop at their own depth; inch sizes by their usual names.
+        var hardware = try boxBench()
+        try hardware.hole(body: "Body 01", face: "top", at: [SIMD3(-15, 0, 20)], kind: .nutTrap, size: "m4", depth: nil)
+        try hardware.hole(body: "Body 01", face: "top", at: [SIMD3(0, 0, 20)], kind: .magnet, size: "6x3", depth: nil)
+        try hardware.hole(body: "Body 01", face: "top", at: [SIMD3(15, 0, 20)], kind: .countersink, size: "1/4-20", depth: nil)
+        let made = hardware.workspace.bodies[0].cuts.compactMap(\.hole)
+        XCTAssertEqual(made.map(\.kind), [.nutTrap, .magnet, .countersink])
+        XCTAssertEqual(made.map(\.size), ["M4", "6×3", "1/4"])
+        XCTAssertEqual(hardware.workspace.bodies[0].cuts.map(\.throughAll), [true, false, true])
+        XCTAssertEqual(hardware.workspace.bodies[0].cuts[1].depth, 3.2)
+        XCTAssertThrowsError(try hardware.hole(body: "Body 01", face: "top", kind: .magnet, size: "M3", depth: nil)) {
+            XCTAssertTrue(($0 as! AssistantWorkbench.Failure).message.contains("Magnet sizes"))
+        }
+
         // Mounting holes 6 mm in from each corner of the top face.
         var plate = try boxBench()
         try plate.hole(body: "Body 01", face: "top", cornerInset: 6, kind: .simple, size: "M3", depth: nil)
@@ -325,7 +339,7 @@ final class AssistantWorkbenchTests: XCTestCase {
             XCTAssertTrue(($0 as! AssistantWorkbench.Failure).message.contains("smaller"))
         }
         XCTAssertThrowsError(try bench.shell(body: "Body 01", openFaces: ["top"], thickness: 0.05))
-        XCTAssertThrowsError(try bench.hole(body: "Body 01", face: "top", kind: .simple, size: "M8", depth: nil))
+        XCTAssertThrowsError(try bench.hole(body: "Body 01", face: "top", kind: .simple, size: "M12", depth: nil)) { XCTAssertTrue(($0 as! AssistantWorkbench.Failure).message.contains("1/4")) }
         XCTAssertThrowsError(try bench.addShapes([Input(kind: .rectangle, point: .zero, width: 0, height: 5)], on: .world(.top)))
         XCTAssertThrowsError(try bench.addShapes([Input(kind: .circle, point: .zero)], on: .world(.top)))
         XCTAssertThrowsError(try bench.setDimension(item: "Body 01", dimension: "width", value: 10))

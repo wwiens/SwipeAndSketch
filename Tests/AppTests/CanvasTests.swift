@@ -40,17 +40,15 @@ import simd
                 }
             })
         }
-        let modeling = ToolbarEntry.roots(sketching: false, onFace: false)
+        let modeling = ToolbarEntry.roots(sketching: false)
         XCTAssertEqual(modeling.map(\.id), ["tool.sketch", "tool.project", "tool.planes", "tool.create", "tool.edges", "tool.combine", "tool.transform", "tool.fit"])
         let modelingGroups: [ToolGroup] = [.planes, .create, .edges, .combine, .transform, .fit]
         XCTAssertEqual(tools(modeling), Set(modelingGroups.flatMap(\.tools) + [.project]))
-        let sketch = ToolbarEntry.roots(sketching: true, onFace: false)
-        XCTAssertEqual(sketch.map(\.id), ["sketch.exit", "tool.line", "tool.rectangle", "tool.curves", "tool.modify", "tool.dimension", "tool.project"])
-        let sketchTools: Set<ModelingTool> = Set(ToolGroup.curves.tools + ToolGroup.modify.tools + [.line, .rectangle, .dimension, .project])
+        // Features is in every sketch's dock, on a face or not (November 21, 2026).
+        let sketch = ToolbarEntry.roots(sketching: true)
+        XCTAssertEqual(sketch.map(\.id), ["sketch.exit", "tool.line", "tool.rectangle", "tool.curves", "tool.faceFeatures", "tool.modify", "tool.dimension", "tool.project"])
+        let sketchTools: Set<ModelingTool> = Set(ToolGroup.curves.tools + ToolGroup.modify.tools + ToolGroup.faceFeatures.tools + [.line, .rectangle, .dimension, .project])
         XCTAssertEqual(tools(sketch), sketchTools)
-        let face = ToolbarEntry.roots(sketching: true, onFace: true)
-        XCTAssertEqual(tools(face), sketchTools.union(ToolGroup.faceFeatures.tools))
-        XCTAssertEqual(face.count, 8)
         for group in ToolGroup.allCases {
             let children = ToolbarEntry.children(of: group)
             XCTAssertEqual(tools(children), Set(group.tools), group.title)
@@ -61,8 +59,8 @@ import simd
     }
 
     func testEssentialsCatalogOffersTheBasicWorkflowInBothLayouts() {
-        for (sketching, onFace) in [(false, false), (true, false), (true, true)] {
-            let roots = ToolbarEntry.roots(sketching: sketching, onFace: onFace, mode: .essentials)
+        for sketching in [false, true] {
+            let roots = ToolbarEntry.roots(sketching: sketching, mode: .essentials)
             XCTAssertFalse(roots.contains(.tool(.project)))
             XCTAssertFalse(roots.contains(.group(.planes)))
             XCTAssertFalse(roots.contains(.group(.fit)))
@@ -80,7 +78,7 @@ import simd
                        [.tool(.box), .tool(.cylinder), .tool(.sphere), .tool(.torus), .tool(.extrude)])
         XCTAssertEqual(WorkspaceMode.essentials.tools(in: .edges), [.fillet, .chamfer, .shell])
         XCTAssertEqual(WorkspaceMode.essentials.tools(in: .faceFeatures), [.hole, .text])
-        XCTAssertTrue(ToolbarEntry.roots(sketching: true, onFace: true, mode: .essentials).contains(.group(.faceFeatures)))
+        XCTAssertTrue(ToolbarEntry.roots(sketching: true, mode: .essentials).contains(.group(.faceFeatures)))
         for group in ToolGroup.allCases { XCTAssertEqual(WorkspaceMode.allTools.tools(in: group), group.tools) }
     }
 
@@ -126,9 +124,8 @@ import simd
 
     func testEveryRadialCaptionStaysInsideItsSector() {
         var configurations: [([ToolbarEntry], Int, Bool)] = [
-            (ToolbarEntry.roots(sketching: false, onFace: false), 0, false),
-            (ToolbarEntry.roots(sketching: true, onFace: false), 0, false),
-            (ToolbarEntry.roots(sketching: true, onFace: true), 0, false),
+            (ToolbarEntry.roots(sketching: false), 0, false),
+            (ToolbarEntry.roots(sketching: true), 0, false),
             (ToolbarEntry.primitiveTools.map(ToolbarEntry.tool), 2, false)
         ]
         for group in ToolGroup.allCases {
@@ -137,8 +134,8 @@ import simd
         for level in [0, 1] {
             configurations.append(([.primitives] + ToolbarEntry.primitiveTools.map(ToolbarEntry.tool), level, true))
         }
-        for (sketching, onFace) in [(false, false), (true, false), (true, true)] {
-            let roots = ToolbarEntry.roots(sketching: sketching, onFace: onFace, mode: .essentials)
+        for sketching in [false, true] {
+            let roots = ToolbarEntry.roots(sketching: sketching, mode: .essentials)
             configurations.append((roots, 0, false))
             for case let .group(group) in roots {
                 for level in [0, 1] {
