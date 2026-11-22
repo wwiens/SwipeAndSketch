@@ -328,9 +328,13 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                        "Kept dimensions show the size as it is now. Dragging a shape changes the number rather than being stopped by it."])
         case .hole:
             HelpOverview(
-                summary: "Put a ready-made screw hole in a face: simple, counterbore, countersink, or heat-set insert.",
-                steps: ["Tap the face where the hole goes. It snaps to the purple dots.", "Choose the type and size (M2 to M5) below.", "Tap Done to drill it. The tool stays ready for the next hole."],
-                tips: ["Tap the diameter or depth to type your own. A counterbore or countersink widens with the hole.", "Turn off Through for a hole that stops partway.",
+                summary: "Put a ready-made hole for hardware in a face: a screw hole (simple, counterbore, or countersink), a heat-set insert, a nut trap, or a magnet pocket.",
+                steps: ["Select a flat face and choose Features ▾ ▸ Hole above the dock (or Features ▸ Hole while sketching on the face), then tap where the hole goes. It snaps to the purple dots.",
+                        "Choose the type and size below: screws from M2 to M8 or #4 to 1/4 inch, magnets by diameter × thickness.",
+                        "Tap Done to drill it. The tool stays ready for the next hole."],
+                tips: ["A nut trap is a hex pocket at the face that holds the nut while you turn the screw. Rotate 30° lines its flats up with an edge.",
+                       "Nut traps and magnet pockets get your Fit Clearance (Settings) on each side, so the nut or magnet goes in.",
+                       "Tap the diameter or depth to type your own. A counterbore, countersink, or nut pocket widens with the hole.", "Turn off Through for a hole that stops partway.",
                        "To change a hole later, tap its wall and choose Edit Hole: change it, or tap elsewhere on the face to move it, and tap Done."])
         case .editShape:
             HelpOverview(
@@ -561,7 +565,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .text:
             HelpOverview(
                 summary: "Add raised or sunk lettering to a flat face: labels, names, version numbers.",
-                steps: ["Select a flat face and tap Text above the dock, or choose Features ▸ Text while sketching on a face.",
+                steps: ["Select a flat face and choose Features ▾ ▸ Text above the dock, or Features ▸ Text while sketching on a face.",
                         "Tap where the text goes; it snaps to the purple dots. Type it in the field below and pick a font.",
                         "Choose Raised or Sunk, tap the height or depth to change them, and tap Done."],
                 tips: ["Letters 5 mm tall and 0.6 to 1 mm deep print cleanly on most printers.",

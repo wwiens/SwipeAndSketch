@@ -218,7 +218,7 @@ enum DesignExport {
                 return locked(id, alias, "hole")
             }
             let center = step.profile.plane.point(circle.center).map(round)
-            var hole = DesignFeature.Hole(type: spec.kind, size: HolePresets.sizes.contains(spec.size) ? spec.size : nil, diameter: round(spec.diameter))
+            var hole = DesignFeature.Hole(type: spec.kind, size: HolePresets.size(spec.size, for: spec.kind), diameter: round(spec.diameter))
             if spec.kind == .counterbore { hole.counterboreDiameter = round(spec.counterboreDiameter); hole.counterboreDepth = round(spec.counterboreDepth) }
             if spec.kind == .countersink { hole.countersinkDiameter = round(spec.countersinkDiameter); hole.countersinkAngle = round(spec.countersinkAngle) }
             return DesignFeature(id: id, body: alias, kind: .hole, axis: axis, x: center.x, y: center.y, z: center.z,

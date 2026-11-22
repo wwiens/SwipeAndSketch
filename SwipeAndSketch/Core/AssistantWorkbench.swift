@@ -1239,6 +1239,12 @@ struct AssistantWorkbench: Sendable {
         return "Shelled \(name): walls \(Self.mm(thickness)) mm, open at \(specs.joined(separator: ", "))."
     }
 
+    /// What sizes a hole kind takes, for a refused size.
+    static func holeSizesHint(_ kind: HoleSpec.Kind) -> String {
+        kind.isScrew ? "Hole sizes are \(HolePresets.sizes.joined(separator: ", ")), or give a diameter." :
+            "Magnet sizes are \(HolePresets.magnetSizes.map { $0.replacingOccurrences(of: "×", with: "x") }.joined(separator: ", ")) (diameter x thickness, mm), or give a diameter."
+    }
+
     /// Drills preset holes into a flat face: at world points (default: the face center), or with
     /// `cornerInset`, one near each corner of the face's bounding rectangle, that far in from both sides.
     @discardableResult mutating func hole(body bodyName: String, face spec: String, at points: [SIMD3<Double>] = [], cornerInset: Double? = nil,
@@ -1246,12 +1252,13 @@ struct AssistantWorkbench: Sendable {
         let body = try body(named: bodyName), solid = try buildable(body), index = try face(spec, of: body)
         guard let facePlane = solid.facePlane(index), let plane = SketchPlane.through(facePlane.origin, normal: facePlane.normal),
               let faceCenter = solid.faceCenter(index), let outline = solid.faceOutline(index) else { throw Failure("Holes need a flat face.") }
-        var label = size.uppercased().replacingOccurrences(of: " ", with: "")
+        var label: String
         if let diameter {
             guard (0.1...200).contains(diameter) else { throw Failure("Hole diameters must be 0.1–200 mm.") }
             label = "Ø\(Self.mm(diameter))"
         } else {
-            guard HolePresets.sizes.contains(label) else { throw Failure("Hole sizes are \(HolePresets.sizes.joined(separator: ", ")), or give a diameter.") }
+            guard let preset = HolePresets.size(size, for: kind) else { throw Failure(Self.holeSizesHint(kind)) }
+            label = preset
         }
         let depth = depth ?? (diameter == nil ? HolePresets.defaultDepth(kind, size: label) : nil)
         if let depth, !(0.01...10_000).contains(depth) { throw Failure("Hole depth must be 0.01–10000 mm.") }
@@ -1267,8 +1274,9 @@ struct AssistantWorkbench: Sendable {
         guard centers.count <= 64 else { throw Failure("Drill at most 64 holes at a time.") }
         var next = workspace
         guard let bodyIndex = next.bodies.firstIndex(where: { $0.id == body.id }) else { throw Failure("That body no longer exists.") }
-        // A plain round hole of any diameter, or a preset for metric hardware.
-        let spec = diameter.map { HoleSpec(kind: .simple, size: label, diameter: $0) } ?? HolePresets.spec(kind, size: label)
+        // A plain round hole (or magnet pocket) of any diameter, or a preset for hobby hardware.
+        let spec = diameter.map { HoleSpec(kind: kind == .magnet ? .magnet : .simple, size: label, diameter: $0) } ??
+            HolePresets.spec(kind, size: label, clearance: Fit.preferredClearance)
         for center in centers {
             guard let operation = ExtrusionCut.hole(spec, at: center, on: plane, depth: depth) else { throw Failure("That hole cannot be placed there.") }
             next.bodies[bodyIndex].cuts.append(operation)
@@ -1857,9 +1865,10 @@ struct AssistantWorkbench: Sendable {
                 guard (0.1...200).contains(diameter) else { throw Failure("Hole diameters must be 0.1–200 mm.") }
                 spec = HoleSpec(kind: .simple, size: "Ø\(Self.mm(diameter))", diameter: diameter)
             } else if kind != nil || size != nil {
-                let label = size?.uppercased().replacingOccurrences(of: " ", with: "") ?? (HolePresets.sizes.contains(spec.size) ? spec.size : "M3")
-                guard HolePresets.sizes.contains(label) else { throw Failure("Hole sizes are \(HolePresets.sizes.joined(separator: ", ")), or give a diameter.") }
-                spec = HolePresets.spec(kind.flatMap { HoleSpec.Kind(rawValue: $0.lowercased()) } ?? spec.kind, size: label)
+                let newKind = kind.flatMap { HoleSpec.Kind(loose: $0) } ?? spec.kind
+                let wanted = size ?? (HolePresets.size(spec.size, for: newKind) ?? HolePresets.defaultSize(for: newKind))
+                guard let label = HolePresets.size(wanted, for: newKind) else { throw Failure(Self.holeSizesHint(newKind)) }
+                spec = HolePresets.spec(newKind, size: label, clearance: Fit.preferredClearance)
             }
             let newDepth: Double? = through == true ? nil : depth ?? (cut.throughAll ? nil : cut.depth)
             if let newDepth, !(0.01...10_000).contains(newDepth) { throw Failure("Hole depth must be 0.01–10000 mm.") }
