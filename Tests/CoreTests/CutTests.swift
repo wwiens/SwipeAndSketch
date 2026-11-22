@@ -135,7 +135,7 @@ final class CutTests: XCTestCase {
         let data = try ProjectCodec.encode(project)
         XCTAssertEqual(try ProjectCodec.decode(data).workspace, project.workspace)
         var json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        json["schemaVersion"] = Project.currentSchemaVersion + 1
+        json["schemaVersion"] = Project.readableSchemaVersions.upperBound + 1
         XCTAssertThrowsError(try ProjectCodec.decode(JSONSerialization.data(withJSONObject: json))) { error in
             XCTAssertEqual(error as? ProjectError, .unsupportedVersion)
         }

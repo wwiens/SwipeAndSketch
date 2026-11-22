@@ -63,7 +63,8 @@ extension SolidBody {
             let cut = cuts[index]
             guard let spec = cut.text else { return false }
             let plane = cut.profile.plane, height = plane.height(of: point)
-            let range = cut.depth > 0 ? 0.02...(cut.depth + 0.05) : (cut.depth - 0.05)...(-0.02)
+            // An inlay's letters reach up to the face, their top included.
+            let range = cut.depth > 0 ? 0.02...(cut.depth + 0.05) : (cut.depth - 0.05)...(cut.inlay == true ? 0.05 : -0.02)
             guard range.contains(height) else { return false }
             let points = spec.loops.flatMap { [$0.start] + $0.segments.flatMap(\.points) }
             guard let minX = points.map(\.x).min(), let maxX = points.map(\.x).max(),

@@ -8,6 +8,11 @@ import simd
 // numbers, names. The glyph outlines are saved with the text, so it rebuilds exactly on any
 // device, whatever fonts that device has; the string, font, and size are kept for editing. Saved
 // as a `text` entry in a solid's ordered `cuts` list.
+//
+// Embedded text (November 22, 2026) is sunk text plus an inlay: a solid of its own holding just
+// the letters, flush with the face and filling the sunk text exactly, so it can be printed in
+// another color. The inlay is a box over the text, from the face down to the text's floor, with
+// an `inlay` text step that keeps only the letters; both use the same letter tool, so they match.
 
 /// One stretch of a glyph outline after the point before it: a line (one point), a quadratic
 /// curve (control point, end), or a cubic curve (two control points, end).
@@ -207,18 +212,30 @@ extension SolidKernel {
             guard let spec = operation.text else { throw error }
             let glyphs = Array(Set(spec.loops.map(\.glyph))).sorted()
             guard glyphs.count > 1 else { throw error }
-            var result = solid
-            for glyph in glyphs {
+            let letters = glyphs.map { glyph in
                 var letter = operation
                 letter.text?.loops = spec.loops.filter { $0.glyph == glyph }
-                result = try applyLetters(letter, to: result)
+                return letter
             }
+            // An inlay is the letters within the solid: each letter's part of it, put together.
+            if operation.inlay == true {
+                let parts = try letters.map { try applyLetters($0, to: solid) }
+                guard parts.count > 1 else { return parts[0] }
+                return try boolean(parts[0], Array(parts.dropFirst()), .union)
+            }
+            var result = solid
+            for letter in letters { result = try applyLetters(letter, to: result) }
             return result
         }
     }
 
     private static func applyLetters(_ operation: ExtrusionCut, to solid: KernelSolid) throws -> KernelSolid {
         let tool = try textTool(for: operation)
+        if operation.inlay == true {
+            let result = try boolean(solid, tool, .intersect)
+            guard result.volume > 1e-9 else { throw Failure(message: "The letters are not in this solid") }
+            return result
+        }
         if operation.depth > 0 {
             let result = try boolean(solid, tool, .union)
             guard result.isValidSolid else { throw Failure(message: "Some letters are off the face; move the text onto it") }
@@ -228,5 +245,59 @@ extension SolidKernel {
         guard result.volume < solid.volume - 1e-9 else { throw Failure(message: "The text is not on this solid") }
         guard result.isValidSolid else { throw Failure(message: "The text cuts this solid apart; make it shallower") }
         return result
+    }
+}
+
+extension SolidBody {
+    /// The inlay for sunk text `operation` (negative depth): a solid of just the letters, from the
+    /// face down to the text's floor, filling the sunk text exactly. Nil for raised text.
+    static func textInlay(for operation: ExtrusionCut, color: BodyColor?, name: String?) -> SolidBody? {
+        guard let spec = operation.text, operation.depth < 0, operation.inlay == nil else { return nil }
+        let points = spec.loops.flatMap { [$0.start] + $0.segments.flatMap(\.points) }
+        guard let minX = points.map(\.x).min(), let maxX = points.map(\.x).max(),
+              let minY = points.map(\.y).min(), let maxY = points.map(\.y).max() else { return nil }
+        let margin = 1.0
+        let square = [Point2(x: minX - margin, y: minY - margin), Point2(x: maxX + margin, y: minY - margin),
+                      Point2(x: maxX + margin, y: maxY + margin), Point2(x: minX - margin, y: maxY + margin)]
+        let plane = operation.profile.plane
+        var letters = operation
+        letters.id = UUID()
+        letters.inlay = true
+        var body = SolidBody(profile: SketchProfile(id: "inlay", plane: plane, sourceIDs: [], outline: square), depth: operation.depth, cuts: [letters])
+        body.color = color == .gray ? nil : color
+        body.name = name.flatMap(ItemNames.cleaned)
+        return body
+    }
+
+    /// Whether this solid is the inlay of sunk text `operation`: its letters, on the same plane,
+    /// as deep. An inlay moved since stays a solid of its own, no longer this text's.
+    func isInlay(of operation: ExtrusionCut) -> Bool {
+        guard operation.inlay == nil, let spec = operation.text, operation.depth < 0 else { return false }
+        return cuts.contains { $0.inlay == true && $0.text == spec && $0.depth == operation.depth && $0.profile.plane == operation.profile.plane }
+    }
+
+    /// The step of the inlay's letters, when this solid is an inlay.
+    var inlayStep: ExtrusionCut? { cuts.first { $0.inlay == true } }
+}
+
+extension Workspace {
+    /// The solids that are the inlay of sunk text `operation`.
+    func inlays(of operation: ExtrusionCut) -> [UUID] {
+        bodies.filter { $0.isInlay(of: operation) }.map(\.id)
+    }
+
+    /// The sunk text an inlay fills: its solid and step, when it is still there unmoved.
+    func textFilled(by inlay: SolidBody) -> (body: UUID, cut: Int)? {
+        guard let step = inlay.inlayStep else { return nil }
+        for body in bodies where body.id != inlay.id {
+            if let index = body.cuts.firstIndex(where: { inlay.isInlay(of: $0) && $0.text == step.text }) { return (body.id, index) }
+        }
+        return nil
+    }
+
+    /// Whether any solid holds an inlay step, which readers before schema version 3 would misread.
+    var hasTextInlays: Bool {
+        func holds(_ body: SolidBody) -> Bool { body.cuts.contains { $0.inlay == true || ($0.nestedSolid.map(holds) ?? false) } }
+        return bodies.contains(where: holds)
     }
 }

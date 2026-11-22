@@ -564,12 +564,13 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                        "To change a peg later, tap it (or its socket, or select a separate peg) and choose Edit Peg. Its sockets follow its new size and place."])
         case .text:
             HelpOverview(
-                summary: "Add raised or sunk lettering to a flat face: labels, names, version numbers.",
+                summary: "Add raised, sunk, or embedded lettering to a flat face: labels, names, version numbers.",
                 steps: ["Select a flat face and choose Features ▾ ▸ Text above the dock, or Features ▸ Text while sketching on a face.",
                         "Tap where the text goes; it snaps to the purple dots. Type it in the field below and pick a font.",
-                        "Choose Raised or Sunk, tap the height or depth to change them, and tap Done."],
+                        "Choose Raised, Sunk, or Embedded, tap the height or depth to change them, and tap Done."],
                 tips: ["Letters 5 mm tall and 0.6 to 1 mm deep print cleanly on most printers.",
                        "Sunk text on a face that prints facing up comes out crisper than raised text on a side.",
+                       "Embedded sinks the letters and fills them flush with an inlay, a solid of its own in the color you pick beside it, for a second filament. Export as 3MF with As Modeled, so the inlay stays in its letters and your slicer can give it its own filament.",
                        "The letters are saved with the project, so they rebuild the same on any iPad.",
                        "To change text later, tap a letter and choose Edit Text."])
         case .screwLid:

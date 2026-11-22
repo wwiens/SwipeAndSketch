@@ -245,6 +245,7 @@ enum DesignExport {
             guard let thread = step.thread else { return locked(id, alias, "thread") }
             return locked(id, alias, "\(thread.isInternal ? "internal" : "external") thread \(thread.size) × \(AssistantWorkbench.mm(thread.length)) mm")
         case .text:
+            if step.inlay == true { return locked(id, alias, "inlay of text \"\(step.text?.text ?? "")\" (only the letters kept)") }
             return locked(id, alias, "text \"\(step.text?.text ?? "")\" \(step.depth < 0 ? "debossed" : "embossed")")
         }
     }

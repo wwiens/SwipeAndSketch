@@ -1839,11 +1839,28 @@ struct WorkspaceView: View {
                         Text(TextFonts.title(for: draft.font)).font(.system(size: 15, weight: .medium)).padding(.horizontal, 6).lineLimit(1)
                     }
                     .accessibilityIdentifier("text.font")
-                    Picker("Style", selection: Binding(get: { draft.depth > 0 }, set: { session.setTextRaised($0) })) {
-                        Text("Raised").tag(true)
-                        Text("Sunk").tag(false)
+                    Picker("Style", selection: Binding(get: { draft.style }, set: { session.setTextStyle($0) })) {
+                        ForEach(TextStyle.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
-                    .pickerStyle(.segmented).frame(width: 150).accessibilityIdentifier("text.style")
+                    .pickerStyle(.segmented).frame(width: 240).accessibilityIdentifier("text.style")
+                    // Embedded: the color of the inlay solid that fills the letters.
+                    if draft.embedded {
+                        Menu {
+                            ForEach(BodyColor.allCases, id: \.self) { color in
+                                Button { session.setTextInlayColor(color) } label: {
+                                    Label { Text(color == draft.inlayColor ? "\(color.title) (in use)" : color.title) } icon: { Image(uiImage: Self.swatch(color)) }
+                                }
+                                .accessibilityIdentifier("text.inlay.\(color.rawValue)")
+                            }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(uiImage: Self.swatch(draft.inlayColor))
+                                Text("Inlay").font(.system(size: 15, weight: .medium))
+                            }
+                            .padding(.horizontal, 6)
+                        }
+                        .accessibilityLabel("Inlay color, \(draft.inlayColor.title)").accessibilityIdentifier("text.inlayColor")
+                    }
                     Button { session.rotateText() } label: { Text("Rotate 90°").font(.system(size: 15, weight: .medium)) }
                         .accessibilityIdentifier("text.rotate")
                     if session.isBuildingText { ProgressView().controlSize(.small).padding(.trailing, 4) }

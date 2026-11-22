@@ -102,6 +102,34 @@ final class TextTests: XCTestCase {
         XCTAssertTrue(bench.summary().contains("debossed text \"OK\""), bench.summary())
     }
 
+    /// Embedded text: the assistant's inlay fills the sunk letters as a solid of its own, follows
+    /// an edit of the text, and goes when the text is raised.
+    func testAssistantEmbedsTextWithAnInlayThatFollowsItsEdits() throws {
+        var bench = AssistantWorkbench(workspace: Workspace(bodies: [try box(depth: 20)]))
+        let boxVolume = try SolidKernel.solid(for: bench.workspace.bodies[0]).volume
+        XCTAssertThrowsError(try bench.text(body: "Body 01", face: "top", text: "A1", height: 8, depth: 1, inlay: "white"), "An inlay needs sunk text")
+        XCTAssertThrowsError(try bench.text(body: "Body 01", face: "top", text: "A1", height: 8, depth: -1, inlay: "plaid"))
+        let made = try bench.text(body: "Body 01", face: "top", text: "A1", height: 8, depth: -1, inlay: "white")
+        XCTAssertTrue(made.contains("white inlay solid, Body 01 Inlay"), made)
+        XCTAssertEqual(bench.workspace.bodies.count, 2)
+        let host = bench.workspace.bodies[0], inlay = bench.workspace.bodies[1]
+        XCTAssertEqual(inlay.color, .white)
+        let both = try SolidKernel.solid(for: host).volume + SolidKernel.solid(for: inlay).volume
+        XCTAssertEqual(both, boxVolume, accuracy: 1e-3, "The inlay fills the letters exactly")
+        XCTAssertTrue(bench.summary().contains("inlay filling text \"A1\""), bench.summary())
+
+        let edited = try bench.editFeature(body: "Body 01", feature: "text", which: "last", text: "B2")
+        XCTAssertTrue(edited.hasSuffix(", with its inlay."), edited)
+        XCTAssertEqual(bench.workspace.bodies.map(\.id), [host.id, inlay.id])
+        XCTAssertEqual(bench.workspace.bodies[1].inlayStep?.text?.text, "B2")
+        XCTAssertEqual(bench.workspace.bodies[1].color, .white)
+        XCTAssertThrowsError(try bench.editFeature(body: "Body 01 Inlay", feature: "text", which: "last", text: "C3"), "The inlay's own letters are not a text to edit")
+
+        let raised = try bench.editFeature(body: "Body 01", feature: "text", which: "last", depth: 1)
+        XCTAssertTrue(raised.hasSuffix(", and removed its inlay."), raised)
+        XCTAssertEqual(bench.workspace.bodies.map(\.id), [host.id])
+    }
+
     func testLetteringAddsNoSnapDots() throws {
         let block = try box(depth: 20)
         let plain = SketchGuides.guides(on: top, bodies: [block])

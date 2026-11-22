@@ -738,6 +738,21 @@ struct TextDraft: Equatable {
     var spec: TextSpec?
     /// Editing the text at this step of the solid's `cuts` (Edit Text) instead of adding it.
     var replacing: Int?
+    /// Embedded (November 22, 2026): sunk, plus an inlay solid of this color filling the letters.
+    var embedded = false
+    var inlayColor: BodyColor = .white
+    /// Edit Text on embedded text: the inlay solid it had, rebuilt in place (or removed if no longer embedded).
+    var inlay: UUID?
+}
+
+/// How text meets its face: standing out, sunk in, or sunk and filled by an inlay of another color.
+enum TextStyle: String, CaseIterable, Sendable {
+    case raised, sunk, embedded
+    var title: String { rawValue.capitalized }
+}
+
+extension TextDraft {
+    var style: TextStyle { depth > 0 ? .raised : embedded ? .embedded : .sunk }
 }
 
 /// The section view (October 21, 2026): solids drawn cut away on one side of a plane parallel to
@@ -1443,6 +1458,8 @@ struct DimensionEdit: Identifiable {
     @ObservationIgnored private var textBuild: Task<Void, Never>?
     /// The last text's settings, for the next.
     @ObservationIgnored private var lastText = (text: "Text", font: TextFonts.defaultFont, height: 6.0, depth: 0.8)
+    /// Whether the last text was embedded, and its inlay's color (nil: picked against the solid's).
+    @ObservationIgnored private var lastTextInlay: (embedded: Bool, color: BodyColor?) = (false, nil)
     private(set) var threadDraft: ThreadDraft?
     private(set) var threadPreview: Workspace?
     private(set) var screwLidDraft: ScrewLidDraft?
@@ -2994,6 +3011,10 @@ struct DimensionEdit: Identifiable {
         if let draft = textDraft {
             if let textError { return textError }
             if isBuildingText { return "Building the letters…" }
+            if draft.embedded {
+                return "Embedded text: sunk, and filled by an inlay solid in the color beside it. Type it below, pick a font, or tap the height or depth. Tap elsewhere on the face to move it, or Done." +
+                    (draft.replacing != nil ? " Cancel leaves the text and its inlay as they were." : "")
+            }
             return (draft.depth > 0 ? "Raised" : "Sunk") + " text. Type it below, pick a font, or tap the height or depth. Tap elsewhere on the face to move it, or Done." +
                 (draft.replacing != nil ? " Cancel leaves the text as it was." : "")
         }
@@ -3312,6 +3333,16 @@ struct DimensionEdit: Identifiable {
             history = WorkspaceHistory(workspace: Workspace(shapes: [rectangle], bodies: [SolidBody(profile: profile, depth: 12)]))
             selection = nil
             cameraAction = .home
+            // Embedded text being placed on the top face, for the Text bar (UI tests' touches are
+            // fingers, which never pick a face).
+            if ProcessInfo.processInfo.arguments.contains("--ui-testing-text-embedded"), let body = workspace.bodies.first,
+               let face = faceSelection(bodyID: body.id, near: [0, 0, 12]) {
+                selection = .face(face)
+                chooseTool(.text)
+                if let plane = sketchMode?.plane { placeText(at: plane.coordinates(of: [0, 0, 12])) }
+                setText("HI")
+                setTextStyle(.embedded)
+            }
         }
         if ProcessInfo.processInfo.arguments.contains("--ui-testing-gridfinity-resize"),
            let plate = try? Gridfinity.plate(columns: 6, rows: 6, magnets: false),
@@ -7084,7 +7115,8 @@ struct DimensionEdit: Identifiable {
         guard tool == .text, let face = sketchMode?.face, let plane = face.plane, !isEditingBlocked else { return }
         dimensionEdit = nil
         var draft = textDraft ?? TextDraft(bodyID: face.bodyID, plane: plane, center: center, text: lastText.text, font: lastText.font,
-                                           height: lastText.height, depth: lastText.depth, angle: 0)
+                                           height: lastText.height, depth: lastText.depth, angle: 0, embedded: lastTextInlay.embedded && lastText.depth < 0,
+                                           inlayColor: lastTextInlay.color ?? inlayColor(against: face.bodyID))
         draft.center = center
         updateText(draft)
     }
@@ -7102,10 +7134,27 @@ struct DimensionEdit: Identifiable {
     }
 
     /// Raised from the face (emboss), or sunk into it (deboss), keeping the depth.
-    func setTextRaised(_ raised: Bool) {
-        guard var draft = textDraft, (draft.depth > 0) != raised else { return }
-        draft.depth = -draft.depth
+    func setTextRaised(_ raised: Bool) { setTextStyle(raised ? .raised : .sunk) }
+
+    /// Raised, sunk, or embedded (sunk and filled by an inlay solid), keeping the depth.
+    func setTextStyle(_ style: TextStyle) {
+        guard var draft = textDraft, draft.style != style else { return }
+        draft.depth = style == .raised ? abs(draft.depth) : -abs(draft.depth)
+        draft.embedded = style == .embedded
         updateText(draft)
+    }
+
+    /// The embedded text's inlay color.
+    func setTextInlayColor(_ color: BodyColor) {
+        guard var draft = textDraft, draft.inlayColor != color else { return }
+        draft.inlayColor = color
+        updateText(draft)
+    }
+
+    /// An inlay color that stands out on the solid's: white on dark or bright colors, black otherwise.
+    private func inlayColor(against bodyID: UUID) -> BodyColor {
+        let color = workspace.bodies.first { $0.id == bodyID }?.color ?? .gray
+        return [.black, .blue, .purple, .red, .green].contains(color) ? .white : .black
     }
 
     /// Turns the text a quarter turn.
@@ -7120,12 +7169,13 @@ struct DimensionEdit: Identifiable {
         guard let draft = textDraft, let preview = textPreview, !isBuildingText, !isEditingBlocked else { return }
         commit(preview)
         lastText = (draft.text, draft.font, draft.height, draft.depth)
+        if draft.depth < 0 { lastTextInlay = (draft.embedded, draft.embedded ? draft.inlayColor : lastTextInlay.color) }
         clearTextDraft()
         if draft.replacing != nil {
             finishFeatureEdit(draft.bodyID, status: "Text changed")
         } else {
             revalidateSketchMode()
-            status = draft.depth > 0 ? "Text raised" : "Text sunk"
+            status = draft.style == .raised ? "Text raised" : draft.style == .embedded ? "Text embedded, with its inlay as a solid of its own" : "Text sunk"
         }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
@@ -7163,13 +7213,40 @@ struct DimensionEdit: Identifiable {
         var next = workspace
         next.bodies[index] = next.bodies[index].placing(operation, replacing: draft.replacing)
         let body = next.bodies[index]
+        // Embedded: the inlay, a solid of its own after the others, so no numbered name changes (in
+        // place, on Edit Text).
+        var inlay: SolidBody?
+        let previous = draft.inlay.flatMap { id in next.bodies.firstIndex { $0.id == id } }
+        if draft.embedded {
+            let hostName = next.bodyNames[body.id] ?? "Solid"
+            let name = previous.flatMap { next.bodies[$0].name } ?? "\(hostName) Inlay"
+            guard var made = SolidBody.textInlay(for: operation, color: draft.inlayColor, name: name) else {
+                isBuildingText = false
+                textError = "This font cannot draw that text."
+                return
+            }
+            if let previous {
+                made.id = next.bodies[previous].id
+                made.group = next.bodies[previous].group
+                next.bodies[previous] = made
+            } else {
+                made.group = body.group
+                next.bodies.append(made)
+            }
+            inlay = made
+        } else if let previous {
+            next.bodies.remove(at: previous)
+        }
         isBuildingText = true
-        let previous = textBuild
+        let solids = [body] + (inlay.map { [$0] } ?? [])
+        let previousBuild = textBuild
         textBuild = Task { [weak self] in
             // One build at a time, and only the latest text: a newer one makes this one moot.
-            await previous?.value
+            await previousBuild?.value
             guard generation == self?.textGeneration else { return }
-            let builds = await Task.detached(priority: .userInitiated) { body.isValid && (try? SolidKernel.solid(for: body)) != nil }.value
+            let builds = await Task.detached(priority: .userInitiated) {
+                solids.allSatisfy { $0.isValid && (try? SolidKernel.solid(for: $0)) != nil }
+            }.value
             guard let self, generation == self.textGeneration else { return }
             self.isBuildingText = false
             guard builds else {
@@ -7720,7 +7797,12 @@ struct DimensionEdit: Identifiable {
         } else if let tag = body.pegTag(at: point), PegJoint.existing(tag, in: workspace, preferring: body.id, clearance: fitClearance) != nil {
             feature = .peg(tag, body: body.id)
         } else if let cut = body.textCut(at: point) {
-            feature = .text(body: body.id, cut: cut)
+            // An inlay's letters stand for the text they fill; one moved away is a solid of its own.
+            if body.cuts[cut].inlay == true {
+                feature = workspace.textFilled(by: body).map { .text(body: $0.body, cut: $0.cut) }
+            } else {
+                feature = .text(body: body.id, cut: cut)
+            }
         } else if face.plane == nil, let probe = selectedHoleProbe?.probe, let cut = body.holeCut(around: probe) {
             feature = .hole(body: body.id, cut: cut)
         }
@@ -7755,11 +7837,19 @@ struct DimensionEdit: Identifiable {
     func editText(bodyID: UUID, cut: Int) {
         guard requireNewEditingAccess() else { return }
         guard !isEditingBlocked, let body = workspace.bodies.first(where: { $0.id == bodyID }), body.cuts.indices.contains(cut),
-              let spec = body.cuts[cut].text else { return }
+              body.cuts[cut].text != nil else { return }
+        // An inlay's letters edit the text it fills, which rebuilds the inlay with it.
+        if body.cuts[cut].inlay == true {
+            guard let host = workspace.textFilled(by: body) else { return }
+            return editText(bodyID: host.body, cut: host.cut)
+        }
         let operation = body.cuts[cut]
+        guard let spec = operation.text else { return }
+        let inlay = workspace.inlays(of: operation).first.flatMap { id in workspace.bodies.first { $0.id == id } }
         guard enterFeatureSketch(bodyID: bodyID, plane: operation.profile.plane, at: spec.center, tool: .text) else { return }
         updateText(TextDraft(bodyID: bodyID, plane: operation.profile.plane, center: spec.center, text: spec.text, font: spec.font,
-                             height: spec.height, depth: operation.depth, angle: spec.angle, replacing: cut))
+                             height: spec.height, depth: operation.depth, angle: spec.angle, replacing: cut, embedded: inlay != nil,
+                             inlayColor: inlay.map { $0.color ?? .gray } ?? inlayColor(against: bodyID), inlay: inlay?.id))
     }
 
     func editThread(bodyID: UUID, cut: Int) {
