@@ -391,7 +391,7 @@ struct QuickStartView: View {
                 row(.primitives, "1. Create", "Open \(workspaceMode == .allTools && radialToolbarEnabled ? "Create, then Primitives" : "Create") in the toolbar, choose Box, and tap the grid with Pencil.")
                 row(.dimension, "2. Size", "Tap the sizes beside the box to enter its width, length, and height.")
                 row(.done, "3. Keep the solid", "Tap Done. You can select and change the solid, round its edges with Fillet, or make it hollow with Shell.")
-                row(.send, "4. Print it", "Open the project menu at the top, choose Export, then Send to Slicer or Share.")
+                row(.send, "4. Print it", "Open the project menu at the top, choose Export, then Export 3MF or Save to Folder.")
             }
             Text("Essentials shows common tools. Choose All Tools at the top of a project for more. Tap Help beside the hint for instructions, or Controls for the whole guide.")
                 .font(.system(size: 14)).foregroundStyle(muted).fixedSize(horizontal: false, vertical: true)
