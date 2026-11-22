@@ -119,7 +119,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .svgImport: .spline
         case .purchases: .brand
         case .notes: .text
-        case .radialToolbar: .more
+        case .radialToolbar: .brand
         case .gettingStarted: .help
         case .sketchPlane, .sketching, .sketchObject, .sketchChain, .pickedSketches: .sketch
         case .line: .line
@@ -221,8 +221,8 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .radialToolbar:
             HelpOverview(
                 summary: "The radial toolbar has every tool from the dock, in the same modeling and sketching groups. Choose Radial Toolbar or Dock under Tool Layout in Settings.",
-                steps: ["Tap the Tools icon at the bottom right to show or hide the wheel.", "Tap a group in the first ring to open its tools in the second. Create > Primitives opens a third ring when there is room.", "Drag the violet center to move the whole toolbar. Tap the center to go back, or to hide the wheel when no group is open."],
-                tips: ["Your toolbar position is remembered. A ring moves inward temporarily if it would reach off screen.", "In a smaller window, Primitives replaces the second ring; Back returns to Create. In a very narrow window, groups use the first ring.", "Squeeze Apple Pencil Pro to show or hide the wheel. Set squeeze to Show Contextual Palette in iPad Settings.", "Selection actions and operation controls stay at the bottom. Pencil draws and selects on the uncovered canvas; fingers navigate."])
+                steps: ["Tap the Tools button (the S) at the bottom right to show or hide the wheel.", "A notch at a sector's outer edge marks a group: tap it and its tools fan out right beside it. Create > Primitives fans out one ring further when there is room.", "Choose a tool and the wheel folds back to its first ring.", "Drag the violet center to move the whole toolbar. Tap the center to go back, or to hide the wheel when no group is open."],
+                tips: ["The tool in use is violet, the open group lavender, and a violet dot marks the closed group that holds the tool in use. Finish Sketch is lime.", "Away from a solid's face, Features is dimmed: holes, pegs, and text go on a face.", "Your toolbar position is remembered, and opening a group never moves it. Near an edge, a group's tools swing toward open space; only when there is no room beside the group does the wheel shift, and just while the group is open.", "In a smaller window, Primitives replaces Create's tools; Back to Create returns. In a very narrow window, groups use the first ring.", "Squeeze Apple Pencil Pro to show or hide the wheel. Set squeeze to Show Contextual Palette in iPad Settings.", "Selection actions and operation controls stay at the bottom. Pencil draws and selects on the uncovered canvas; fingers navigate."])
         case .gettingStarted:
             HelpOverview(
                 summary: "Apple Pencil draws, selects, and edits; fingers move the view. Start with a ready-made solid under Create, or sketch an outline and extrude it into a solid.",

@@ -1038,18 +1038,26 @@ import XCTest
             ("fit", ["peg", "thread", "screwLid", "fitTest"])
         ]
         for (group, tools) in groups {
+            let resting = hub.frame
             app.buttons["tool.\(group)"].tap()
             for tool in tools { XCTAssertTrue(app.buttons["tool.\(tool)"].isHittable, tool) }
-            XCTAssertTrue(app.frame.insetBy(dx: 1, dy: 1).contains(wheel.frame), "Every expanded ring stays on screen")
+            XCTAssertEqual(hub.frame.midX, resting.midX, accuracy: 1, "Opening a group leaves the wheel where it is")
+            XCTAssertEqual(hub.frame.midY, resting.midY, accuracy: 1, "Opening a group leaves the wheel where it is")
             for tool in tools {
-                XCTAssertTrue(wheel.frame.contains(app.buttons["tool.\(tool)"].frame), "Caption inside menu: " + tool)
+                let caption = app.buttons["tool.\(tool)"].frame
+                XCTAssertTrue(wheel.frame.contains(caption), "Caption inside menu: " + tool)
+                XCTAssertTrue(app.frame.insetBy(dx: 1, dy: 1).contains(caption), "Every tool's arc stays on screen: " + tool)
             }
             let captions = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
             captions.name = "Radial captions, " + group; captions.lifetime = .keepAlways; add(captions)
         }
         app.buttons["tool.create"].tap(); app.buttons["tool.primitives"].tap()
         for tool in ["box", "cylinder", "sphere", "torus"] { XCTAssertTrue(app.buttons["tool.\(tool)"].isHittable) }
-        XCTAssertEqual(wheel.frame.width, 552, accuracy: 2, "Three compact concentric rings on the large iPad")
+        for tool in ["box", "cylinder", "sphere", "torus"] {
+            let caption = app.buttons["tool.\(tool)"].frame
+            XCTAssertGreaterThan(hypot(caption.midX - hub.frame.midX, caption.midY - hub.frame.midY), 220,
+                                 "Primitives open on a third ring on the large iPad: " + tool)
+        }
         XCTAssertFalse(app.staticTexts["Drag to move"].exists)
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         shot.name = "Radial toolbar with three rings"; shot.lifetime = .keepAlways; add(shot)
@@ -1057,9 +1065,14 @@ import XCTest
         XCTAssertTrue(app.buttons["tool.box"].waitForNonExistence(timeout: 5), "A center tap still goes back after dragging")
         app.buttons["tool.primitives"].tap()
         app.buttons["tool.box"].tap()
+        XCTAssertTrue(app.buttons["tool.box"].waitForNonExistence(timeout: 5), "Choosing a tool folds the wheel back to its first ring")
+        XCTAssertTrue(app.buttons["tool.create"].isSelected, "Create marks the tool in use")
+        app.buttons["tool.create"].tap(); app.buttons["tool.primitives"].tap()
         XCTAssertTrue(app.buttons["tool.box"].isSelected, "Box waits for Pencil placement on the canvas")
         app.buttons["tool.box"].tap()
+        app.buttons["tool.create"].tap(); app.buttons["tool.primitives"].tap()
         XCTAssertFalse(app.buttons["tool.box"].isSelected)
+        hub.tap(); hub.tap()
         app.buttons["tool.transform"].tap(); app.buttons["tool.mirror"].tap()
         XCTAssertTrue(app.buttons["mirror.cancel"].waitForExistence(timeout: 5))
         XCTAssertFalse(wheel.exists, "Operation controls remain usable during setup")
@@ -1070,7 +1083,11 @@ import XCTest
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.22)).tap()
         XCTAssertTrue(wheel.exists)
         app.buttons["tool.sketch"].tap()
-        for tool in ["line", "rectangle", "curves", "modify", "dimension", "project"] { XCTAssertTrue(app.buttons["tool.\(tool)"].isHittable) }
+        for tool in ["line", "rectangle", "curves", "faceFeatures", "modify", "dimension", "project"] { XCTAssertTrue(app.buttons["tool.\(tool)"].isHittable) }
+        XCTAssertEqual(app.buttons["tool.faceFeatures"].value as? String, "Needs a face", "Off a face, Features is dimmed and says why")
+        app.buttons["tool.faceFeatures"].tap(); app.buttons["tool.hole"].tap()
+        XCTAssertTrue(app.staticTexts["hint.text"].label.hasPrefix("Holes, pegs, and text go on a solid's face"))
+        XCTAssertTrue(app.buttons["tool.hole"].waitForNonExistence(timeout: 5))
         app.buttons["tool.rectangle"].tap()
         app.buttons["tool.rectangle"].tap()
         XCTAssertEqual(app.buttons["tool.rectangle"].value as? String, "Center")
@@ -1083,8 +1100,10 @@ import XCTest
         XCUIDevice.shared.orientation = .portrait
         XCTAssertTrue(hub.waitForExistence(timeout: 5))
         app.buttons["tool.create"].tap(); app.buttons["tool.primitives"].tap()
-        XCTAssertTrue(app.frame.contains(wheel.frame))
-        XCTAssertTrue(app.buttons["tool.torus"].isHittable)
+        for tool in ["box", "cylinder", "sphere", "torus"] {
+            XCTAssertTrue(app.buttons["tool.\(tool)"].isHittable, tool)
+            XCTAssertTrue(app.frame.contains(app.buttons["tool.\(tool)"].frame), "Primitives open on screen in portrait: " + tool)
+        }
         let portrait = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         portrait.name = "Radial toolbar in portrait"; portrait.lifetime = .keepAlways; add(portrait)
     }

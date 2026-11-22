@@ -1926,12 +1926,17 @@ struct WorkspaceView: View {
                 squareButton(.help, label: "Controls") { session.showHelp = true }
                 if radialToolbarEnabled {
                     Button(action: toggleRadialToolbar) {
-                        BrandTile(icon: .more, selected: radialVisible)
+                        // The wheel's own S, so it does not look like the project menu's •••.
+                        SSIconGlyph(icon: .brand, color: radialVisible ? Color("ss-paper") : ink)
+                            .opacity(radialAllowed ? 1 : 0.32)
+                            .frame(width: 43, height: 43)
+                            .background((radialVisible ? violet : Color("ss-neutral")).opacity(radialAllowed ? 1 : 0.45),
+                                        in: RoundedRectangle(cornerRadius: 12))
                     }
                     .frame(minWidth: 48, minHeight: 48)
                     .buttonStyle(.plain).disabled(!radialAllowed)
                     .allowsHitTesting(!session.isPencilDown)
-                    // Help calls it the Tools icon.
+                    // Help calls it the Tools button.
                     .accessibilityLabel("Tools").accessibilityValue(radialVisible ? "Shown" : "Hidden")
                     .accessibilityIdentifier("radial.toggle")
                 }

@@ -122,55 +122,113 @@ import simd
         XCTAssertFalse(RadialToolbarLayout.fits(levels: 2, in: CGRect(x: 0, y: 0, width: 320, height: 700)))
     }
 
-    func testEveryRadialCaptionStaysInsideItsSector() {
-        var configurations: [([ToolbarEntry], Int, Bool)] = [
-            (ToolbarEntry.roots(sketching: false), 0, false),
-            (ToolbarEntry.roots(sketching: true), 0, false),
-            (ToolbarEntry.primitiveTools.map(ToolbarEntry.tool), 2, false)
-        ]
-        for group in ToolGroup.allCases {
-            for level in [0, 1] { configurations.append((ToolbarEntry.children(of: group), level, false)) }
-        }
-        for level in [0, 1] {
-            configurations.append(([.primitives] + ToolbarEntry.primitiveTools.map(ToolbarEntry.tool), level, true))
-        }
-        for sketching in [false, true] {
-            let roots = ToolbarEntry.roots(sketching: sketching, mode: .essentials)
-            configurations.append((roots, 0, false))
-            for case let .group(group) in roots {
-                for level in [0, 1] {
-                    configurations.append((ToolbarEntry.children(of: group, mode: .essentials), level, false))
+    func testRadialGroupsOpenAsArcsBesideThemWithoutMovingTheWheel() {
+        let bounds = CGRect(x: 12, y: 118, width: 1352, height: 826)
+        let base = RadialToolbarLayout.outerRadius(0) + RadialToolbarLayout.rim
+        let inset = RadialToolbarLayout.outerRadius(1) + RadialToolbarLayout.rim
+        let corners = [CGPoint(x: bounds.minX, y: bounds.minY), CGPoint(x: bounds.maxX, y: bounds.minY),
+                       CGPoint(x: bounds.minX, y: bounds.maxY), CGPoint(x: bounds.maxX, y: bounds.maxY),
+                       CGPoint(x: bounds.midX, y: bounds.maxY), CGPoint(x: bounds.maxX, y: bounds.midY)]
+        for mode in WorkspaceMode.allCases {
+            for sketching in [false, true] {
+                let roots = ToolbarEntry.roots(sketching: sketching, mode: mode)
+                for (index, root) in roots.enumerated() {
+                    guard case .group(let group) = root else { continue }
+                    let children = ToolbarEntry.children(of: group, mode: mode)
+                    let anchor = RadialToolbarLayout.angle(index: index, count: roots.count)
+                    let context = "\(group) in \(mode)"
+                    // Where the wheel rests unmoved, every group opens centered beside itself,
+                    // each tool the same width, and the wheel stays put.
+                    let resting = CGPoint(x: bounds.maxX - inset, y: bounds.maxY - inset)
+                    let open = RadialToolbarLayout.wheel(resting: resting, in: bounds, group: (children.count, anchor), nested: nil)
+                    XCTAssertEqual(open.center, resting, context)
+                    XCTAssertEqual(open.arcs.count, 1, context)
+                    XCTAssertEqual(open.arcs[0], RadialToolbarLayout.centeredArc(count: children.count, level: 1, anchor: anchor), context)
+                    XCTAssertFalse(open.arcs[0].isFullRing, "A group's tools never wrap the whole wheel: " + context)
+                    // Parked anywhere, even in a corner, the arc is on screen and touches its group,
+                    // and the first ring stays where it can be reached.
+                    for corner in corners {
+                        let parked = RadialToolbarLayout.clamp(corner, radius: base, in: bounds)
+                        let placed = RadialToolbarLayout.wheel(resting: parked, in: bounds, group: (children.count, anchor), nested: nil)
+                        let arc = placed.arcs[0]
+                        XCTAssertTrue(RadialToolbarLayout.visible(arc, center: placed.center, in: bounds), context)
+                        XCTAssertTrue(arc.contains(angle: anchor), context)
+                        XCTAssertTrue(bounds.contains(CGRect(x: placed.center.x - base, y: placed.center.y - base, width: base * 2, height: base * 2)), context)
+                        XCTAssertGreaterThanOrEqual(arc.step, Double(RadialToolbarLayout.minimumToolWidth / RadialToolbarLayout.middleRadius(1)) - 1e-6, context)
+                    }
                 }
             }
         }
-        for (entries, level, compact) in configurations {
-            for (index, entry) in entries.enumerated() {
-                var subtitles: [String?] = [nil]
-                switch entry {
-                case .group: subtitles = ["Tools"]
-                case .primitives: subtitles = [compact ? "Back to Create" : "Solids"]
-                case .tool(.rectangle): subtitles = ["Corners", "Center"]
-                case .tool(.slot): subtitles = ["Ends", "Center"]
-                default: break
+        // Primitives open beside Primitives, on a third ring.
+        let roots = ToolbarEntry.roots(sketching: false)
+        let create = ToolbarEntry.children(of: .create)
+        let anchor = RadialToolbarLayout.angle(index: roots.firstIndex(of: .group(.create))!, count: roots.count)
+        let nested = (count: ToolbarEntry.primitiveTools.count, index: create.firstIndex(of: .primitives)!)
+        for corner in [CGPoint(x: bounds.maxX, y: bounds.maxY), CGPoint(x: bounds.midX, y: bounds.midY), CGPoint(x: bounds.minX, y: bounds.minY)] {
+            let parked = RadialToolbarLayout.clamp(corner, radius: base, in: bounds)
+            let placed = RadialToolbarLayout.wheel(resting: parked, in: bounds, group: (create.count, anchor), nested: nested)
+            XCTAssertEqual(placed.arcs.count, 2)
+            XCTAssertTrue(placed.arcs[1].contains(angle: placed.arcs[0].angle(nested.index)))
+            for arc in placed.arcs { XCTAssertTrue(RadialToolbarLayout.visible(arc, center: placed.center, in: bounds)) }
+        }
+    }
+
+    func testEveryRadialCaptionStaysInsideItsSector() {
+        // A group's tools open as an arc at any angle (it turns toward open space) and at either
+        // tool width, so check them all the way round.
+        func arcs(count: Int, level: Int) -> [RadialArc] {
+            [RadialToolbarLayout.toolWidth, RadialToolbarLayout.minimumToolWidth].flatMap { width in
+                let step = min(Double(width / RadialToolbarLayout.middleRadius(level)), 2 * .pi / Double(count))
+                return stride(from: 0.0, to: 2 * .pi, by: .pi / 18).map { RadialArc(level: level, start: $0, step: step, count: count) }
+            }
+        }
+        var configurations: [([ToolbarEntry], [RadialArc], Bool)] = []
+        for sketching in [false, true] {
+            for mode in WorkspaceMode.allCases {
+                let roots = ToolbarEntry.roots(sketching: sketching, mode: mode)
+                configurations.append((roots, [.ring(count: roots.count, level: 0)], false))
+                for case let .group(group) in roots {
+                    let children = ToolbarEntry.children(of: group, mode: mode)
+                    configurations.append((children, [.ring(count: children.count, level: 0)] + arcs(count: children.count, level: 1), false))
                 }
-                for subtitle in subtitles {
-                    let title = compact && entry == .primitives ? "Back" : entry.title
-                    let caption = RadialToolbarCaptionLayout(title: title, subtitle: subtitle,
-                                                            index: index, count: entries.count, level: level)
-                    let context = "\(entry.id), ring \(level + 1), \(entries.count) sectors"
-                    XCTAssertTrue(caption.fits, context)
-                    XCTAssertEqual(caption.title.replacingOccurrences(of: "\n", with: " "), title, "No omitted words: " + context)
-                    XCTAssertEqual(caption.subtitleFrame != nil, subtitle != nil, context)
-                    // Independently sample every component's rectangle, including the inner
-                    // edge's midpoint: checking only the caption center misses this regression.
-                    let angle = RadialToolbarLayout.angle(index: index, count: entries.count)
-                    for frame in caption.visibleFrames {
-                        for x in [frame.minX, frame.midX, frame.maxX] {
-                            for y in [frame.minY, frame.midY, frame.maxY] {
-                                XCTAssertGreaterThanOrEqual(hypot(x, y), RadialToolbarLayout.innerRadius(level) + 2.9, context)
-                                XCTAssertLessThanOrEqual(hypot(x, y), RadialToolbarLayout.outerRadius(level) - 2.9, context)
-                                let delta = atan2(sin(atan2(y, x) - angle), cos(atan2(y, x) - angle))
-                                XCTAssertLessThan(abs(delta), .pi / Double(entries.count) - 0.018, context)
+            }
+        }
+        let primitives = ToolbarEntry.primitiveTools.map(ToolbarEntry.tool)
+        configurations.append((primitives, arcs(count: primitives.count, level: 2), false))
+        let compact = [ToolbarEntry.primitives] + primitives
+        configurations.append((compact, [.ring(count: compact.count, level: 0)] + arcs(count: compact.count, level: 1), true))
+        for (entries, rings, compact) in configurations {
+            for arc in rings {
+                for (index, entry) in entries.enumerated() {
+                    var subtitles: [String?] = [nil]
+                    switch entry {
+                    case .group(.faceFeatures): subtitles = [nil, RadialToolbar.needsFaceSubtitle]
+                    case .tool(.rectangle): subtitles = ["Corners", "Center"]
+                    case .tool(.slot): subtitles = ["Ends", "Center"]
+                    default: break
+                    }
+                    let notch = entry.opensTools && !(compact && entry == .primitives)
+                    for subtitle in subtitles {
+                        let title = compact && entry == .primitives ? RadialToolbar.backTitle : entry.title
+                        let angle = arc.angle(index), level = arc.level
+                        let caption = RadialToolbarCaptionLayout(title: title, subtitle: subtitle, angle: angle, sweep: arc.step,
+                                                                level: level, notch: notch)
+                        let context = "\(entry.id), ring \(level + 1), \(entries.count) sectors of \(arc.step) at \(angle)"
+                        XCTAssertTrue(caption.fits, context)
+                        XCTAssertEqual(caption.title.replacingOccurrences(of: "\n", with: " "), title, "No omitted words: " + context)
+                        XCTAssertEqual(caption.subtitleFrame != nil, subtitle != nil, context)
+                        let notchPoint = RadialToolbarCaptionLayout.notchCenter(angle: angle, level: level)
+                        // Independently sample every component's rectangle, including the inner
+                        // edge's midpoint: checking only the caption center misses this regression.
+                        for frame in caption.visibleFrames {
+                            if notch { XCTAssertFalse(frame.contains(notchPoint), "Caption clear of the notch: " + context) }
+                            for x in [frame.minX, frame.midX, frame.maxX] {
+                                for y in [frame.minY, frame.midY, frame.maxY] {
+                                    XCTAssertGreaterThanOrEqual(hypot(x, y), RadialToolbarLayout.innerRadius(level) + 2.9, context)
+                                    XCTAssertLessThanOrEqual(hypot(x, y), RadialToolbarLayout.outerRadius(level) - 2.9, context)
+                                    let delta = atan2(sin(atan2(y, x) - angle), cos(atan2(y, x) - angle))
+                                    XCTAssertLessThan(abs(delta), arc.step / 2 - 0.018, context)
+                                }
                             }
                         }
                     }
@@ -203,6 +261,11 @@ import simd
         XCTAssertEqual(saves.count, 1)
         XCTAssertNil(controller.view.hitTest(CGPoint(x: 200, y: 200), with: nil), "The placement container must pass uncovered canvas input through")
         XCTAssertNil(controller.view.hitTest(CGPoint(x: 600 - 135, y: 400 - 135), with: nil), "Even the wheel's rectangular corners pass through")
+        let arc = RadialToolbarLayout.centeredArc(count: 4, level: 1, anchor: .pi)
+        controller.update(content: Text("Toolbar"), center: CGPoint(x: 600, y: 400), radius: 140, frameRadius: 210, arcs: [arc],
+                          bounds: bounds, onMove: { _ in })
+        XCTAssertNotNil(controller.view.hitTest(CGPoint(x: 600 - 174, y: 400), with: nil), "An open arc takes touches")
+        XCTAssertNil(controller.view.hitTest(CGPoint(x: 600 + 174, y: 400), with: nil), "Beside the arc, the canvas does")
     }
 
     func canvas(_ session: ModelingSession) -> CanvasController {
