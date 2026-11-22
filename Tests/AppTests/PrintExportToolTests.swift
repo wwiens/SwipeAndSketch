@@ -2,7 +2,7 @@ import XCTest
 import simd
 @testable import SwipeAndSketch
 
-/// Export (3MF or STL) and Send to Slicer through the session.
+/// Export (3MF or STL) and Save to Folder through the session.
 @MainActor final class PrintExportToolTests: CanvasTestCase {
 
     /// App preferences these tests change, put back afterwards (hosted tests share the app's settings).
@@ -59,7 +59,7 @@ import simd
         try await settled(session)
         let file = folder.appendingPathComponent("Untitled Project.3mf")
         XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
-        XCTAssertEqual(session.status, "Sent Untitled Project.3mf to \(folder.lastPathComponent)")
+        XCTAssertEqual(session.status, "Saved Untitled Project.3mf to \(folder.lastPathComponent)")
         let first = try Data(contentsOf: file)
         session.chooseTool(.fitTest)
         session.sendToPrinter(.visible, toFolder: true)
@@ -91,7 +91,7 @@ import simd
         XCTAssertNil(session.printSheet, "The sheet closes")
         try await settled(session)
         let file = folder.appendingPathComponent("Untitled Project.stl")
-        XCTAssertEqual(session.status, "Sent Untitled Project.stl to \(folder.lastPathComponent)")
+        XCTAssertEqual(session.status, "Saved Untitled Project.stl to \(folder.lastPathComponent)")
         XCTAssertGreaterThan(triangles(try Data(contentsOf: file)), triangles(selected), "All visible solids, more than the one selected")
     }
 

@@ -582,20 +582,20 @@ import XCTest
         let format = app.segmentedControls["export.format"]
         XCTAssertTrue(format.waitForExistence(timeout: 5))
         format.buttons["3MF"].tap()
-        XCTAssertTrue(app.buttons["print.bed"].waitForExistence(timeout: 5), "3MF has plate options")
-        // The sheet scrolls: the estimate sits below Share.
-        let sheet = app.collectionViews.firstMatch
-        for _ in 0..<3 where !app.buttons["print.share"].exists { sheet.swipeUp() }
+        // Export and Save to Folder are pinned at the foot; the plate layout starts folded.
         XCTAssertTrue(app.buttons["print.share"].exists)
-        XCTAssertTrue(app.buttons["print.chooseFolder"].exists)
+        XCTAssertTrue(app.buttons["print.saveToFolder"].exists)
+        let plate = app.descendants(matching: .any)["print.plate"].firstMatch
+        XCTAssertTrue(plate.waitForExistence(timeout: 5), "3MF has a plate layout")
+        XCTAssertFalse(app.buttons["print.bed"].exists, "Folded until opened")
         attach("Export sheet, 3MF")
-        for _ in 0..<3 where !format.isHittable { sheet.swipeDown() }
+        plate.tap()
+        XCTAssertTrue(app.buttons["print.bed"].waitForExistence(timeout: 5))
+        attach("Export sheet, plate layout open")
         format.buttons["STL"].tap()
-        XCTAssertFalse(app.buttons["print.bed"].waitForExistence(timeout: 2), "STL is exported as modeled")
-        for _ in 0..<3 where !app.buttons["print.share"].exists { sheet.swipeUp() }
+        XCTAssertFalse(plate.waitForExistence(timeout: 2), "STL is exported as modeled")
         XCTAssertTrue(app.buttons["print.share"].exists)
         attach("Export sheet, STL")
-        for _ in 0..<3 where !format.isHittable { sheet.swipeDown() }
         format.buttons["3MF"].tap()
         app.buttons["Cancel"].tap()
         XCTAssertFalse(format.waitForExistence(timeout: 2))
@@ -637,10 +637,13 @@ import XCTest
         }
         app.buttons["Project menu"].tap()
         app.buttons["project.export"].tap()
-        // The estimate is at the foot of the sheet, under the export choices.
+        // The Estimate row sums it up; its page has the figures, parts list, and filament settings.
         XCTAssertTrue(app.segmentedControls["export.format"].waitForExistence(timeout: 5))
+        let summary = app.buttons["export.estimate"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        XCTAssertTrue(summary.label.contains(" g · "), summary.label)
+        summary.tap()
         let filament = app.descendants(matching: .any)["export.estimate.filament"]
-        for _ in 0..<4 where !(filament.exists && filament.isHittable) { app.collectionViews.firstMatch.swipeUp() }
         XCTAssertTrue(filament.waitForExistence(timeout: 5))
         XCTAssertTrue(app.descendants(matching: .any)["export.estimate.cost"].exists)
         let before = filament.label
@@ -726,7 +729,7 @@ import XCTest
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.tap()
         search.typeText("slicer")
-        XCTAssertTrue(app.staticTexts["Send to Slicer"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Save to Folder"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["How Swipe & Sketch works"].exists, "Searching shows only the topics found")
         XCTAssertFalse(app.staticTexts["Pencil"].exists)
         app.buttons["guide.done"].tap()

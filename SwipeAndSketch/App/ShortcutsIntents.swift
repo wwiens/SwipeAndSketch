@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 import UIKit
 
 // Shortcuts and Siri (Phase 1, November 15, 2026): open a project, export it (3MF, STL, or its
-// parts list as CSV), send it to the slicer's print folder, and read its parts list and print
+// parts list as CSV), save it to the folder picked in Export, and read its parts list and print
 // estimate. These only read projects; nothing here ever changes one, so they stay available after
 // the trial like the rest of export. Projects are Home's projects, or any project file a shortcut
 // hands over. The project open in the editor is read from the editor, unsaved changes included.
@@ -38,7 +38,7 @@ private enum ShortcutsError: LocalizedError {
         switch self {
         case .noProject: "Choose a project or a Swipe & Sketch project file."
         case .noSolids(let name): "“\(name)” has no solids to use. Hidden solids count only with Parts set to All."
-        case .noPrintFolder: "There is no print folder yet. In Swipe & Sketch, open Export and choose Choose Print Folder… once."
+        case .noPrintFolder: "There is no folder to save to yet. In Swipe & Sketch, open Export and tap Save to Folder once."
         }
     }
 }
@@ -165,7 +165,7 @@ struct ProjectEntity: AppEntity, IndexedEntity {
             try? await index.deleteAppEntities(ofType: ProjectEntity.self)
             try? await index.indexAppEntities(entities)
         }
-        // Siri's phrases that name a project ("Send Bracket to the slicer…") learn the new names.
+        // Siri's phrases that name a project ("Save Bracket to my folder…") learn the new names.
         SwipeAndSketchShortcuts.updateAppShortcutParameters()
     }
 }
@@ -288,8 +288,8 @@ struct ExportProjectIntent: AppIntent {
 }
 
 struct SendToSlicerIntent: AppIntent {
-    static let title: LocalizedStringResource = "Send to Slicer"
-    static let description = IntentDescription("Saves a project's 3MF or STL into your print folder, replacing the last version, so the slicer opens the newest. Choose the folder once in Export.")
+    static let title: LocalizedStringResource = "Save to Folder"
+    static let description = IntentDescription("Saves a project's 3MF or STL into the folder you picked in Export's Save to Folder, replacing the last copy, so your slicer opens the newest.")
     static let supportedModes: IntentModes = .background
 
     @Parameter(title: "Project") var project: ProjectEntity?
@@ -298,7 +298,7 @@ struct SendToSlicerIntent: AppIntent {
     @Parameter(title: "Parts", default: .visible) var parts: PartsOption
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Send \(\.$project) to the slicer as \(\.$format)") {
+        Summary("Save \(\.$project) to the folder as \(\.$format)") {
             \.$parts
             \.$file
         }
@@ -312,7 +312,7 @@ struct SendToSlicerIntent: AppIntent {
         let export = try await exportData(read, format == .threeMF ? .threeMF : .stl, parts)
         let saved = try await Task.detached(priority: .userInitiated) { try PrintFolder.save(export.data, named: export.name, in: folder) }.value
         return .result(value: IntentFile(fileURL: saved, filename: export.name, type: UTType(filenameExtension: saved.pathExtension)),
-                       dialog: "Sent \(export.name) to \(folder.lastPathComponent).")
+                       dialog: "Saved \(export.name) to \(folder.lastPathComponent).")
     }
 }
 
@@ -383,9 +383,9 @@ struct SwipeAndSketchShortcuts: AppShortcutsProvider {
             "Export with \(.applicationName)"
         ], shortTitle: "Export Project", systemImageName: "square.and.arrow.up")
         AppShortcut(intent: SendToSlicerIntent(), phrases: [
-            "Send \(\.$project) to the slicer with \(.applicationName)",
-            "Send a project to the slicer with \(.applicationName)"
-        ], shortTitle: "Send to Slicer", systemImageName: "printer")
+            "Save \(\.$project) to my folder with \(.applicationName)",
+            "Save a project to my folder with \(.applicationName)"
+        ], shortTitle: "Save to Folder", systemImageName: "printer")
         AppShortcut(intent: GetPartsListIntent(), phrases: [
             "Get a parts list in \(.applicationName)",
             "Show the parts list in \(.applicationName)"

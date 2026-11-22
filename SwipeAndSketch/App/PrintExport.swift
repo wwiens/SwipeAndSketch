@@ -2,9 +2,9 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 // Export: a print-ready 3MF (parts named as in the Model Tree, placed on the printer's plate, with
-// a preview picture) or an STL. The file is shared, or saved straight into a chosen print folder,
+// a preview picture) or an STL. The file is shared, or saved straight into one folder picked once,
 // such as one in iCloud Drive that a slicer on a Mac opens, replacing the last version, so each
-// change is one tap away from the printer (Send to Slicer).
+// change is one tap away from the printer (Save to Folder).
 
 /// The Export sheet (from the project menu or a selection's Export).
 enum PrintSheetMode: String, Identifiable {
@@ -37,7 +37,7 @@ extension PrintLayout {
     }
 }
 
-/// The remembered print folder (a security-scoped bookmark).
+/// The folder Save to Folder remembers (a security-scoped bookmark).
 enum PrintFolder {
     private static let key = "print.folderBookmark"
     static var url: URL? {
@@ -54,7 +54,7 @@ enum PrintFolder {
         UserDefaults.standard.set(try url.bookmarkData(), forKey: key)
     }
 
-    /// Saves an export into the print folder, replacing the last version, so the slicer's recent
+    /// Saves an export into the chosen folder, replacing the last version, so the slicer's recent
     /// file is always the newest. Returns where it went.
     static func save(_ data: Data, named fileName: String, in folder: URL) throws -> URL {
         let access = folder.startAccessingSecurityScopedResource()
@@ -111,7 +111,7 @@ extension ModelingSession {
         }
     }
 
-    /// Writes the 3MF (print-ready) or STL off the main thread, then shares it or saves it into the print folder.
+    /// Writes the 3MF (print-ready) or STL off the main thread, then shares it or saves it into the chosen folder.
     func sendToPrinter(_ choice: PrintParts, toFolder: Bool, format: ModelExport.Format = .threeMF) {
         let parts = printParts(choice)
         guard !parts.isEmpty, !isProjectBusy else { return }
@@ -120,7 +120,7 @@ extension ModelingSession {
         cancelTransient()
         printSheet = nil
         isProjectBusy = true
-        status = toFolder ? "Sending to the print folder…" : "Exporting \(format.title)…"
+        status = toFolder ? "Saving to the folder…" : "Exporting \(format.title)…"
         let layout = printLayout, name = projectName, thumbnail = thumbnailProvider?()
         if let previous = exportItem?.url.deletingLastPathComponent() { try? FileManager.default.removeItem(at: previous) }
         Task.detached(priority: .userInitiated) { [weak self] in
@@ -140,7 +140,7 @@ extension ModelingSession {
         case .success(let url):
             donateExport(format, toFolder: toFolder)
             if toFolder {
-                status = "Sent \(url.lastPathComponent) to \(url.deletingLastPathComponent().lastPathComponent)"
+                status = "Saved \(url.lastPathComponent) to \(url.deletingLastPathComponent().lastPathComponent)"
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
             } else {
                 exportItem = ExportItem(url: url)
@@ -148,34 +148,31 @@ extension ModelingSession {
             }
         case .failure(let error):
             status = "Not exported"
-            saveError = (toFolder ? "Could not save to the print folder. " : "Export failed. ") + error.localizedDescription
+            saveError = (toFolder ? "Could not save to the folder. " : "Export failed. ") + error.localizedDescription
         }
     }
 }
 
-/// Export: the format (3MF or STL), which parts, how a 3MF sits on the plate, and where the file
-/// goes (the print folder a slicer opens, or the share sheet).
+/// Export: which parts and the format up top, with the estimate; a 3MF's plate layout folded
+/// away below; and the two ways out pinned at the foot: Export… (the share sheet: Files, AirDrop,
+/// a slicer app) and Save to Folder (one folder picked once, the last copy replaced each time).
 struct PrintSheet: View {
     @Bindable var session: ModelingSession
     let mode: PrintSheetMode
     @State private var parts = PrintParts.visible
     @State private var choosingFolder = false
+    /// Save to Folder with no folder yet: pick one, then save there as soon as the picker closes.
+    @State private var saveAfterPicking = false
+    @State private var pickedFolder: URL?
+    @State private var showsPlate = false
     @AppStorage("export.format") private var formatName = ModelExport.Format.threeMF.rawValue
     private var format: ModelExport.Format { ModelExport.Format(rawValue: formatName) ?? .threeMF }
 
     var body: some View {
         let count = session.printParts(.visible).count
+        let entries = session.partsList(parts), total = PartsList.total(entries)
         NavigationStack {
             Form {
-                Section {
-                    Picker("Format", selection: $formatName) {
-                        ForEach(ModelExport.Format.allCases, id: \.self) { Text($0.title).tag($0.rawValue) }
-                    }
-                    .pickerStyle(.segmented).accessibilityIdentifier("export.format")
-                } header: { Text("Format") } footer: {
-                    Text(format == .threeMF ? "Print-ready: each part named as in the Model Tree, placed on your plate, with a picture of the view as its preview. Most slicers open it directly." :
-                            "One watertight mesh in millimeters, as modeled, for any slicer or mesh tool. Parts are not named or placed on a plate.")
-                }
                 Section {
                     Picker("Parts", selection: $parts) {
                         Text(count == 1 ? "The visible solid" : "All \(count) visible solids").tag(PrintParts.visible)
@@ -188,62 +185,112 @@ struct PrintSheet: View {
                     .accessibilityIdentifier("print.parts")
                     // Export from a selected group starts with just its solids.
                     .onAppear { if session.selectedGroup != nil, !session.printParts(.selected).isEmpty { parts = .selected } }
-                } header: { Text("Parts") } footer: {
-                    if format == .threeMF { Text("Each part is named as in the Model Tree, so the slicer's object list matches.") }
+                    LabeledContent("Format") {
+                        Picker("Format", selection: $formatName) {
+                            ForEach(ModelExport.Format.allCases, id: \.self) { Text($0.title).tag($0.rawValue) }
+                        }
+                        .pickerStyle(.segmented).labelsHidden().frame(maxWidth: 180)
+                        .accessibilityIdentifier("export.format")
+                    }
+                    NavigationLink {
+                        Form { EstimateSection(session: session, parts: parts) }
+                            .navigationTitle("Estimate").navigationBarTitleDisplayMode(.inline)
+                    } label: {
+                        LabeledContent("Estimate", value: "\(total.weightText) · \(total.lengthText) · \(total.costText(currency: estimateCurrency))")
+                            .monospacedDigit()
+                    }
+                    .accessibilityIdentifier("export.estimate")
+                } footer: {
+                    Text(format == .threeMF ? "3MF keeps each part's Model Tree name, laid out on your plate, so the slicer's object list matches." :
+                            "STL is one watertight mesh in millimeters, as modeled, for any slicer or mesh tool.")
                 }
                 if format == .threeMF {
                     Section {
-                        Picker("Placement", selection: $session.printLayout.placement) {
-                            ForEach(PrintLayout.Placement.allCases, id: \.self) { Text($0.title).tag($0) }
-                        }
-                        .pickerStyle(.segmented).accessibilityIdentifier("print.placement")
-                        Picker("Plate", selection: Binding(get: { session.printLayout.bed }, set: { session.printLayout.bed = $0 })) {
-                            ForEach(PrintLayout.beds, id: \.title) { Text($0.title).tag($0.size) }
-                            if !PrintLayout.beds.contains(where: { $0.size == session.printLayout.bed }) {
-                                Text(session.printLayout.bedTitle).tag(session.printLayout.bed)
+                        DisclosureGroup(isExpanded: $showsPlate) {
+                            Picker("Placement", selection: $session.printLayout.placement) {
+                                ForEach(PrintLayout.Placement.allCases, id: \.self) { Text($0.title).tag($0) }
                             }
+                            .pickerStyle(.segmented).accessibilityIdentifier("print.placement")
+                            Picker("Plate", selection: Binding(get: { session.printLayout.bed }, set: { session.printLayout.bed = $0 })) {
+                                ForEach(PrintLayout.beds, id: \.title) { Text($0.title).tag($0.size) }
+                                if !PrintLayout.beds.contains(where: { $0.size == session.printLayout.bed }) {
+                                    Text(session.printLayout.bedTitle).tag(session.printLayout.bed)
+                                }
+                            }
+                            .accessibilityIdentifier("print.bed")
+                            Text(session.printLayout.placement == .arranged ? "Parts are laid side by side, each resting on the plate, so a lid and its box print together." :
+                                    "Parts keep their places in the model, lifted onto the middle of the plate.")
+                                .font(.footnote).foregroundStyle(Color("ss-muted"))
+                        } label: {
+                            LabeledContent("Plate Layout", value: plateSummary)
+                                .accessibilityIdentifier("print.plate")
                         }
-                        .accessibilityIdentifier("print.bed")
+                        // Seen even folded, since it changes what the slicer does.
                         if !session.printFits(parts) {
                             Text("These parts do not all fit on one plate; the slicer will ask to arrange them.")
                                 .font(.footnote).foregroundStyle(Color("ss-coral"))
                         }
-                    } header: { Text("Plate") } footer: {
-                        Text(session.printLayout.placement == .arranged ? "Parts are laid side by side, each resting on the plate, so a lid and its box print together." :
-                                "Parts keep their places in the model, lifted onto the middle of the plate.")
                     }
                 }
-                Section {
-                    Button {
-                        session.sendToPrinter(parts, toFolder: true, format: format)
-                    } label: {
-                        Label { Text(session.printFolderName.map { "Save to “\($0)”" } ?? "Save to a Print Folder") }
-                            icon: { Image(SSIcon.send.assetName).renderingMode(.template) }
-                    }
-                    .disabled(session.printFolderName == nil).accessibilityIdentifier("print.saveToFolder")
-                    Button(session.printFolderName == nil ? "Choose Print Folder…" : "Change Print Folder…") { choosingFolder = true }
-                        .accessibilityIdentifier("print.chooseFolder")
-                } header: { Text("Send to Slicer") } footer: {
-                    Text("Pick a folder in iCloud Drive once; each send replaces the file there, so the slicer on your Mac always opens the newest version.")
-                }
-                Section {
-                    Button { session.sendToPrinter(parts, toFolder: false, format: format) } label: {
-                        Label { Text("Share or Open in Another App…") }
-                            icon: { Image(SSIcon.export.assetName).renderingMode(.template) }
-                    }
-                    .accessibilityIdentifier("print.share")
-                } footer: { Text("AirDrop to a Mac, save to Files, or open in a slicer or printer app on this iPad.") }
-                // Below the export choices, so they stay in view; scroll for the filament and parts.
-                EstimateSection(session: session, parts: parts)
             }
+            .safeAreaInset(edge: .bottom) { actions }
             .navigationTitle("Export")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { session.printSheet = nil } } }
-            .sheet(isPresented: $choosingFolder) {
-                FolderPicker { url in session.rememberPrintFolder(url) }.ignoresSafeArea()
+            .sheet(isPresented: $choosingFolder, onDismiss: folderPickerClosed) {
+                FolderPicker { url in pickedFolder = url }.ignoresSafeArea()
             }
         }
         .tint(Color("ss-violet"))
+    }
+
+    private var plateSummary: String {
+        let bed = session.printLayout.bed
+        return (session.printLayout.placement == .arranged ? "Arranged" : "As Modeled") + " · \(formatted(bed.x)) × \(formatted(bed.y)) mm"
+    }
+
+    /// Export… first (the usual way out), then the folder save, always in view.
+    private var actions: some View {
+        let muted = Color("ss-muted"), folder = session.printFolderName
+        return VStack(spacing: 6) {
+            Button { session.sendToPrinter(parts, toFolder: false, format: format) } label: {
+                Label { Text("Export \(format.title)…") } icon: { Image(SSIcon.export.assetName).renderingMode(.template) }
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent).controlSize(.large)
+            .accessibilityIdentifier("print.share")
+            Text("Save to Files, AirDrop, or open in a slicer app.")
+                .font(.footnote).foregroundStyle(muted)
+            Button {
+                if folder == nil { saveAfterPicking = true; choosingFolder = true }
+                else { session.sendToPrinter(parts, toFolder: true, format: format) }
+            } label: {
+                Label { Text(folder.map { "Save to “\($0)”" } ?? "Save to Folder…") } icon: { Image(SSIcon.send.assetName).renderingMode(.template) }
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered).controlSize(.large)
+            .accessibilityIdentifier("print.saveToFolder")
+            .padding(.top, 6)
+            HStack(spacing: 4) {
+                Text(folder == nil ? "Pick a folder once, such as one your slicer opens in iCloud Drive. Each save replaces the last copy." :
+                        "Replaces the last copy there, so your slicer opens the newest.")
+                if folder != nil {
+                    Button("Change Folder") { saveAfterPicking = false; choosingFolder = true }
+                        .accessibilityIdentifier("print.chooseFolder")
+                }
+            }
+            .font(.footnote).foregroundStyle(muted).multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 8)
+        .background(.bar)
+    }
+
+    /// A folder picked for Save to Folder is remembered, then saved into at once.
+    private func folderPickerClosed() {
+        defer { pickedFolder = nil; saveAfterPicking = false }
+        guard let url = pickedFolder else { return }
+        session.rememberPrintFolder(url)
+        if saveAfterPicking, session.printFolderName != nil { session.sendToPrinter(parts, toFolder: true, format: format) }
     }
 }
 

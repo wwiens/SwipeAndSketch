@@ -1,6 +1,6 @@
 import Foundation
 
-// Reading a project without opening it for editing (Shortcuts and Siri: export, Send to Slicer,
+// Reading a project without opening it for editing (Shortcuts and Siri: export, Save to Folder,
 // the parts list, and the print estimate). A coordinated read, so a save in progress elsewhere is
 // never read half-written, and never a write: the file stays exactly as it was, whatever happens.
 
@@ -66,7 +66,7 @@ enum ProjectReader {
 }
 
 extension Workspace {
-    /// The solids an export, Send to Slicer, or parts list takes, with their Model Tree names: the
+    /// The solids an export, Save to Folder, or parts list takes, with their Model Tree names: the
     /// visible ones (as the Export sheet), or every solid, hidden ones too.
     func printParts(includingHidden: Bool) -> [ModelExport.PrintPart] {
         let names = bodyNames

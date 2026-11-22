@@ -1269,10 +1269,10 @@ struct DimensionEdit: Identifiable {
     var cameraAction: CameraAction = .align(.top)
     var showHelp = false
     var exportItem: ExportItem?
-    /// The Export sheet (3MF or STL, shared or sent to the slicer), and how a 3MF's parts sit on the plate.
+    /// The Export sheet (3MF or STL, shared or saved to a folder), and how a 3MF's parts sit on the plate.
     var printSheet: PrintSheetMode?
     var printLayout = PrintLayout.stored { didSet { printLayout.store() } }
-    /// The folder Export's Send to Slicer saves into (a slicer on a Mac can open it from iCloud Drive).
+    /// The folder Export's Save to Folder saves into (a slicer on a Mac can open it from iCloud Drive).
     var printFolderName = PrintFolder.name
     /// A picture of the canvas for the 3MF's preview (set by the canvas).
     @ObservationIgnored var thumbnailProvider: (() -> Data?)?

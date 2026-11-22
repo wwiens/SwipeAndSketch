@@ -124,8 +124,8 @@ import simd
         intent.project = entity(url)
         intent.format = .stl
         intent.parts = .visible
-        do { _ = try await intent.perform(); XCTFail("No print folder yet") } catch {
-            XCTAssertTrue(error.localizedDescription.hasPrefix("There is no print folder yet."), error.localizedDescription)
+        do { _ = try await intent.perform(); XCTFail("No folder yet") } catch {
+            XCTAssertTrue(error.localizedDescription.hasPrefix("There is no folder to save to yet."), error.localizedDescription)
         }
         let prints = folder.appendingPathComponent("Prints", isDirectory: true)
         try FileManager.default.createDirectory(at: prints, withIntermediateDirectories: true)
