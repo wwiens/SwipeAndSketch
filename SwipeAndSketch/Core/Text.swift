@@ -64,9 +64,63 @@ enum TextFonts {
 
     /// The fonts this device has (a missing font would silently fall back to another).
     static var available: [(name: String, title: String)] {
-        choices.filter { CTFontCopyPostScriptName(CTFontCreateWithName($0.name as CFString, 12, nil)) as String == $0.name }
+        choices.filter { isInstalled($0.name) }
     }
-    static func title(for name: String) -> String { choices.first { $0.name == name }?.title ?? name }
+
+    /// Whether this device has the font with this PostScript name.
+    static func isInstalled(_ name: String) -> Bool {
+        CTFontCopyPostScriptName(CTFontCreateWithName(name as CFString, 12, nil)) as String == name
+    }
+
+    /// A suggested font's short title, another installed font's full name ("Baskerville SemiBold
+    /// Italic"), or the PostScript name of a font this device lacks.
+    static func title(for name: String) -> String {
+        if let choice = choices.first(where: { $0.name == name }) { return choice.title }
+        guard isInstalled(name) else { return name }
+        return CTFontCopyFullName(CTFontCreateWithName(name as CFString, 12, nil)) as String
+    }
+
+    /// One face of an installed font.
+    struct Face: Hashable, Sendable, Identifiable {
+        /// The PostScript name, as saved in `TextSpec.font`.
+        var name: String
+        var family: String
+        /// "Bold", "Condensed Medium", …
+        var style: String
+        var fullName: String
+        var weight: Double
+        var italic: Bool
+        var id: String { name }
+    }
+
+    /// Every font family this device can draw text with, faces lightest first, uprights before
+    /// italics. Leaves out the system's hidden fonts and color fonts (emoji), which have no outlines
+    /// to cut. Fonts the user installed are included where the system shares them with the app.
+    static func installedFamilies() -> [(family: String, faces: [Face])] {
+        let collection = CTFontCollectionCreateFromAvailableFonts(nil)
+        // The system's list can leave out fonts that still load by name (Courier on a Mac), so the
+        // suggested ones are added by name.
+        let descriptors = ((CTFontCollectionCreateMatchingFontDescriptors(collection) as? [CTFontDescriptor]) ?? []) +
+            available.map { CTFontCopyFontDescriptor(CTFontCreateWithName($0.name as CFString, 12, nil)) }
+        var faces: [String: Face] = [:]
+        for descriptor in descriptors {
+            guard let name = CTFontDescriptorCopyAttribute(descriptor, kCTFontNameAttribute) as? String, !name.hasPrefix("."),
+                  let family = CTFontDescriptorCopyAttribute(descriptor, kCTFontFamilyNameAttribute) as? String, !family.hasPrefix(".") else { continue }
+            let traits = CTFontDescriptorCopyAttribute(descriptor, kCTFontTraitsAttribute) as? [String: Any] ?? [:]
+            let symbolic = (traits[kCTFontSymbolicTrait as String] as? NSNumber)?.uint32Value ?? 0
+            guard symbolic & CTFontSymbolicTraits.traitColorGlyphs.rawValue == 0 else { continue }
+            let style = CTFontDescriptorCopyAttribute(descriptor, kCTFontStyleNameAttribute) as? String ?? "Regular"
+            let fullName = CTFontDescriptorCopyAttribute(descriptor, kCTFontDisplayNameAttribute) as? String ?? name
+            faces[name] = Face(name: name, family: family, style: style, fullName: fullName,
+                               weight: (traits[kCTFontWeightTrait as String] as? NSNumber)?.doubleValue ?? 0,
+                               italic: symbolic & CTFontSymbolicTraits.traitItalic.rawValue != 0)
+        }
+        return Dictionary(grouping: faces.values, by: \.family)
+            .map { family, faces in
+                (family, faces.sorted { ($0.italic ? 1 : 0, $0.weight, $0.style) < ($1.italic ? 1 : 0, $1.weight, $1.style) })
+            }
+            .sorted { $0.family.localizedStandardCompare($1.family) == .orderedAscending }
+    }
 
     /// The outlines of `text` in `font`, capitals `height` tall, centered on `center` and turned
     /// `angle` degrees. Nil when the text has no visible glyphs or the font is missing.

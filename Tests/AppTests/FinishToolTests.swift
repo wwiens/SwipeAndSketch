@@ -35,11 +35,15 @@ import simd
         // Top front edge (y = −20, z = 20): outline segment 0 on the cap.
         tap(controller, SIMD3(0, -20, 20))
         XCTAssertEqual(session.finishDraft?.edges.map(\.name), [ExtrusionEdge(position: .side, index: 1), ExtrusionEdge(position: .cap, index: 0)])
-        XCTAssertNotNil(session.finishPreview)
+        XCTAssertEqual(session.finishDraft?.size, 0, "A fillet starts at 0")
+        XCTAssertNil(session.finishPreview, "Nothing to preview or apply at 0")
+        session.confirmFinish()
         XCTAssertEqual(session.workspace.bodies.first, body, "Drafts never change the document")
+        XCTAssertNotNil(session.finishDraft)
 
         XCTAssertTrue(session.applyDimension(3, target: .finishSize(.fillet)))
         XCTAssertEqual(session.finishDraft?.size, 3)
+        XCTAssertNotNil(session.finishPreview)
         XCTAssertNotNil(controller.finishHandle())
         XCTAssertEqual(controller.dimensionAnnotations().map(\.target), [.finishSize(.fillet)])
         controller.refresh()
@@ -62,6 +66,30 @@ import simd
         XCTAssertEqual(session.workspace.bodies.first?.finishes.count, 1)
     }
 
+    /// Every new fillet or chamfer starts at 0, not at the last size used (user request,
+    /// November 22, 2026).
+    func testEveryNewFinishStartsAtZero() throws {
+        let (session, controller, _) = try boxScene()
+        // Each kind: committed on its first edge, then a new draft on a second edge.
+        let edges: [(EdgeFinish.Kind, SIMD3<Float>, SIMD3<Float>)] = [
+            (.fillet, SIMD3(30, -20, 10), SIMD3(0, -20, 20)),
+            (.chamfer, SIMD3(0, -20, 20), SIMD3(30, 0, 20)),
+        ]
+        for (kind, first, second) in edges {
+            session.chooseTool(kind == .fillet ? .fillet : .chamfer)
+            tap(controller, first)
+            XCTAssertEqual(session.finishDraft?.size, 0, kind.title)
+            XCTAssertFalse(session.applyDimension(0, target: .finishSize(kind)), "Typing 0 is refused")
+            XCTAssertTrue(session.applyDimension(2, target: .finishSize(kind)), session.finishError ?? kind.title)
+            session.confirmFinish()
+            XCTAssertNil(session.finishDraft)
+            session.chooseTool(kind == .fillet ? .fillet : .chamfer)
+            tap(controller, second)
+            XCTAssertNotNil(session.finishDraft, kind.title)
+            XCTAssertEqual(session.finishDraft?.size, 0, "\(kind.title): the next one starts at 0 too, not at 2")
+            session.cancelFinish()
+        }
+    }
 
     func testTappingAnEdgeAgainDeselectsAndSwitchingToolsDiscardsTheDraft() throws {
         let (session, controller, _) = try boxScene()
@@ -94,6 +122,7 @@ import simd
         tap(controller, SIMD3(30, -20, 10))
         session.snapEnabled = false
         let start = try XCTUnwrap(session.finishDraft?.size)
+        XCTAssertEqual(start, 0)
         let handle = try XCTUnwrap(controller.finishHandle())
         controller.pencilBegan(at: handle.center)
         controller.pencilMoved(to: CGPoint(x: handle.center.x, y: handle.center.y - 40))

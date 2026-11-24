@@ -4,5 +4,9 @@
 <dict>
 	<key>com.apple.developer.private-cloud-compute</key>
 	<true/>
+	<key>com.apple.developer.user-fonts</key>
+	<array>
+		<string>app-usage</string>
+	</array>
 </dict>
 </plist>

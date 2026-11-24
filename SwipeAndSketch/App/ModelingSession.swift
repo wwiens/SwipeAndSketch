@@ -1460,6 +1460,10 @@ struct DimensionEdit: Identifiable {
     @ObservationIgnored private var lastText = (text: "Text", font: TextFonts.defaultFont, height: 6.0, depth: 0.8)
     /// Whether the last text was embedded, and its inlay's color (nil: picked against the solid's).
     @ObservationIgnored private var lastTextInlay: (embedded: Bool, color: BodyColor?) = (false, nil)
+    /// Fonts placed lately from All Fonts (not the suggested ones), newest first, kept between launches.
+    private(set) var recentTextFonts = UserDefaults.standard.stringArray(forKey: "recentTextFonts") ?? [] {
+        didSet { UserDefaults.standard.set(recentTextFonts, forKey: "recentTextFonts") }
+    }
     private(set) var threadDraft: ThreadDraft?
     private(set) var threadPreview: Workspace?
     private(set) var screwLidDraft: ScrewLidDraft?
@@ -1522,7 +1526,6 @@ struct DimensionEdit: Identifiable {
     private(set) var finishError: String?
     /// Reason the last keypad value was rejected, if more specific than the default.
     var dimensionError: String?
-    @ObservationIgnored private var lastFinishSize: [EdgeFinish.Kind: Double] = [:]
     /// The edges of the last finish preview that built.
     @ObservationIgnored private var lastFinishPreviewEdges: [PickedEdge] = []
     private var dragContext: (original: Workspace, shape: SketchShape, handle: SketchHandle)?
@@ -3049,6 +3052,9 @@ struct DimensionEdit: Identifiable {
         }
         if let draft = finishDraft {
             if let finishError { return finishError }
+            if draft.size == 0 {
+                return "Drag the double-arrow or tap the \(draft.kind.sizeTitle.lowercased()) to size the \(draft.kind.rawValue). Tap more edges to add them."
+            }
             return "Tap more edges, drag the double-arrow, or tap the \(draft.kind.sizeTitle.lowercased()). Done applies the \(draft.kind.rawValue)."
         }
         if tool == .offsetPlane {
@@ -7169,6 +7175,9 @@ struct DimensionEdit: Identifiable {
         guard let draft = textDraft, let preview = textPreview, !isBuildingText, !isEditingBlocked else { return }
         commit(preview)
         lastText = (draft.text, draft.font, draft.height, draft.depth)
+        if !TextFonts.choices.contains(where: { $0.name == draft.font }) {
+            recentTextFonts = Array(([draft.font] + recentTextFonts.filter { $0 != draft.font }).prefix(5))
+        }
         if draft.depth < 0 { lastTextInlay = (draft.embedded, draft.embedded ? draft.inlayColor : lastTextInlay.color) }
         clearTextDraft()
         if draft.replacing != nil {
@@ -7207,7 +7216,9 @@ struct DimensionEdit: Identifiable {
         guard let spec = draft.spec, spec.isValid, let operation = ExtrusionCut.text(spec, on: draft.plane, depth: draft.depth),
               let index = workspace.bodies.firstIndex(where: { $0.id == draft.bodyID }) else {
             isBuildingText = false
-            textError = draft.text.trimmingCharacters(in: .whitespaces).isEmpty ? "Type the text to add." : "This font cannot draw that text."
+            textError = draft.text.trimmingCharacters(in: .whitespaces).isEmpty ? "Type the text to add."
+                : !TextFonts.isInstalled(draft.font) ? "\(draft.font) isn't on this iPad. Choose another font."
+                : "This font cannot draw that text."
             return
         }
         var next = workspace
@@ -8177,7 +8188,7 @@ struct DimensionEdit: Identifiable {
     func toggleFinishEdge(bodyID: UUID, edge: PickedEdge) {
         guard let kind = tool.finishKind, !isEditingBlocked, workspace.bodies.contains(where: { $0.id == bodyID }) else { return }
         dimensionEdit = nil
-        var draft = finishDraft?.bodyID == bodyID ? finishDraft! : FinishDraft(bodyID: bodyID, kind: kind, edges: [], size: lastFinishSize[kind] ?? kind.defaultSize)
+        var draft = finishDraft?.bodyID == bodyID ? finishDraft! : FinishDraft(bodyID: bodyID, kind: kind, edges: [], size: 0)
         if let index = draft.edges.firstIndex(where: { $0.index == edge.index }) { draft.edges.remove(at: index) } else { draft.edges.append(edge) }
         if draft.edges.isEmpty { clearFinishDraft(); return }
         finishDraft = draft
@@ -8187,10 +8198,11 @@ struct DimensionEdit: Identifiable {
     }
 
     /// Live size change (drag). The preview keeps the last size that fits; Done needs a fitting size.
-    /// `now`: built at once, so whether it fits is known (a typed value).
+    /// `now`: built at once, so whether it fits is known (a typed value). A draft starts at 0 (no
+    /// finish yet, so nothing to preview), and dragging back to the start returns it there.
     func setFinishSize(_ size: Double, now: Bool = false) {
         guard var draft = finishDraft, size.isFinite else { return }
-        let size = min(EdgeFinish.sizeRange.upperBound, max(EdgeFinish.sizeRange.lowerBound, size))
+        let size = size <= 0 ? 0 : min(EdgeFinish.sizeRange.upperBound, max(EdgeFinish.sizeRange.lowerBound, size))
         guard size != draft.size else { if now { finishPreviews.settle { finishPreviewRequest() } }; return }
         draft.size = size
         finishDraft = draft
@@ -8199,8 +8211,7 @@ struct DimensionEdit: Identifiable {
 
     func confirmFinish() {
         finishPreviews.settle { finishPreviewRequest() }
-        guard let draft = finishDraft, finishError == nil, let preview = finishPreview, !isEditingBlocked else { return }
-        lastFinishSize[draft.kind] = draft.size
+        guard let draft = finishDraft, draft.size > 0, finishError == nil, let preview = finishPreview, !isEditingBlocked else { return }
         commit(preview)
         clearFinishDraft()
         selection = .body(draft.bodyID)
@@ -8215,12 +8226,13 @@ struct DimensionEdit: Identifiable {
     /// Rebuilds the draft body through the kernel, off the main thread on screen unless `now`. On
     /// failure the last fitting preview stays visible.
     private func updateFinishPreview(now: Bool = false) {
+        if finishDraft?.size == 0 { finishPreviews.drop(); finishPreview = nil; finishError = nil; return }
         guard let request = finishPreviewRequest() else { return }
         finishPreviews.submit(request, inBackground: buildsPreviewsInBackground && !now)
     }
 
     private func finishPreviewRequest() -> FinishPreviewRequest? {
-        guard let draft = finishDraft, workspace.bodies.contains(where: { $0.id == draft.bodyID }) else { return nil }
+        guard let draft = finishDraft, draft.size > 0, workspace.bodies.contains(where: { $0.id == draft.bodyID }) else { return nil }
         return FinishPreviewRequest(base: workspace, draft: draft)
     }
 
@@ -8238,7 +8250,9 @@ struct DimensionEdit: Identifiable {
     /// A result describes the draft it was built for, which may be older than the current one.
     private func applyFinishPreview(_ output: (FinishDraft, SolidBody?)) {
         let (draft, finished) = output
-        guard finishDraft?.bodyID == draft.bodyID, let index = workspace.bodies.firstIndex(where: { $0.id == draft.bodyID }) else { return }
+        // A size of 0 has no preview; a result still on its way from a larger size is dropped.
+        guard finishDraft?.bodyID == draft.bodyID, finishDraft?.size ?? 0 > 0,
+              let index = workspace.bodies.firstIndex(where: { $0.id == draft.bodyID }) else { return }
         if let finished {
             var next = workspace
             next.bodies[index] = finished

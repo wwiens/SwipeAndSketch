@@ -570,8 +570,9 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                         "Choose Raised, Sunk, or Embedded, tap the height or depth to change them, and tap Done."],
                 tips: ["Letters 5 mm tall and 0.6 to 1 mm deep print cleanly on most printers.",
                        "Sunk text on a face that prints facing up comes out crisper than raised text on a side.",
-                       "Embedded sinks the letters and fills them flush with an inlay, a solid of its own in the color you pick beside it, for a second filament. Export as 3MF with As Modeled, so the inlay stays in its letters and your slicer can give it its own filament.",
-                       "The letters are saved with the project, so they rebuild the same on any iPad.",
+                       "Embedded sinks the letters and fills them flush with an inlay, a solid of its own in the color you pick beside it, for a second filament. A 3MF export keeps the inlay in its letters, the solid and its inlay one object of two parts, so your slicer can give each its own filament.",
+                       "The font menu lists the fonts you've used lately and a few that print well. All Fonts… at its top shows every font on your iPad, by family, each in your text; search for one by name. Bold, plain letters print most cleanly.",
+                       "The letters are saved with the project, so they rebuild the same on any iPad. Only changing the text needs its font on the iPad doing it.",
                        "To change text later, tap a letter and choose Edit Text."])
         case .screwLid:
             HelpOverview(

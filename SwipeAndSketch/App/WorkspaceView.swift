@@ -40,6 +40,7 @@ struct WorkspaceView: View {
     @AppStorage(WorkspaceMode.tipsDefaultsKey) private var showTips = true
     @State private var configuredUITestPreferences = false
     @State private var showExtrusionOptions = false
+    @State private var showTextFonts = false
     @AppStorage("radialToolbarEnabled") private var radialToolbarEnabled = true
     @AppStorage("radialToolbarX") private var radialToolbarX = -1.0
     @AppStorage("radialToolbarY") private var radialToolbarY = -1.0
@@ -283,6 +284,11 @@ struct WorkspaceView: View {
         .sheet(item: $session.exportItem) { item in ShareSheet(url: item.url).ignoresSafeArea() }
         .sheet(item: $session.printSheet) { mode in PrintSheet(session: session, mode: mode) }
         .sheet(isPresented: $showImport) { ImportSheet(session: session) { showImport = false } }
+        .sheet(isPresented: $showTextFonts) {
+            TextFontBrowser(current: session.textDraft?.font ?? TextFonts.defaultFont, sample: session.textDraft?.text ?? "",
+                            onChoose: { session.setTextFont($0); showTextFonts = false }, onCancel: { showTextFonts = false })
+        }
+        .onChange(of: session.textDraft == nil) { _, gone in if gone { showTextFonts = false } }
         .sheet(item: Binding(get: { session.svgImport }, set: { if $0 == nil { session.cancelSVGImport() } })) { request in
             SVGImportSheet(session: session, request: request).presentationSizing(.page)
         }
@@ -949,7 +955,7 @@ struct WorkspaceView: View {
             AnyView(transformMenu(solid: false))
         }
         if !contents.bodies.isEmpty {
-            stripButton("Export", icon: .export, id: "selection.export") { session.printSheet = .export }
+            stripButton("Export", icon: .export, id: "selection.export") { session.printSheet = .selection }
         }
     }
 
@@ -989,7 +995,7 @@ struct WorkspaceView: View {
             }
         } label: { StripLabel(title: "Color", icon: .color, showsMenu: true) }
             .accessibilityLabel("Color").accessibilityIdentifier("selection.color")
-        stripButton("Export", icon: .export, id: "selection.export") { session.printSheet = .export }
+        stripButton("Export", icon: .export, id: "selection.export") { session.printSheet = .selection }
     }
 
     /// Several edges of one solid picked together: Fillet and Chamfer take them all.
@@ -1823,6 +1829,39 @@ struct WorkspaceView: View {
         .accessibilityIdentifier("hole.size")
     }
 
+    /// The Text tool's font menu (November 24, 2026): All Fonts… for every font on the iPad, the font
+    /// in use and those used lately from All Fonts, then the suggested fonts.
+    private func textFontMenu(_ draft: TextDraft) -> some View {
+        let suggested = Set(TextFonts.choices.map(\.name))
+        var others: [String] = []
+        for name in [draft.font] + session.recentTextFonts where !suggested.contains(name) && !others.contains(name) {
+            if name == draft.font || TextFonts.isInstalled(name) { others.append(name) }
+        }
+        return Menu {
+            // All Fonts… first: the menu can be taller than the room above the bar.
+            Section {
+                Button("All Fonts…") { showTextFonts = true }.accessibilityIdentifier("text.allFonts")
+            }
+            if !others.isEmpty {
+                Section("Recent") {
+                    ForEach(others, id: \.self) { name in
+                        Button(name == draft.font ? "\(TextFonts.title(for: name)) (in use)" : TextFonts.title(for: name)) { session.setTextFont(name) }
+                    }
+                }
+            }
+            Section("Suggested") {
+                ForEach(TextFonts.available, id: \.name) { font in
+                    Button(font.name == draft.font ? "\(font.title) (in use)" : font.title) { session.setTextFont(font.name) }
+                }
+            }
+        } label: {
+            Text(TextFonts.title(for: draft.font)).font(.system(size: 15, weight: .medium)).padding(.horizontal, 6).lineLimit(1)
+                .frame(maxWidth: 200)
+        }
+        .menuOrder(.fixed)  // as listed, though the menu opens upward from the bar
+        .accessibilityIdentifier("text.font")
+    }
+
     /// An operation's own controls, in place of the dock (part 4 of 4: split so no one SwiftUI type nests too deep).
     @ViewBuilder private var operationControlsD: some View {
         if let draft = session.textDraft {
@@ -1831,14 +1870,7 @@ struct WorkspaceView: View {
                     TextField("Text", text: Binding(get: { draft.text }, set: { session.setText($0) }))
                         .font(.system(size: 16)).textFieldStyle(.roundedBorder).frame(width: 200)
                         .autocorrectionDisabled().accessibilityIdentifier("text.content")
-                    Menu {
-                        ForEach(TextFonts.available, id: \.name) { font in
-                            Button(font.name == draft.font ? "\(font.title) (in use)" : font.title) { session.setTextFont(font.name) }
-                        }
-                    } label: {
-                        Text(TextFonts.title(for: draft.font)).font(.system(size: 15, weight: .medium)).padding(.horizontal, 6).lineLimit(1)
-                    }
-                    .accessibilityIdentifier("text.font")
+                    textFontMenu(draft)
                     Picker("Style", selection: Binding(get: { draft.style }, set: { session.setTextStyle($0) })) {
                         ForEach(TextStyle.allCases, id: \.self) { Text($0.title).tag($0) }
                     }

@@ -26,6 +26,32 @@ final class TextTests: XCTestCase {
         XCTAssertFalse(TextFonts.available.isEmpty)
     }
 
+    func testEveryInstalledFontIsListedAndCanDrawText() throws {
+        let families = TextFonts.installedFamilies()
+        let faces = families.flatMap(\.faces)
+        XCTAssertGreaterThan(families.count, 20, "The iPad's own fonts")
+        XCTAssertEqual(families.map(\.family), families.map(\.family).sorted { $0.localizedStandardCompare($1) == .orderedAscending })
+        XCTAssertEqual(Set(faces.map(\.name)).count, faces.count, "Each face once")
+        XCTAssertFalse(faces.contains { $0.name.hasPrefix(".") || $0.family.hasPrefix(".") }, "No hidden system fonts")
+        XCTAssertFalse(faces.contains { $0.family == "Apple Color Emoji" }, "Color fonts have no outlines to cut")
+        for choice in TextFonts.available { XCTAssertTrue(faces.contains { $0.name == choice.name }, choice.name) }
+        // Uprights before italics.
+        let helvetica = try XCTUnwrap(families.first { $0.family == "Helvetica" }?.faces)
+        XCTAssertEqual(helvetica.firstIndex { $0.italic }.map { idx in helvetica[idx...].allSatisfy(\.italic) }, true)
+
+        // A font outside the suggested ones works like any other.
+        let baskerville = try XCTUnwrap(faces.first { $0.name == "Baskerville-SemiBoldItalic" })
+        XCTAssertTrue(TextFonts.isInstalled(baskerville.name))
+        XCTAssertEqual(TextFonts.title(for: baskerville.name), "Baskerville SemiBold Italic")
+        let text = try XCTUnwrap(TextSpec.make("Ag", font: baskerville.name, height: 8, center: .zero, angle: 0))
+        XCTAssertTrue(text.isValid)
+        XCTAssertEqual(text.font, baskerville.name)
+
+        XCTAssertEqual(TextFonts.title(for: "Helvetica-Bold"), "Helvetica Bold")
+        XCTAssertFalse(TextFonts.isInstalled("NoSuchFont-Bold"))
+        XCTAssertEqual(TextFonts.title(for: "NoSuchFont-Bold"), "NoSuchFont-Bold")
+    }
+
     func testEmbossRaisesAndDebossSinksTheLetters() throws {
         let block = try box(depth: 20)
         var raised = block

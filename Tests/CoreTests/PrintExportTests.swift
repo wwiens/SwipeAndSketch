@@ -90,6 +90,39 @@ final class PrintExportTests: XCTestCase {
         XCTAssertThrowsError(try unzip(["-p", file.url.path, "Metadata/thumbnail.png"]), "No picture unless given") { _ in }
     }
 
+    /// November 22, 2026: Bambu Studio loaded embedded text's inlay as an object of its own,
+    /// arranged beside its solid. A solid and its inlay are one object of two parts now.
+    func testEmbeddedTextPrintsAsOneObjectOfTwoPartsKeptTogether() throws {
+        let top = try XCTUnwrap(SketchPlane.through(.init(0, 0, 20), normal: .init(0, 0, 1)))
+        let spec = try XCTUnwrap(TextSpec.make("HI", font: TextFonts.defaultFont, height: 10, center: .zero, angle: 0))
+        var base = try box(-30, -20, 30, 20, depth: 20)
+        let text = try XCTUnwrap(ExtrusionCut.text(spec, on: top, depth: -1))
+        base.cuts.append(text)
+        let inlay = try XCTUnwrap(SolidBody.textInlay(for: text, color: .black, name: "Box Inlay"))
+        let lid = try box(-30, -20, 30, 20, depth: 5, at: 20)
+        let parts: [ModelExport.PrintPart] = [.init(body: base, name: "Box"), .init(body: lid, name: "Lid"), .init(body: inlay, name: "Box Inlay")]
+        XCTAssertEqual(ModelExport.printObjects(parts), [[0, 2], [1]])
+
+        let file = try read(try ModelExport.threeMF(parts, title: "Sign", layout: PrintLayout(placement: .arranged, bed: [256, 256]), thumbnail: nil))
+        // Each part's mesh, then the box's object made of its own mesh and the inlay's.
+        XCTAssertEqual(file.names, ["Box", "Lid", "Box Inlay", "Box"])
+        XCTAssertTrue(file.model.contains("<object id=\"4\" type=\"model\" name=\"Box\">\n   <components>\n    <component objectid=\"1\"/>\n    <component objectid=\"3\"/>\n   </components>"))
+        XCTAssertTrue(file.model.contains("<basematerials id=\"5\">"))
+        XCTAssertTrue(file.model.contains("name=\"Box Inlay\" pid=\"5\""), "The inlay keeps its color for the slicer's filament")
+        // Two items on the plate, side by side: the inlay moves with its box, not beside it.
+        XCTAssertTrue(file.model.contains("<item objectid=\"4\""))
+        XCTAssertTrue(file.model.contains("<item objectid=\"2\""))
+        XCTAssertFalse(file.model.contains("<item objectid=\"3\""))
+        XCTAssertEqual(file.transforms.count, 2)
+
+        // An inlay exported without its solid, or moved off its letters, prints on its own.
+        XCTAssertEqual(ModelExport.printObjects([parts[2]]), [[0]])
+        var moved = inlay
+        moved.profile.plane = try XCTUnwrap(SketchPlane.through(.init(0, 0, 40), normal: .init(0, 0, 1)))
+        moved.cuts[0].profile.plane = moved.profile.plane
+        XCTAssertEqual(ModelExport.printObjects([parts[0], .init(body: moved, name: "Moved")]), [[0], [1]])
+    }
+
     func testTooManyPartsAreReportedAsNotFitting() {
         let big = (min: SIMD3<Double>(0, 0, 0), max: SIMD3<Double>(150, 150, 10))
         let result = PrintLayout.Placement.offsets(for: [big, big, big, big, big], layout: PrintLayout(placement: .arranged, bed: [256, 256]))

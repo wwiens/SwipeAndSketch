@@ -26,7 +26,6 @@ struct EdgeFinish: Codable, Equatable, Identifiable, Sendable {
         var title: String { rawValue.capitalized }
         /// The keypad label: a fillet has a radius, a chamfer a setback distance.
         var sizeTitle: String { self == .fillet ? "Radius" : "Distance" }
-        var defaultSize: Double { self == .fillet ? 1 : 0.5 }
     }
     var id = UUID()
     var kind: Kind

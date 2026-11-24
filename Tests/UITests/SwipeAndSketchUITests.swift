@@ -579,26 +579,33 @@ import XCTest
 
         app.buttons["Project menu"].tap()
         app.buttons["project.export"].tap()
+        // Quick by default: what goes out, then Export and Save to Folder; the settings are in Options.
+        let options = app.buttons["export.options"]
+        XCTAssertTrue(options.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["print.share"].exists)
+        XCTAssertTrue(app.buttons["print.saveToFolder"].exists)
+        XCTAssertFalse(app.segmentedControls["export.format"].exists, "Format is in Options")
+        attach("Export sheet")
+        options.tap()
         let format = app.segmentedControls["export.format"]
         XCTAssertTrue(format.waitForExistence(timeout: 5))
         format.buttons["3MF"].tap()
-        // Export and Save to Folder are pinned at the foot; the plate layout starts folded.
-        XCTAssertTrue(app.buttons["print.share"].exists)
-        XCTAssertTrue(app.buttons["print.saveToFolder"].exists)
-        let plate = app.descendants(matching: .any)["print.plate"].firstMatch
-        XCTAssertTrue(plate.waitForExistence(timeout: 5), "3MF has a plate layout")
-        XCTAssertFalse(app.buttons["print.bed"].exists, "Folded until opened")
-        attach("Export sheet, 3MF")
-        plate.tap()
-        XCTAssertTrue(app.buttons["print.bed"].waitForExistence(timeout: 5))
-        attach("Export sheet, plate layout open")
+        XCTAssertTrue(app.buttons["print.bed"].waitForExistence(timeout: 5), "3MF has a plate")
+        attach("Export options, 3MF")
         format.buttons["STL"].tap()
-        XCTAssertFalse(plate.waitForExistence(timeout: 2), "STL is exported as modeled")
-        XCTAssertTrue(app.buttons["print.share"].exists)
-        attach("Export sheet, STL")
+        XCTAssertFalse(app.buttons["print.bed"].waitForExistence(timeout: 2), "STL is exported as modeled")
+        attach("Export options, STL")
+        app.buttons["export.optionsDone"].tap()
+        XCTAssertTrue(options.waitForExistence(timeout: 5))
+        XCTAssertTrue(options.label.contains(".stl"), options.label)
+        XCTAssertTrue(app.buttons["print.share"].label.contains("STL"), app.buttons["print.share"].label)
+        options.tap()
+        XCTAssertTrue(format.waitForExistence(timeout: 5))
         format.buttons["3MF"].tap()
+        app.buttons["export.optionsDone"].tap()
+        XCTAssertTrue(options.waitForExistence(timeout: 5))
         app.buttons["Cancel"].tap()
-        XCTAssertFalse(format.waitForExistence(timeout: 2))
+        XCTAssertFalse(options.waitForExistence(timeout: 2))
     }
 
     /// The Text bar's Raised | Sunk | Embedded switch and the inlay's color fit beside the text field,
@@ -628,6 +635,39 @@ import XCTest
         XCUIDevice.shared.orientation = .portrait
     }
 
+    /// The Text tool's font menu: the suggested fonts, then All Fonts… for every font on the iPad,
+    /// searchable, each face shown in the text being placed.
+    func testTextFontMenuOpensAllFontsAndPicksAnyFont() {
+        continueAfterFailure = false
+        let app = app(arguments: ["--ui-testing-solid", "--ui-testing-text-embedded"])
+        func attach(_ name: String) {
+            let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); shot.name = name; shot.lifetime = .keepAlways; add(shot)
+        }
+        let font = app.buttons["text.font"]
+        XCTAssertTrue(font.waitForExistence(timeout: 20))
+        font.tap()
+        XCTAssertTrue(app.buttons["Futura Bold"].waitForExistence(timeout: 5), "The suggested fonts")
+        attach("Font menu")
+        app.buttons["All Fonts…"].tap()
+        let search = app.searchFields["Search fonts"]
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["textFonts.face.Helvetica-Bold"].waitForExistence(timeout: 5), "The font in use, its family open")
+        attach("All Fonts")
+        search.tap()
+        search.typeText("Baskerville")
+        let face = app.buttons["textFonts.face.Baskerville-SemiBoldItalic"]
+        XCTAssertTrue(face.waitForExistence(timeout: 5))
+        attach("All Fonts, searching")
+        face.tap()
+        XCTAssertFalse(search.waitForExistence(timeout: 2), "Choosing a face closes the sheet")
+        XCTAssertEqual(font.label, "Baskerville SemiBold Italic")
+        XCTAssertTrue(app.buttons["text.confirm"].waitForExistence(timeout: 5))
+        attach("Text in Baskerville")
+        font.tap()
+        XCTAssertTrue(app.buttons["Baskerville SemiBold Italic (in use)"].waitForExistence(timeout: 5), "The font in use is listed in the menu")
+        attach("Font menu, font in use")
+    }
+
     func testExportEstimatesFilamentAndListsParts() {
         continueAfterFailure = false
         let app = app(arguments: ["--ui-testing-solid"])
@@ -637,15 +677,17 @@ import XCTest
         }
         app.buttons["Project menu"].tap()
         app.buttons["project.export"].tap()
-        // The Estimate row sums it up; its page has the figures, parts list, and filament settings.
-        XCTAssertTrue(app.segmentedControls["export.format"].waitForExistence(timeout: 5))
-        let summary = app.buttons["export.estimate"]
+        // The card gives the weight; Options has the figures, parts list, and filament settings.
+        let summary = app.buttons["export.options"]
         XCTAssertTrue(summary.waitForExistence(timeout: 5))
-        XCTAssertTrue(summary.label.contains(" g · "), summary.label)
+        XCTAssertTrue(summary.label.contains(" g of filament"), summary.label)
         summary.tap()
+        // The estimate is the last section of Options, built as it scrolls into view.
         let filament = app.descendants(matching: .any)["export.estimate.filament"]
+        let cost = app.descendants(matching: .any)["export.estimate.cost"]
+        for _ in 0..<3 where !cost.waitForExistence(timeout: 2) { app.swipeUp() }
         XCTAssertTrue(filament.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.descendants(matching: .any)["export.estimate.cost"].exists)
+        XCTAssertTrue(cost.exists)
         let before = filament.label
         XCTAssertTrue(before.contains(" g · ") && before.hasSuffix(" m"), before)
         attach("Export sheet with estimate")
@@ -800,6 +842,78 @@ import XCTest
         app.launch()
         return app
     }
+    /// A screenshot tour of every dialog, sheet, panel, and menu in a real project (opened from Home,
+    /// as the app does), for checking their colors with the device in Light and in Dark Mode.
+    /// Run it once in each appearance; it only fails if the project doesn't open.
+    func testDialogColorTour() {
+        continueAfterFailure = true
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing-documents", "--reset-document-tests"]
+        app.launch()
+        let style = UITraitCollection.current.userInterfaceStyle == .dark ? "dark" : "light"
+        func shot(_ name: String) {
+            let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); shot.name = "\(style) \(name)"; shot.lifetime = .keepAlways; add(shot)
+        }
+        func tap(_ id: String, wait: TimeInterval = 5) -> Bool {
+            let button = app.buttons[id]
+            guard button.waitForExistence(timeout: wait), button.isHittable else { return false }
+            button.tap(); return true
+        }
+        /// Closes whatever is up: its own button, Done, or Cancel.
+        func close(_ ids: [String]) {
+            for id in ids + ["Done", "Cancel"] where tap(id, wait: 1) { sleep(1); return }
+        }
+        func menu(_ id: String) -> Bool { tap("Project menu", wait: 10) && tap(id) }
+        let title = app.staticTexts["project.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 30), "The project opens")
+        sleep(1); shot("01 Editor")
+
+        if tap("Project menu") { sleep(1); shot("02 Project menu"); app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.75)).tap() }
+        if menu("project.import") { sleep(1); shot("03 Import"); close(["import.cancel"]) }
+        if menu("project.export") {
+            sleep(1); shot("04 Export")
+            if tap("export.options") { sleep(1); shot("05 Export options"); _ = tap("export.optionsDone") }
+            close([])
+        }
+        if menu("project.settings") {
+            sleep(1); shot("06 Settings")
+            if tap("settings.provider.claude") { sleep(1); shot("07 Settings, Claude"); app.navigationBars.buttons.element(boundBy: 0).tap() }
+            close(["settings.done"])
+        }
+        if menu("project.purchases") { sleep(2); shot("08 Purchases"); close(["purchase.done"]) }
+        if menu("project.about") { sleep(1); shot("09 About"); close([]) }
+        if menu("project.notes") { sleep(1); shot("10 Notes"); close(["notes.close"]) }
+        if tap("items.toggle") {
+            sleep(1); shot("11 Model Tree")
+            let row = app.buttons["item.Body 01"]
+            if row.waitForExistence(timeout: 3) {
+                row.press(forDuration: 1.2); sleep(1); shot("12 Model Tree row menu")
+                if tap("Rename", wait: 2) { sleep(1); shot("13 Rename alert"); close([]) } else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.9)).tap() }
+            }
+            _ = tap("items.toggle")
+        }
+        if tap("assistant.toggle") { sleep(1); shot("14 Assistant"); close(["assistant.close"]) }
+        if tap("hint.help") {
+            sleep(1); shot("15 Help card")
+            if tap("hint.controls", wait: 2) { sleep(1); shot("16 Controls guide"); close(["guide.done"]) }
+            close(["help.close"])
+        }
+        if tap("dimension.width", wait: 2) { sleep(1); shot("17 Keypad"); close(["keypad.cancel"]) }
+        for group in ["tool.create", "tool.edges", "tool.planes"] where tap(group, wait: 2) {
+            sleep(1); shot("18 Dock group \(group)"); _ = tap(group, wait: 1)
+        }
+        if menu("project.new") { sleep(2); shot("19 New Project"); close(["templates.cancel"]) }
+        if menu("project.saveAs") { sleep(2); shot("20 Save As (Files)"); close([]) }
+
+        if tap("project.home") {
+            sleep(2); shot("21 Home")
+            if tap("home.settings") { sleep(1); shot("22 Home Settings"); close(["settings.done"]) }
+            if tap("home.about") { sleep(1); shot("23 Home About"); close([]) }
+            if tap("home.blank") { sleep(2); shot("24 Home New Project"); close(["templates.cancel"]) }
+            if tap("home.browse") { sleep(2); shot("25 Home Browse (Files)"); close([]) }
+        }
+    }
+
     func testFilesSaveAsCreatesIndependentCopyAndBrowserCreatesNamedProject() {
         continueAfterFailure = false
         XCUIDevice.shared.orientation = .landscapeLeft

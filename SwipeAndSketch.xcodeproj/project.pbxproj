@@ -118,6 +118,7 @@
 		A71C00000000000000000001 /* SwipeAndSketch/App/RadialToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71C00000000000000000002 /* SwipeAndSketch/App/RadialToolbar.swift */; };
 		7A0C4E5100000000000000A1 /* SwipeAndSketch/App/TouchHighlights.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0C4E5100000000000000A2 /* SwipeAndSketch/App/TouchHighlights.swift */; };
 		7A0C4E5100000000000000C1 /* SwipeAndSketch/App/ImportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0C4E5100000000000000C2 /* SwipeAndSketch/App/ImportSheet.swift */; };
+		7F0E7F0B1A2C3D4E5F600701 /* SwipeAndSketch/App/TextFontBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0E7F0B1A2C3D4E5F600702 /* SwipeAndSketch/App/TextFontBrowser.swift */; };
 		A903D1F2E888CDB65F777F37 /* SwipeAndSketch/Core/ConstructionPlanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B591D3990DE4944AEEBE5949 /* SwipeAndSketch/Core/ConstructionPlanes.swift */; };
 		A913BEAD12FF446190001001 /* SwipeAndSketch/App/NotesPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A913BEAD12FF446190001002 /* SwipeAndSketch/App/NotesPanel.swift */; };
 		A9841ED803C54B6AB22D8510 /* SwipeAndSketch/Canvas/ViewCube.swift in Sources */ = {isa = PBXBuildFile; fileRef = B105C9AC4FBD48D2A4D07365 /* SwipeAndSketch/Canvas/ViewCube.swift */; };
@@ -328,6 +329,7 @@
 		A71C00000000000000000002 /* SwipeAndSketch/App/RadialToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/RadialToolbar.swift; sourceTree = SOURCE_ROOT; };
 		7A0C4E5100000000000000A2 /* SwipeAndSketch/App/TouchHighlights.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/TouchHighlights.swift; sourceTree = SOURCE_ROOT; };
 		7A0C4E5100000000000000C2 /* SwipeAndSketch/App/ImportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/ImportSheet.swift; sourceTree = SOURCE_ROOT; };
+		7F0E7F0B1A2C3D4E5F600702 /* SwipeAndSketch/App/TextFontBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/TextFontBrowser.swift; sourceTree = SOURCE_ROOT; };
 		A7A1F6B9CC71D8BDE4F61DB8 /* SwipeAndSketch/Core/Scale.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/Core/Scale.swift; sourceTree = SOURCE_ROOT; };
 		A913BEAD12FF446190001002 /* SwipeAndSketch/App/NotesPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeAndSketch/App/NotesPanel.swift; sourceTree = SOURCE_ROOT; };
 		AC7E921DE81906840AB5A5A3 /* Tests/AppTests/MultiSelectToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/AppTests/MultiSelectToolTests.swift; sourceTree = SOURCE_ROOT; };
@@ -537,6 +539,7 @@
 				A71C00000000000000000002 /* SwipeAndSketch/App/RadialToolbar.swift */,
 				7A0C4E5100000000000000A2 /* SwipeAndSketch/App/TouchHighlights.swift */,
 				7A0C4E5100000000000000C2 /* SwipeAndSketch/App/ImportSheet.swift */,
+				7F0E7F0B1A2C3D4E5F600702 /* SwipeAndSketch/App/TextFontBrowser.swift */,
 				FCC661DB4C4744F5B68CDB8C /* SwipeAndSketch/App/SwipeSketchIcon.swift */,
 				FABAEDA45F6342B7865522C6 /* SwipeAndSketch/Core/AssistantWorkbench.swift */,
 				613F3938402A4A92B06DFE19 /* SwipeAndSketch/Assistant/AssistantTools.swift */,
@@ -974,6 +977,7 @@
 				A71C00000000000000000001 /* SwipeAndSketch/App/RadialToolbar.swift in Sources */,
 				7A0C4E5100000000000000A1 /* SwipeAndSketch/App/TouchHighlights.swift in Sources */,
 				7A0C4E5100000000000000C1 /* SwipeAndSketch/App/ImportSheet.swift in Sources */,
+				7F0E7F0B1A2C3D4E5F600701 /* SwipeAndSketch/App/TextFontBrowser.swift in Sources */,
 				0A10E23B58BA40F8BA1C9AB2 /* SwipeAndSketch/App/SwipeSketchIcon.swift in Sources */,
 				D2B18F60759549EAAD92C8CB /* SwipeAndSketch/Core/AssistantWorkbench.swift in Sources */,
 				FF0D01DB7ED548A28868B580 /* SwipeAndSketch/Assistant/AssistantTools.swift in Sources */,

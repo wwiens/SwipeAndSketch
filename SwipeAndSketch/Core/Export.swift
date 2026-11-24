@@ -120,7 +120,12 @@ enum ModelExport {
     /// in their object lists), placed on the plate by `layout`, with a preview picture when given.
     static func threeMF(_ parts: [PrintPart], title: String, layout: PrintLayout?, thumbnail: Data?, date: Date = Date()) throws -> Data {
         let meshes = try meshes(parts.map(\.body))
-        let offsets = layout.map { PrintLayout.Placement.offsets(for: meshes.map(bounds), layout: $0).offsets } ?? meshes.map { _ in .zero }
+        // A solid and the inlays filling its sunk text print as one object of several parts (the
+        // 3MF's components), which slicers load as one object, a filament per part, kept together
+        // on the plate (November 22, 2026).
+        let objects = printObjects(parts)
+        let boxes = objects.compactMap { members in union(members.map { bounds(meshes[$0]) }) }
+        let offsets = layout.map { PrintLayout.Placement.offsets(for: boxes, layout: $0).offsets } ?? objects.map { _ in .zero }
         let day = ISO8601DateFormatter.string(from: date, timeZone: .current, formatOptions: [.withFullDate])
         // One string grown in place (the same text as before), not a string per vertex and triangle
         // joined at the end, which held the model two or three times over (November 8, 2026).
@@ -140,7 +145,9 @@ enum ModelExport {
         // for multicolor prints. The materials resource takes the id after the objects'.
         let colors = parts.map { $0.body.color ?? .gray }
         let palette = parts.contains { $0.body.color != nil } ? BodyColor.allCases.filter(colors.contains) : []
-        let materials = parts.count + 1
+        // Ids: each part's mesh object, then an object per several-part print object, then the materials.
+        let assemblies = objects.filter { $0.count > 1 }
+        let materials = parts.count + assemblies.count + 1
         if !palette.isEmpty {
             lines.append("  <basematerials id=\"\(materials)\">")
             for color in palette { lines.append("   <base name=\"\(color.title)\" displaycolor=\"\(color.hex)FF\"/>") }
@@ -159,12 +166,22 @@ enum ModelExport {
             lines.append("   </mesh>")
             lines.append("  </object>")
         }
+        for (index, members) in assemblies.enumerated() {
+            lines.append("  <object id=\"\(parts.count + index + 1)\" type=\"model\" name=\"\(escape(parts[members[0]].name))\">")
+            lines.append("   <components>")
+            for member in members { lines.append("    <component objectid=\"\(member + 1)\"/>") }
+            lines.append("   </components>")
+            lines.append("  </object>")
+        }
         lines.append(" </resources>")
         lines.append(" <build>")
-        for (index, move) in offsets.enumerated() {
+        var assembly = parts.count
+        for (members, move) in zip(objects, offsets) {
+            let id: Int
+            if members.count > 1 { assembly += 1; id = assembly } else { id = members[0] + 1 }
             // Placed by the item's transform (3MF rows: the last three numbers are the translation).
             let transform = move == .zero ? "" : " transform=\"1 0 0 0 1 0 0 0 1 \(number(move.x)) \(number(move.y)) \(number(move.z))\""
-            lines.append("  <item objectid=\"\(index + 1)\"\(transform) printable=\"1\"/>")
+            lines.append("  <item objectid=\"\(id)\"\(transform) printable=\"1\"/>")
         }
         lines.append(" </build>")
         lines.append("</model>")
@@ -188,6 +205,26 @@ enum ModelExport {
     }
 
     /// The box around a mesh.
+    /// The parts grouped as they print, in order: each solid with the inlays (exported with it)
+    /// that fill its sunk text, first the solid; every other part alone. Indexes into `parts`.
+    static func printObjects(_ parts: [PrintPart]) -> [[Int]] {
+        var host: [Int: Int] = [:]
+        for (index, part) in parts.enumerated() where part.body.inlayStep != nil {
+            host[index] = parts.indices.first { other in
+                other != index && parts[other].body.inlayStep == nil && parts[other].body.cuts.contains { part.body.isInlay(of: $0) }
+            }
+        }
+        return parts.indices.compactMap { index in
+            host[index] == nil ? [index] + parts.indices.filter { host[$0] == index } : nil
+        }
+    }
+
+    /// The box around several boxes; nil for none.
+    static func union(_ boxes: [(min: SIMD3<Double>, max: SIMD3<Double>)]) -> (min: SIMD3<Double>, max: SIMD3<Double>)? {
+        guard let first = boxes.first else { return nil }
+        return boxes.dropFirst().reduce(first) { (simd_min($0.min, $1.min), simd_max($0.max, $1.max)) }
+    }
+
     static func bounds(_ mesh: Mesh) -> (min: SIMD3<Double>, max: SIMD3<Double>) {
         var low = SIMD3<Double>(repeating: .infinity), high = SIMD3<Double>(repeating: -.infinity)
         for v in mesh.vertices {
